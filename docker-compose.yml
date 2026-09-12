@@ -1,0 +1,75 @@
+version: '3.9'
+
+services:
+  # ── PostgreSQL 16 + pgvector ──────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: fae_postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: fae_app_pgdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01_init.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d fae_app_pgdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fae_network
+
+  # ── FastAPI 后端 ──────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fae_backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://admin:${DB_PASSWORD}@postgres:5432/fae_app_pgdb
+    volumes:
+      - ./backend:/app
+      - uploads_data:/app/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - fae_network
+
+  # ── Next.js 前端 ──────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: fae_frontend
+    env_file: .env
+    environment:
+      NEXTAUTH_URL: http://localhost:3000
+      BACKEND_URL: http://backend:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - fae_network
+
+networks:
+  fae_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  uploads_data:
