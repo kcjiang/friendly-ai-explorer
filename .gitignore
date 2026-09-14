@@ -2,6 +2,11 @@
 .env
 .env.prod
 .env.local
+.env.production
+.env.smoke
+.local-deploy/
+nginx/certs/*.pem
+nginx/certs/*.key
 
 # Python
 __pycache__/
@@ -14,6 +19,7 @@ build/
 
 # Node.js
 node_modules/
+.pnpm-store/
 .next/
 out/
 npm-debug.log*

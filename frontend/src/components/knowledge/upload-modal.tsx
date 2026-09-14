@@ -1,5 +1,7 @@
 "use client";
 
+import { errorMessage } from "@/lib/errors";
+
 import { useRef, useState } from "react";
 import { X, Upload, Loader2, FileText, Image } from "lucide-react";
 import apiClient from "@/lib/api";
@@ -51,8 +53,8 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
         headers: { "Content-Type": "multipart/form-data" },
       });
       onSuccess();
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "上传失败，请重试");
+    } catch (e: unknown) {
+      setError(errorMessage(e, "上传失败，请重试"));
     } finally {
       setUploading(false);
     }

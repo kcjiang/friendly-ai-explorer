@@ -1,5 +1,7 @@
 "use client";
 
+import { errorMessage } from "@/lib/errors";
+
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
@@ -120,8 +122,8 @@ export default function PresetPanel({ deviceType, onRun, disabled = false }: Pro
     try {
       await apiClient.delete(`/api/v1/debug/commands/${p.id}`);
       load();
-    } catch (e: any) {
-      alert(e?.response?.data?.detail ?? "删除失败");
+    } catch (e: unknown) {
+      alert(errorMessage(e, "删除失败"));
     }
   }
 
@@ -301,8 +303,8 @@ function PresetFormModal({
         });
       }
       onSuccess();
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "保存失败");
+    } catch (e: unknown) {
+      setError(errorMessage(e, "保存失败"));
     } finally { setSaving(false); }
   }
 

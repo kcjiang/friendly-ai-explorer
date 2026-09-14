@@ -1,5 +1,7 @@
 "use client";
 
+import { errorMessage } from "@/lib/errors";
+
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -217,8 +219,8 @@ function UserFormModal({
         }
       }
       onSuccess();
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? "操作失败");
+    } catch (e: unknown) {
+      setError(errorMessage(e, "操作失败"));
     } finally {
       setSaving(false);
     }
@@ -402,8 +404,8 @@ function ApiTesterTab() {
         try { setResponse(JSON.stringify(await res.json(), null, 2)); }
         catch { setResponse(await res.text()); }
       }
-    } catch (e: any) {
-      setResponse(`Error: ${e.message}`);
+    } catch (e: unknown) {
+      setResponse(`Error: ${errorMessage(e)}`);
     } finally {
       setLoading(false);
     }

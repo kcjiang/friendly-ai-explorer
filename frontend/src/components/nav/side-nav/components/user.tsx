@@ -95,10 +95,7 @@ export default function User() {
           
           {/* 用户信息 */}
           <DropdownMenuItem
-            onClick={() => {
-              console.log("go to profile");
-              // TODO: 跳转用户页面
-            }}
+            disabled
             className="cursor-pointer"
           >
             <UserIcon size={16} className="mr-2" />

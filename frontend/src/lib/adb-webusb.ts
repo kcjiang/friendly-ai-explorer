@@ -282,7 +282,7 @@ export class AdbDevice {
     if (msg.cmd !== A_AUTH || msg.arg0 !== AUTH_TOKEN) throw new Error('协议错误：期望 AUTH TOKEN');
 
     // 签名挑战
-    const sig = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', this.privKey, msg.data));
+    const sig = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', this.privKey, new Uint8Array(msg.data)));
     await this.send(A_AUTH, AUTH_SIGNATURE, 0, sig);
 
     const resp = await this.readMsg();

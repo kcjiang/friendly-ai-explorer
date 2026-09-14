@@ -1,5 +1,7 @@
 "use client";
 
+import { errorMessage } from "@/lib/errors";
+
 import { useEffect, useRef, useState } from "react";
 import {
   Usb, Terminal, Activity, Play, Square,
@@ -29,7 +31,7 @@ export default function AdbPage() {
       const dev = await AdbDevice.request();
       await dev.connect((s, msg) => { setStatus(s); if (msg) setErr(msg); });
       setDevice(dev); setStatus("connected");
-    } catch (e: any) { setStatus("error"); setErr(e?.message ?? String(e)); }
+    } catch (e: unknown) { setStatus("error"); setErr(errorMessage(e, String(e))); }
   }
 
   async function disconnect() {
@@ -88,7 +90,7 @@ export default function AdbPage() {
           )}
         </div>
         <div className="flex border border-border rounded-lg overflow-hidden">
-          {([["shell","Shell",<Terminal size={13} />],["logcat","Logcat",<Activity size={13} />]] as const).map(([k,l,icon]) => (
+          {([["shell","Shell",<Terminal key="shell" size={13} />],["logcat","Logcat",<Activity key="logcat" size={13} />]] as const).map(([k,l,icon]) => (
             <button key={k} onClick={() => setTab(k)}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-sm transition-colors ${
                 tab === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50"
@@ -214,7 +216,7 @@ function ShellTab({ device, onLinesChange }: { device: AdbDevice; onLinesChange:
       let out = "";
       await device.shell(cmd, txt => { out += txt; });
       push(out.trimEnd() || "(无输出)");
-    } catch (e: any) { push(e?.message ?? "执行失败", "err"); }
+    } catch (e: unknown) { push(errorMessage(e, "执行失败"), "err"); }
     finally { setRunning(false); setTimeout(() => inputRef.current?.focus(), 50); }
   }
 
@@ -310,7 +312,7 @@ function LogcatTab({ device, onLinesChange }: { device: AdbDevice; onLinesChange
       </div>
       <div className="flex-1 overflow-y-auto bg-slate-950 font-mono text-xs p-4 leading-5">
         {lines.length===0
-          ? <div className="flex flex-col items-center justify-center h-full text-slate-600"><Activity size={32} className="mb-2 opacity-40"/><p>点击"开始拉取"采集日志</p></div>
+          ? <div className="flex flex-col items-center justify-center h-full text-slate-600"><Activity size={32} className="mb-2 opacity-40"/><p>点击&quot;开始拉取&quot;采集日志</p></div>
           : lines.map((l,i)=><div key={i} className={`whitespace-pre-wrap break-all ${lc(l)}`}>{l}</div>)
         }
         <div ref={bottomRef}/>

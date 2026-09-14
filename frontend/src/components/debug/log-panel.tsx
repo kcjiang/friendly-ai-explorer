@@ -1,5 +1,7 @@
 "use client";
 
+import { errorMessage } from "@/lib/errors";
+
 import { useEffect, useState } from "react";
 import { Download, Trash2, RefreshCw, Loader2, FileText, Eye, X } from "lucide-react";
 import apiClient from "@/lib/api";
@@ -61,8 +63,8 @@ export default function LogPanel({ deviceType, lines, onClose }: Props) {
       });
       setDesc("");
       loadLogs();
-    } catch (e: any) {
-      alert(e?.response?.data?.detail ?? "上传失败");
+    } catch (e: unknown) {
+      alert(errorMessage(e, "上传失败"));
     } finally { setUploading(false); }
   }
 

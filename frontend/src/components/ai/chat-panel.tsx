@@ -62,7 +62,7 @@ export default function AiChatPanel() {
       const decoder = new TextDecoder();
       let accumulated = "";
 
-      while (true) {
+      for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
 

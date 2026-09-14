@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Eye, EyeOff } from "lucide-react";
 import apiClient from "@/lib/api";
@@ -161,13 +161,13 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
 
 // ── 简易 Markdown 预览 ────────────────────────────────────────
 function MarkdownPreview({ content }: { content: string }) {
-  const [ReactMarkdown, setRM] = useState<any>(null);
-  const [remarkGfm,     setGfm] = useState<any>(null);
+  const [ReactMarkdown, setRM] = useState<typeof import("react-markdown").default | null>(null);
+  const [remarkGfm,     setGfm] = useState<typeof import("remark-gfm").default | null>(null);
 
-  useState(() => {
+  useEffect(() => {
     import("react-markdown").then(m => setRM(() => m.default));
     import("remark-gfm").then(m => setGfm(() => m.default));
-  });
+  }, []);
 
   if (!ReactMarkdown || !remarkGfm) {
     return <div className="text-sm text-muted-foreground">加载预览中...</div>;

@@ -1,5 +1,7 @@
 "use client";
 
+import { errorMessage } from "@/lib/errors";
+
 import { useEffect, useRef, useState } from "react";
 import {
   Cable, Send, Trash2, Download, Settings,
@@ -66,13 +68,13 @@ export default function SerialPage() {
 
   async function connect(){
     try{
-      const port=await (navigator as any).serial.requestPort();
+      const port=await navigator.serial.requestPort();
       await port.open({baudRate:config.baudRate,dataBits:config.dataBits,stopBits:config.stopBits,parity:config.parity,flowControl:config.flowControl});
-      portRef.current=port; writerRef.current=port.writable.getWriter();
+      portRef.current=port; writerRef.current=port.writable!.getWriter();
       stopRef.current=false; setConnected(true);
       push(`已连接 · ${config.baudRate} bps · ${config.dataBits}${config.parity[0].toUpperCase()}${config.stopBits}`,"sys");
       void readLoop(port);
-    }catch(e:any){ push(`连接失败：${e?.message??e}`,"err"); }
+    }catch (e: unknown){ push(`连接失败：${errorMessage(e, String(e))}`,"err"); }
   }
 
   async function readLoop(port:SerialPort){
@@ -81,7 +83,7 @@ export default function SerialPage() {
       while(!stopRef.current&&port.readable){
         const reader=port.readable.getReader();
         try{
-          while(true){
+          while(!stopRef.current){
             const{value,done}=await reader.read();
             if(done||stopRef.current) break;
             if(!value) continue;
@@ -96,13 +98,13 @@ export default function SerialPage() {
           }
         }finally{ reader.releaseLock(); }
       }
-    }catch(e:any){ if(!stopRef.current) push(`读取错误：${e?.message??e}`,"err"); }
+    }catch (e: unknown){ if(!stopRef.current) push(`读取错误：${errorMessage(e, String(e))}`,"err"); }
   }
 
   async function disconnect(){
     stopRef.current=true;
-    try{ writerRef.current?.releaseLock(); }catch{}
-    try{ await portRef.current?.close(); }catch{}
+    try{ writerRef.current?.releaseLock(); }catch { /* The device may already be disconnected. */ }
+    try{ await portRef.current?.close(); }catch { /* The device may already be disconnected. */ }
     portRef.current=null; writerRef.current=null;
     setConnected(false); push("已断开连接","sys");
   }
@@ -113,7 +115,7 @@ export default function SerialPage() {
     try{
       await writerRef.current.write(data);
       push(`→ ${raw.replace(/\r/g,"\\r").replace(/\n/g,"\\n")}`,"tx");
-    }catch(e:any){ push(`发送失败：${e?.message??e}`,"err"); }
+    }catch (e: unknown){ push(`发送失败：${errorMessage(e, String(e))}`,"err"); }
   }
 
   async function send(raw?:string){
@@ -132,7 +134,7 @@ export default function SerialPage() {
       await writerRef.current.write(data);
       push(`→ ${(raw??text).replace(/\r/g,"\\r").replace(/\n/g,"\\n")}`,"tx");
       if(!raw){ setHistory(h=>[text,...h.slice(0,99)]); setHidx(-1); setInput(""); }
-    }catch(e:any){ push(`发送失败：${e?.message??e}`,"err"); }
+    }catch (e: unknown){ push(`发送失败：${errorMessage(e, String(e))}`,"err"); }
   }
 
   function onKeyDown(e:React.KeyboardEvent<HTMLInputElement>){
@@ -204,7 +206,7 @@ export default function SerialPage() {
           ].map(f=>(
             <div key={f.key}>
               <label className="block text-xs text-muted-foreground mb-1">{f.label}</label>
-              <select value={(config as any)[f.key]} disabled={connected}
+              <select value={config[f.key as keyof SerialConfig]} disabled={connected}
                 onChange={e=>setConfig(c=>({...c,[f.key]:isNaN(Number(e.target.value))?e.target.value:Number(e.target.value)}))}
                 className="px-2 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none disabled:opacity-50">
                 {f.opts.map(o=><option key={String(o.v)} value={o.v}>{o.l}</option>)}
@@ -213,7 +215,7 @@ export default function SerialPage() {
           ))}
           <div>
             <label className="block text-xs text-muted-foreground mb-1">行尾</label>
-            <select value={lineEnding} onChange={e=>setLineEnding(e.target.value as any)}
+            <select value={lineEnding} onChange={e=>setLineEnding(e.target.value as typeof lineEnding)}
               className="px-2 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none">
               <option value="none">None</option>
               <option value="cr">CR (\r)</option>

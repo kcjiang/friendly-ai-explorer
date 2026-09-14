@@ -1,5 +1,7 @@
 "use client";
 
+import { errorMessage } from "@/lib/errors";
+
 import { useEffect, useState } from "react";
 import {
   Mail, RefreshCw, Settings, X, Loader2, CheckCircle,
@@ -11,7 +13,7 @@ import apiClient from "@/lib/api";
 // ── Types ─────────────────────────────────────────────────────
 interface EmailAccount {
   id: string; email_address: string; imap_host: string;
-  imap_port: number; username: string; is_active: boolean;
+  imap_port: number; username: string; is_active: boolean; use_ssl: boolean;
   last_synced_at: string | null;
 }
 interface SyncedEmail {
@@ -72,8 +74,8 @@ export default function EmailPage() {
       const r = await apiClient.post("/api/v1/email/sync", { limit: syncLimit });
       setSyncRes(`✅ 新增 ${r.data.synced} 封，分析 ${r.data.analyzed} 封，生成预工单 ${r.data.pre_tickets_created} 个`);
       await loadEmails(); await loadPreTickets();
-    } catch (e: any) {
-      setSyncRes(`❌ ${e?.response?.data?.detail ?? "同步失败"}`);
+    } catch (e: unknown) {
+      setSyncRes(`❌ ${errorMessage(e, "同步失败")}`);
     } finally { setSyncing(false); }
   }
 
@@ -152,7 +154,7 @@ export default function EmailPage() {
           { key: "inbox", label: "收件箱", icon: <Inbox size={13} />, count: emails.length },
           { key: "pretickets", label: "预创建工单", icon: <ListTodo size={13} />, count: pendingPTs },
         ].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key as any)}
+          <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             className={`flex items-center gap-1.5 py-2.5 px-4 text-sm font-medium border-b-2 transition-colors -mb-px ${
               tab === t.key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
             }`}>
@@ -195,7 +197,7 @@ function InboxView({ emails, selected, onSelect }: {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <Mail size={40} className="mb-3 opacity-30" />
-        <p className="text-sm">暂无邮件，点击"同步"拉取最新邮件</p>
+        <p className="text-sm">暂无邮件，点击&quot;同步&quot;拉取最新邮件</p>
       </div>
     );
   }
@@ -291,7 +293,7 @@ function PreTicketsView({ preTickets, onRefresh }: { preTickets: PreTicket[]; on
       const r = await apiClient.post(`/api/v1/email/pre-tickets/${pt.id}/approve`);
       alert(`✅ 工单已创建：${r.data.ticket_no}`);
       onRefresh();
-    } catch (e: any) { alert(e?.response?.data?.detail ?? "操作失败"); }
+    } catch (e: unknown) { alert(errorMessage(e, "操作失败")); }
     finally { setLoading(""); }
   }
 
@@ -299,7 +301,7 @@ function PreTicketsView({ preTickets, onRefresh }: { preTickets: PreTicket[]; on
     if (!confirm("确定拒绝此预工单？")) return;
     setLoading(pt.id);
     try { await apiClient.post(`/api/v1/email/pre-tickets/${pt.id}/reject`); onRefresh(); }
-    catch { }
+    catch (e: unknown) { alert(errorMessage(e)); }
     finally { setLoading(""); }
   }
 
@@ -418,7 +420,7 @@ function AccountSetupModal({ existing, onClose, onSuccess, onDelete }: {
     try {
       const r = await apiClient.post("/api/v1/email/account", form);
       onSuccess(r.data);
-    } catch (e: any) { setError(e?.response?.data?.detail ?? "连接失败，请检查配置"); }
+    } catch (e: unknown) { setError(errorMessage(e, "连接失败，请检查配置")); }
     finally { setSaving(false); }
   }
 
@@ -505,7 +507,7 @@ function EditPreTicketModal({ pt, onClose, onSuccess }: {
     try {
       await apiClient.patch(`/api/v1/email/pre-tickets/${pt.id}`, form);
       onSuccess();
-    } catch { } finally { setSaving(false); }
+    } catch (e: unknown) { alert(errorMessage(e)); } finally { setSaving(false); }
   }
 
   return (

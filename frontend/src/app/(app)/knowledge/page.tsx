@@ -85,7 +85,7 @@ export default function KnowledgePage() {
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
             <p className="text-sm">暂无文档</p>
-            <p className="text-xs mt-1">点击右上角"撰写文档"或"上传文件"开始创建</p>
+            <p className="text-xs mt-1">点击右上角&quot;撰写文档&quot;或&quot;上传文件&quot;开始创建</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">

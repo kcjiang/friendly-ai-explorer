@@ -244,8 +244,8 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
 
 // ── Markdown 预览 ─────────────────────────────────────────────
 function MarkdownPreview({ content }: { content: string }) {
-  const [ReactMarkdown, setRM]  = useState<any>(null);
-  const [remarkGfm,     setGfm] = useState<any>(null);
+  const [ReactMarkdown, setRM]  = useState<typeof import("react-markdown").default | null>(null);
+  const [remarkGfm,     setGfm] = useState<typeof import("remark-gfm").default | null>(null);
 
   useState(() => {
     import("react-markdown").then(m => setRM(() => m.default));

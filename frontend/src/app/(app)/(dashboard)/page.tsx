@@ -157,7 +157,7 @@ export default function DashboardPage() {
         ) : (
           <div className="text-center py-8 text-muted-foreground">
             <Bot size={32} className="mx-auto mb-2 opacity-30" />
-            <p className="text-sm">点击"生成 TODO"让 AI 帮你规划今日工作</p>
+            <p className="text-sm">点击&quot;生成 TODO&quot;让 AI 帮你规划今日工作</p>
           </div>
         )}
       </div>
