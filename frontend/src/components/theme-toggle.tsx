@@ -11,12 +11,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useHydration } from "@/hooks/use-hydration";
+import packageInfo from "../../package.json";
 
 export function ThemeToggle() {
   const { setTheme, theme } = useTheme();
   const hydrated = useHydration();
 
   return (
+    <div className="flex shrink-0 items-center gap-3">
+      <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground" title="FAE 平台版本">
+        v{packageInfo.version}
+      </span>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="icon" className="relative">
@@ -38,6 +43,7 @@ export function ThemeToggle() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    </div>
   );
 }
 

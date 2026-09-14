@@ -1,0 +1,96 @@
+name: Publish Docker images
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (existing v-prefixed Git tag, without v here)'
+        required: true
+        default: '0.1.0-dev.1'
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+# Serialize releases so concurrent builds do not race to update latest.
+concurrency:
+  group: fae-images
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v${{ inputs.version }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check version of the selected release tag
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: node scripts/set-version.mjs --check
+      - name: Resolve release commit
+        id: release
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Lowercase image name
+        id: image
+        shell: bash
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: echo "name=ghcr.io/${OWNER,,}/fae-${{ matrix.service }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          file: ./${{ matrix.service }}/Dockerfile.prod
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.image.outputs.name }}:sha-${{ needs.prepare.outputs.commit }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ inputs.version }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.commit }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  promote:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish latest after both builds succeed
+        env:
+          OWNER: ${{ github.repository_owner }}
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          for service in frontend backend; do
+            image="ghcr.io/${OWNER,,}/fae-${service}"
+            docker buildx imagetools create --tag "${image}:v${RELEASE_VERSION}" --tag "${image}:latest" "${image}:sha-${COMMIT}"
+          done

@@ -4,11 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
+from app.version import APP_VERSION
 from app.routers import auth, tickets, knowledge, ai, admin, users, email_router, preset_router
 
 app = FastAPI(
     title="Friendly AI Explorer API",
-    version="1.0.0",
+    version=APP_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -39,4 +40,4 @@ app.include_router(preset_router.router, prefix="/api/v1/debug",     tags=["Debu
 
 @app.get("/health", tags=["Health"])
 async def health():
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok", "version": APP_VERSION}
