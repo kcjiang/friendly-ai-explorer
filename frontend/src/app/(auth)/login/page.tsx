@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { BrandLogo } from "@/components/brand-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function LoginPage() {
@@ -15,129 +19,64 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setError("");
     setLoading(true);
-
-    const res = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-
-    setLoading(false);
-
-    if (res?.error) {
-      setError("邮箱或密码错误，请重试");
-    } else {
-      router.push("/");
-      router.refresh();
+    try {
+      const res = await signIn("credentials", { email, password, redirect: false });
+      if (!res || res.error) {
+        setError("邮箱或密码错误，请重试");
+      } else {
+        router.push("/");
+        router.refresh();
+      }
+    } catch {
+      setError("暂时无法连接登录服务，请稍后重试");
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <div className="relative min-h-screen flex flex-col">
-      {/* 背景 */}
-      <div
-        className="fixed inset-0 -z-10 bg-cover bg-center"
-        style={{ backgroundImage: "url(/images/background_image.jpg)" }}
-      />
-
-      {/* TopNav */}
-      <div className="flex h-16 items-center justify-between px-6 border-b border-border backdrop-blur-sm bg-background/60">
-        {/* 左：logo */}
-        <div className="flex items-center">
-          <img
-            src="/images/sdmc_logo.svg"
-            alt="SDMC Logo"
-            className="h-8 w-auto dark:invert"
-          />
-        </div>
-
-        {/* 右：主题切换 */}
+    <div className="relative isolate flex min-h-svh flex-col">
+      <div aria-hidden="true" className="fixed inset-0 -z-20 bg-cover bg-center" style={{ backgroundImage: "url(/images/background_image.jpg)" }} />
+      <div aria-hidden="true" className="fixed inset-0 -z-10 bg-white/10 transition-colors duration-300 dark:bg-black/55" />
+      <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border/60 bg-background/80 px-4 backdrop-blur-md sm:px-8">
+        <BrandLogo brand="sdmc" className="h-8 w-[105px]" />
         <ThemeToggle />
-      </div>
-
-      {/* 中间内容 */}
-      <div className="flex flex-1 items-center justify-center px-6">
-        <div className="w-full max-w-xs">
-          {/* 登录卡片 */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-950">
-            
-            {/* logo（需适配暗黑模式） */}
-            <div className="mb-6 flex justify-center">
-              <img
-                src="/images/fae_logo.svg"
-                alt="FAE Logo"
-                className="h-10 w-auto dark:invert"
-              />
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* 邮箱 */}
-              <div className="space-y-1.5">
-                <label className="text-sm text-slate-700 dark:text-slate-300">
-                  邮箱地址
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-ring dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
+      </header>
+      <main className="flex flex-1 items-center justify-center px-6 py-12">
+        <Card className="w-full max-w-sm shadow-xl">
+          <CardHeader className="gap-2">
+            <BrandLogo brand="fae" className="mb-4 h-10 w-[148px]" />
+            <CardTitle>登录你的账号</CardTitle>
+            <CardDescription>输入邮箱和密码，开始你的 FAE 工作。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="grid gap-5" aria-busy={loading}>
+              <div className="grid gap-2">
+                <label htmlFor="email" className="text-sm font-medium">邮箱地址</label>
+                <Input id="email" name="email" type="email" autoComplete="username" placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={loading} />
               </div>
-
-              {/* 密码 */}
-              <div className="space-y-1.5">
-                <label className="text-sm text-slate-700 dark:text-slate-300">
-                  密码
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-ring dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
+              <div className="grid gap-2">
+                <label htmlFor="password" className="text-sm font-medium">密码</label>
+                <Input id="password" name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={loading} />
               </div>
-
-              {/* 错误提示 */}
-              {error && (
-                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
-
-              {/* 登录按钮 */}
-              <Button className="w-full" disabled={loading}>
-                {loading ? "登录中..." : "登 录"}
-              </Button>
-
-              {/* 分割线 */}
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <div className="h-px flex-1 bg-border" />
-                OR
-                <div className="h-px flex-1 bg-border" />
+              {error && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+              <div className="grid gap-3">
+                <Button type="submit" className="w-full text-white" disabled={loading}>
+                  {loading && <Loader2 aria-hidden="true" className="animate-spin" />}
+                  {loading ? "登录中…" : "登录"}
+                </Button>
+                <Button type="button" variant="outline" className="w-full" disabled aria-describedby="dingtalk-status">使用钉钉登录</Button>
+                <p id="dingtalk-status" className="text-center text-xs text-muted-foreground">钉钉登录即将开放</p>
               </div>
-
-              {/* 钉钉登录 */}
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => signIn("dingtalk")}
-              >
-                钉钉登录
-              </Button>
+              <p className="text-center text-sm text-muted-foreground">需要账号或重置密码？请联系管理员。</p>
             </form>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="py-4 text-center text-xs text-slate-600 dark:text-slate-400">
-        ©2003-2026 SDMC Technology Co., Ltd
-      </div>
+          </CardContent>
+        </Card>
+      </main>
+      <footer className="px-4 py-5 text-center text-xs text-foreground/70">©2003–2026 SDMC Technology Co., Ltd</footer>
     </div>
   );
 }

@@ -13,6 +13,7 @@ from app.services.admin_service import list_users
 router = APIRouter()
 
 
+@router.get("", response_model=list[UserOut], include_in_schema=False)
 @router.get("/", response_model=list[UserOut], summary="获取用户列表（用于下拉选择）")
 async def get_users(current_user: AnyUser, db: AsyncSession = Depends(get_db)):
     return await list_users(db)

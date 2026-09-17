@@ -17,11 +17,13 @@ async def get_stats(current_user: AnyUser, db: AsyncSession = Depends(get_db)):
     return await ticket_service.get_stats(db, current_user)
 
 
+@router.get("", response_model=list[TicketListOut], include_in_schema=False)
 @router.get("/", response_model=list[TicketListOut], summary="获取工单列表")
 async def list_tickets(current_user: AnyUser, db: AsyncSession = Depends(get_db)):
     return await ticket_service.get_tickets(db, current_user)
 
 
+@router.post("", response_model=TicketOut, status_code=201, include_in_schema=False)
 @router.post("/", response_model=TicketOut, status_code=201, summary="新建工单")
 async def create_ticket(
     body: CreateTicketRequest,

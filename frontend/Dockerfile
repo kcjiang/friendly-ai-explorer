@@ -1,7 +1,7 @@
-FROM node:20-alpine
+FROM node:22-alpine
 
 # 启用 pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN npm install -g pnpm@9.15.9
 
 WORKDIR /app
 

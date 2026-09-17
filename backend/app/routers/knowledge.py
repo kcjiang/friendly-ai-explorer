@@ -12,11 +12,13 @@ from app.services import knowledge_service
 router = APIRouter()
 
 
+@router.get("", response_model=list[DocumentListOut], include_in_schema=False)
 @router.get("/", response_model=list[DocumentListOut], summary="文档列表")
 async def list_documents(current_user: AnyUser, db: AsyncSession = Depends(get_db)):
     return await knowledge_service.list_documents(db, current_user)
 
 
+@router.post("", response_model=DocumentOut, status_code=201, include_in_schema=False)
 @router.post("/", response_model=DocumentOut, status_code=201, summary="新建 Markdown 文档")
 async def create_document(
     body: CreateDocumentRequest,
