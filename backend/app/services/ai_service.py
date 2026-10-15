@@ -9,6 +9,7 @@ from app.ai.rag_engine import retrieve_context, build_prompt
 from app.ai.gemini_client import gemini
 from app.ai.tasks.ticket_analyzer import analyze_ticket
 from app.ai.tasks.todo_generator import generate_todos
+from app.services import ticket_service
 
 
 async def stream_rag_answer(message: str, db: AsyncSession) -> AsyncGenerator[str, None]:
@@ -21,24 +22,26 @@ async def stream_rag_answer(message: str, db: AsyncSession) -> AsyncGenerator[st
 
 async def analyze_ticket_by_id(ticket_id: str, db: AsyncSession, user: User) -> dict:
     """AI 分析指定工单，结果写回数据库并返回"""
-    result = await db.execute(select(Ticket).where(Ticket.id == ticket_id))
-    ticket = result.scalar_one_or_none()
-    if not ticket:
-        raise HTTPException(status_code=404, detail="工单不存在")
+    ticket = await ticket_service.get_ticket(ticket_id, db, user)
+    ticket_service.require_edit(ticket, user)
+    revision = ticket.revision
 
     analysis = await analyze_ticket(
         {
             "title":            ticket.title,
             "description":      ticket.description,
-            "product_name":     ticket.product_name,
+            "product_name":     ticket.current_product_name,
             "firmware_version": ticket.firmware_version,
-            "customer_name":    ticket.customer_name,
+            "customer_name":    ticket.current_customer_name,
+            "raw_report":       ticket.raw_report,
         },
         db,
     )
 
     # 写回工单
+    ticket = await ticket_service.locked_ticket(ticket_id, db, user, revision)
     ticket.ai_analysis = analysis
+    ticket_service.stamp(ticket, user)
     await db.commit()
 
     return {"ticket_id": ticket_id, "analysis": analysis}

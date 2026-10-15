@@ -12,6 +12,9 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
       - ./db/migration_v2_email.sql:/docker-entrypoint-initdb.d/02_email.sql:ro
       - ./db/migration_v4_debug.sql:/docker-entrypoint-initdb.d/04_debug.sql:ro
+      - ./db/migration_v5_catalog.sql:/docker-entrypoint-initdb.d/05_catalog.sql:ro
+      - ./db/migration_v6_tickets.sql:/docker-entrypoint-initdb.d/06_tickets.sql:ro
+      - ./db/migration_v7_catalog_trash.sql:/docker-entrypoint-initdb.d/07_catalog_trash.sql:ro
     healthcheck:
       test: [CMD-SHELL, pg_isready -U admin -d fae_app_pgdb]
       interval: 5s

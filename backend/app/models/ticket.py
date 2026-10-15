@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import String, Text, DateTime, Enum as SAEnum, ForeignKey, Boolean, ARRAY
+from sqlalchemy import String, Text, DateTime, Enum as SAEnum, ForeignKey, Boolean, ARRAY, BigInteger, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
@@ -13,14 +13,14 @@ class TicketStatus(str, enum.Enum):
     in_progress = "in_progress"
     pending     = "pending"
     resolved    = "resolved"
-    closed      = "closed"
+    reproducing = "reproducing"
+    verifying   = "verifying"
 
 
 class TicketPriority(str, enum.Enum):
     critical = "critical"
-    high     = "high"
-    medium   = "medium"
-    low      = "low"
+    major    = "major"
+    trivial  = "trivial"
 
 
 class Ticket(Base):
@@ -34,8 +34,23 @@ class Ticket(Base):
     customer_contact: Mapped[Optional[str]]      = mapped_column(String(200), nullable=True)
     product_name:     Mapped[Optional[str]]      = mapped_column(String(200), nullable=True)
     firmware_version: Mapped[Optional[str]]      = mapped_column(String(100), nullable=True)
-    status:           Mapped[TicketStatus]       = mapped_column(SAEnum(TicketStatus,   name="ticket_status"),   nullable=False, default=TicketStatus.open)
-    priority:         Mapped[TicketPriority]     = mapped_column(SAEnum(TicketPriority, name="ticket_priority"), nullable=False, default=TicketPriority.medium)
+    status:           Mapped[TicketStatus]       = mapped_column(SAEnum(TicketStatus, native_enum=False), nullable=False, default=TicketStatus.open)
+    priority:         Mapped[TicketPriority]     = mapped_column(SAEnum(TicketPriority, native_enum=False), nullable=False, default=TicketPriority.major)
+    legacy_ticket_no: Mapped[Optional[str]] = mapped_column(String(50))
+    system_seq: Mapped[int] = mapped_column(BigInteger, unique=True)
+    project_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey('catalog_projects.id'))
+    project_seq: Mapped[Optional[int]] = mapped_column(BigInteger)
+    source: Mapped[str] = mapped_column(String(100), default='Email')
+    source_number: Mapped[str] = mapped_column(String(200), default='')
+    source_url: Mapped[str] = mapped_column(String(2000), default='')
+    raw_report: Mapped[str] = mapped_column(Text, default='')
+    tapd_created: Mapped[bool] = mapped_column(Boolean, default=False)
+    tapd_url: Mapped[str] = mapped_column(String(2000), default='')
+    status_note: Mapped[str] = mapped_column(String(500), default='')
+    next_plan: Mapped[str] = mapped_column(Text, default='')
+    notes: Mapped[str] = mapped_column(Text, default='')
+    updated_by: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
+    revision: Mapped[int] = mapped_column(Integer, default=1)
     assignee_id:      Mapped[Optional[uuid.UUID]]= mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     creator_id:       Mapped[uuid.UUID]          = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     ai_analysis:      Mapped[Optional[str]]      = mapped_column(Text, nullable=True)
@@ -47,6 +62,7 @@ class Ticket(Base):
     resolved_at:      Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     creator:  Mapped["User"]               = relationship("User", foreign_keys=[creator_id])
+    updater: Mapped["User"] = relationship("User", foreign_keys=[updated_by])
     assignee: Mapped[Optional["User"]]     = relationship("User", foreign_keys=[assignee_id])
     comments: Mapped[list["TicketComment"]]= relationship("TicketComment", back_populates="ticket", cascade="all, delete-orphan")
 

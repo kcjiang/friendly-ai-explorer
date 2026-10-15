@@ -18,3 +18,4 @@ aiofiles==24.1.0
 alembic==1.13.2
 email-validator==2.1.1
 cryptography==42.0.8
+geonamescache==3.0.2

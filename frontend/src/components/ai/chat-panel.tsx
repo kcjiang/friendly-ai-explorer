@@ -1,25 +1,30 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Bot, ChevronDown, Loader2, Send } from "lucide-react";
 import { useSession } from "next-auth/react";
-import { Bot, X, Send, Loader2, ChevronDown } from "lucide-react";
+import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
 
 interface Message {
-  role:    "user" | "assistant";
+  role: "user" | "assistant";
   content: string;
   loading?: boolean;
 }
 
 export default function AiChatPanel() {
   const { data: session } = useSession();
-  const [open,     setOpen]     = useState(false);
+  const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "你好！我是 FAE AI 助手，可以帮你查询知识库、分析技术问题。有什么需要帮助的吗？" },
+    {
+      role: "assistant",
+      content:
+        "你好！我是 FAE AI 助手，可以帮你查询知识库、分析技术问题。有什么需要帮助的吗？",
+    },
   ]);
-  const [input,    setInput]    = useState("");
+  const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef  = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // 自动滚动到底部
   useEffect(() => {
@@ -36,24 +41,27 @@ export default function AiChatPanel() {
     if (!text || thinking) return;
 
     setInput("");
-    setMessages(prev => [...prev, { role: "user", content: text }]);
+    setMessages((prev) => [...prev, { role: "user", content: text }]);
     setThinking(true);
 
     // 先插入一条 loading 的 assistant 消息
-    setMessages(prev => [...prev, { role: "assistant", content: "", loading: true }]);
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", content: "", loading: true },
+    ]);
 
     try {
       const token = session?.accessToken;
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/v1/ai/chat`,
         {
-          method:  "POST",
+          method: "POST",
           headers: {
-            "Content-Type":  "application/json",
-            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ message: text }),
-        }
+        },
       );
 
       if (!res.ok || !res.body) throw new Error("请求失败");
@@ -81,17 +89,17 @@ export default function AiChatPanel() {
         }
 
         // 实时更新最后一条 assistant 消息
-        setMessages(prev => {
+        setMessages((prev) => {
           const next = [...prev];
           next[next.length - 1] = { role: "assistant", content: accumulated };
           return next;
         });
       }
-    } catch (e) {
-      setMessages(prev => {
+    } catch {
+      setMessages((prev) => {
         const next = [...prev];
         next[next.length - 1] = {
-          role:    "assistant",
+          role: "assistant",
           content: "抱歉，请求出现错误，请稍后重试。",
         };
         return next;
@@ -105,46 +113,59 @@ export default function AiChatPanel() {
     <>
       {/* 浮动按钮 */}
       <button
-        onClick={() => setOpen(o => !o)}
-        className={`fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full shadow-lg
-                    flex items-center justify-center transition-all duration-300
-                    bg-gradient-to-br from-blue-500 to-violet-600
-                    hover:scale-110 hover:shadow-blue-500/30 hover:shadow-xl ${
-                      open ? "scale-90 opacity-0 pointer-events-none" : ""
-                    }`}
+        onClick={() => setOpen((o) => !o)}
+        className={`fixed bottom-6 right-6 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-300 via-indigo-400 to-violet-500 p-0.5 shadow-lg shadow-indigo-500/20 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-indigo-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transform-none ${
+          open ? "pointer-events-none scale-90 opacity-0" : ""
+        }`}
         title="AI 助手"
+        aria-label="打开 AI 助手"
+        aria-expanded={open}
+        aria-controls="fae-ai-chat-panel"
+        tabIndex={open ? -1 : 0}
       >
-        <Bot size={22} className="text-white" />
+        <span className="relative h-full w-full overflow-hidden rounded-full bg-indigo-50 dark:bg-slate-900">
+          <Image
+            src="/cedar.gif"
+            alt=""
+            width={64}
+            height={64}
+            unoptimized
+            className="h-full w-full -translate-y-[10%] scale-[1.35] object-contain"
+          />
+        </span>
       </button>
 
       {/* 聊天面板 */}
       <div
-        className={`fixed bottom-6 right-6 z-50 w-96 flex flex-col rounded-2xl shadow-2xl
-                    border border-border bg-background overflow-hidden
-                    transition-all duration-300 origin-bottom-right ${
-                      open
-                        ? "opacity-100 scale-100 max-h-[600px]"
-                        : "opacity-0 scale-90 max-h-0 pointer-events-none"
-                    }`}
+        id="fae-ai-chat-panel"
+        className={`fixed bottom-6 right-6 z-50 flex w-96 origin-bottom-right flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl transition-all duration-300 ${
+          open
+            ? "max-h-[600px] scale-100 opacity-100"
+            : "pointer-events-none max-h-0 scale-90 opacity-0"
+        }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3
-                        bg-gradient-to-r from-blue-500 to-violet-600 flex-shrink-0">
+        <div className="flex flex-shrink-0 items-center justify-between bg-gradient-to-r from-blue-500 to-violet-600 px-4 py-3">
           <div className="flex items-center gap-2">
             <Bot size={18} className="text-white" />
-            <span className="text-sm font-semibold text-white">FAE AI 助手</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            <span className="text-sm font-semibold text-white">
+              FAE AI 助手
+            </span>
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
           </div>
           <button
             onClick={() => setOpen(false)}
-            className="text-white/70 hover:text-white transition-colors"
+            className="text-white/70 transition-colors hover:text-white"
           >
             <ChevronDown size={18} />
           </button>
         </div>
 
         {/* 消息列表 */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0" style={{ maxHeight: 440 }}>
+        <div
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4"
+          style={{ maxHeight: 440 }}
+        >
           {messages.map((msg, i) => (
             <div
               key={i}
@@ -152,23 +173,21 @@ export default function AiChatPanel() {
             >
               {/* 头像 */}
               {msg.role === "assistant" ? (
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-violet-600
-                                flex items-center justify-center flex-shrink-0 mt-0.5">
+                <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-violet-600">
                   <Bot size={14} className="text-white" />
                 </div>
               ) : (
-                <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center
-                                flex-shrink-0 mt-0.5 text-xs font-semibold text-primary">
+                <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                   {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
                 </div>
               )}
 
               {/* 气泡 */}
               <div
-                className={`max-w-[75%] px-3 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                className={`max-w-[75%] rounded-2xl px-3 py-2.5 text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-tr-sm"
-                    : "bg-muted rounded-tl-sm"
+                    ? "rounded-tr-sm bg-primary text-primary-foreground"
+                    : "rounded-tl-sm bg-muted"
                 }`}
               >
                 {msg.loading ? (
@@ -186,29 +205,31 @@ export default function AiChatPanel() {
         </div>
 
         {/* 输入区 */}
-        <div className="flex items-center gap-2 px-3 py-3 border-t border-border flex-shrink-0">
+        <div className="flex flex-shrink-0 items-center gap-2 border-t border-border px-3 py-3">
           <input
             ref={inputRef}
             value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
             placeholder="输入问题... (Enter 发送)"
             disabled={thinking}
-            className="flex-1 px-3 py-2 text-sm rounded-xl border border-border bg-muted/30
-                       focus:outline-none focus:ring-2 focus:ring-primary/30
-                       disabled:opacity-50 transition-colors"
+            className="flex-1 rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
           />
           <button
             onClick={sendMessage}
             disabled={thinking || !input.trim()}
-            className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600
-                       flex items-center justify-center flex-shrink-0
-                       hover:opacity-90 disabled:opacity-40 transition-opacity"
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 transition-opacity hover:opacity-90 disabled:opacity-40"
           >
-            {thinking
-              ? <Loader2 size={15} className="text-white animate-spin" />
-              : <Send size={15} className="text-white" />
-            }
+            {thinking ? (
+              <Loader2 size={15} className="animate-spin text-white" />
+            ) : (
+              <Send size={15} className="text-white" />
+            )}
           </button>
         </div>
       </div>
@@ -227,10 +248,18 @@ function MarkdownText({ content }: { content: string }) {
       {lines.map((line, i) => {
         // 标题行
         if (line.startsWith("## ")) {
-          return <p key={i} className="font-semibold mt-2">{line.slice(3)}</p>;
+          return (
+            <p key={i} className="mt-2 font-semibold">
+              {line.slice(3)}
+            </p>
+          );
         }
         if (line.startsWith("# ")) {
-          return <p key={i} className="font-bold mt-2">{line.slice(2)}</p>;
+          return (
+            <p key={i} className="mt-2 font-bold">
+              {line.slice(2)}
+            </p>
+          );
         }
         // 列表项
         if (line.startsWith("- ") || line.startsWith("* ")) {
@@ -242,7 +271,11 @@ function MarkdownText({ content }: { content: string }) {
         }
         // 数字列表
         if (/^\d+\.\s/.test(line)) {
-          return <p key={i} className="pl-3">{renderInline(line)}</p>;
+          return (
+            <p key={i} className="pl-3">
+              {renderInline(line)}
+            </p>
+          );
         }
         return <p key={i}>{renderInline(line)}</p>;
       })}
@@ -259,7 +292,10 @@ function renderInline(text: string): React.ReactNode {
     }
     if (part.startsWith("`") && part.endsWith("`")) {
       return (
-        <code key={i} className="bg-black/10 dark:bg-white/10 px-1 py-0.5 rounded text-xs font-mono">
+        <code
+          key={i}
+          className="rounded bg-black/10 px-1 py-0.5 font-mono text-xs dark:bg-white/10"
+        >
           {part.slice(1, -1)}
         </code>
       );

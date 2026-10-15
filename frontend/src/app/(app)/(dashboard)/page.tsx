@@ -8,15 +8,15 @@ import apiClient from "@/lib/api";
 
 interface Stats {
   total: number; open: number; in_progress: number;
-  pending: number; resolved: number; closed: number;
+  pending: number; resolved: number; reproducing: number; verifying: number;
 }
 interface Todo { task: string; priority: string; }
 
 const PRIORITY_COLORS: Record<string, string> = {
   critical: "bg-red-500",
-  high:     "bg-orange-400",
+  major:    "bg-orange-400",
   medium:   "bg-yellow-400",
-  low:      "bg-green-400",
+  trivial:  "bg-green-400",
 };
 
 export default function DashboardPage() {
@@ -50,11 +50,12 @@ export default function DashboardPage() {
 
   const statCards = stats ? [
     { label: "全部工单",  value: stats.total,       icon: <Ticket size={18} />,       color: "text-blue-500",   bg: "bg-blue-50 dark:bg-blue-950/30"   },
-    { label: "待处理",    value: stats.open,         icon: <Clock size={18} />,         color: "text-amber-500",  bg: "bg-amber-50 dark:bg-amber-950/30" },
-    { label: "处理中",    value: stats.in_progress,  icon: <Loader2 size={18} />,       color: "text-violet-500", bg: "bg-violet-50 dark:bg-violet-950/30"},
-    { label: "等待客户",  value: stats.pending,      icon: <Clock size={18} />,         color: "text-yellow-500", bg: "bg-yellow-50 dark:bg-yellow-950/30"},
+    { label: "新工单",    value: stats.open,         icon: <Clock size={18} />,         color: "text-amber-500",  bg: "bg-amber-50 dark:bg-amber-950/30" },
+    { label: "修复中",    value: stats.in_progress,  icon: <Loader2 size={18} />,       color: "text-violet-500", bg: "bg-violet-50 dark:bg-violet-950/30"},
+    { label: "挂起",  value: stats.pending,      icon: <Clock size={18} />,         color: "text-yellow-500", bg: "bg-yellow-50 dark:bg-yellow-950/30"},
     { label: "已解决",    value: stats.resolved,     icon: <CheckCircle size={18} />,   color: "text-green-500",  bg: "bg-green-50 dark:bg-green-950/30" },
-    { label: "已关闭",    value: stats.closed,       icon: <BookOpen size={18} />,      color: "text-slate-500",  bg: "bg-slate-50 dark:bg-slate-800/30" },
+    { label: "待复现",    value: stats.reproducing,       icon: <BookOpen size={18} />,      color: "text-slate-500",  bg: "bg-slate-50 dark:bg-slate-800/30" },
+    { label: "验证修复", value: stats.verifying, icon: <CheckCircle size={18} />, color: "text-cyan-500", bg: "bg-cyan-50 dark:bg-cyan-950/30" },
   ] : [];
 
   return (
@@ -77,7 +78,7 @@ export default function DashboardPage() {
           <Loader2 size={20} className="animate-spin mr-2" /> 加载中...
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
           {statCards.map(c => (
             <div
               key={c.label}
@@ -99,17 +100,17 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-medium">工单解决率</p>
             <p className="text-sm font-bold text-green-500">
-              {Math.round(((stats.resolved + stats.closed) / stats.total) * 100)}%
+              {Math.round(((stats.resolved) / stats.total) * 100)}%
             </p>
           </div>
           <div className="w-full bg-muted rounded-full h-2.5">
             <div
               className="bg-gradient-to-r from-green-400 to-emerald-500 h-2.5 rounded-full transition-all duration-700"
-              style={{ width: `${Math.round(((stats.resolved + stats.closed) / stats.total) * 100)}%` }}
+              style={{ width: `${Math.round(((stats.resolved) / stats.total) * 100)}%` }}
             />
           </div>
           <div className="flex justify-between text-xs text-muted-foreground mt-2">
-            <span>已解决 + 已关闭：{stats.resolved + stats.closed}</span>
+            <span>已解决：{stats.resolved}</span>
             <span>合计：{stats.total}</span>
           </div>
         </div>

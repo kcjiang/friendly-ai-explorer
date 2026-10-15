@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from uuid import UUID
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,7 +48,7 @@ async def chat(
 
 @router.post("/analyze-ticket/{ticket_id}", summary="AI 分析工单")
 async def analyze_ticket(
-    ticket_id: str,
+    ticket_id: UUID,
     current_user: AnyUser,
     db: AsyncSession = Depends(get_db),
 ):

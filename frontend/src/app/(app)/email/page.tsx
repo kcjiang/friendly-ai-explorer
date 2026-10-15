@@ -9,6 +9,7 @@ import {
   Check, XCircle, Edit2,
 } from "lucide-react";
 import apiClient from "@/lib/api";
+import { SearchSelect } from "@/components/catalog/search-select";
 
 // ── Types ─────────────────────────────────────────────────────
 interface EmailAccount {
@@ -284,13 +285,14 @@ function InboxView({ emails, selected, onSelect }: {
 
 // ── 预创建工单视图 ────────────────────────────────────────────
 function PreTicketsView({ preTickets, onRefresh }: { preTickets: PreTicket[]; onRefresh: () => void; }) {
+  const [project, setProject] = useState({ value: "", label: "" });
   const [editing, setEditing] = useState<PreTicket | null>(null);
   const [loading, setLoading] = useState<string>("");
 
   async function handleApprove(pt: PreTicket) {
     setLoading(pt.id);
     try {
-      const r = await apiClient.post(`/api/v1/email/pre-tickets/${pt.id}/approve`);
+      const r = await apiClient.post(`/api/v1/email/pre-tickets/${pt.id}/approve`, { project_id: project.value });
       alert(`✅ 工单已创建：${r.data.ticket_no}`);
       onRefresh();
     } catch (e: unknown) { alert(errorMessage(e, "操作失败")); }
@@ -317,6 +319,7 @@ function PreTicketsView({ preTickets, onRefresh }: { preTickets: PreTicket[]; on
 
   return (
     <div className="p-4 space-y-3 overflow-y-auto h-full">
+      <div className="max-w-lg space-y-2"><p className="text-sm">批准前请选择所属项目（用于接下来批准的工单）：</p><SearchSelect label="所属项目" value={project.value} selectedLabel={project.label} kind="catalog" url="/api/v1/catalog/projects" onChange={setProject} /></div>
       <p className="text-sm text-muted-foreground">共 {preTickets.length} 个预工单，
         <span className="text-primary font-medium">{preTickets.filter(p => p.status === "pending_review").length}</span> 个待审核</p>
 
@@ -364,7 +367,7 @@ function PreTicketsView({ preTickets, onRefresh }: { preTickets: PreTicket[]; on
                   className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors">
                   <Edit2 size={14} />
                 </button>
-                <button onClick={() => handleApprove(pt)} disabled={loading === pt.id}
+                <button onClick={() => handleApprove(pt)} disabled={!!loading || !project.value}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 transition-colors">
                   {loading === pt.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                   批准

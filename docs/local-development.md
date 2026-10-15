@@ -29,6 +29,14 @@ docker compose -f docker-compose.yml ps
 
 ## 验收与排查
 
+### 工单库升级
+
+工单重构新增 `db/migration_v6_tickets.sql`，最近删除新增 `db/migration_v7_catalog_trash.sql`。已有数据库需按 v5 → v6 → v7 顺序迁移；无需删除数据库。编号、权限、新旧状态映射及完整操作步骤见 [工单库与看板](tickets.md)。
+
+### 团队资料库
+
+访问 `/catalog` 可维护客户、产品和项目。已有开发数据库需先执行 `db/migration_v5_catalog.sql`，再重建后端以安装离线城市目录依赖；全新数据库会自动初始化。具体命令和功能说明见 [团队资料库](catalog.md)。
+
 ### 丢弃旧开发数据库并重新初始化
 
 以下操作将永久删除本地开发数据库中的记录。上传文件卷会被保留，但原文件的数据库关联记录会消失。生产环境不使用此流程。

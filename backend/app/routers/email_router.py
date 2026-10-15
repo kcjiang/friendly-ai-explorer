@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -63,9 +65,13 @@ async def update_pre_ticket(
     return await email_service.update_pre_ticket(pt_id, body, db, current_user)
 
 
+class ApproveRequest(BaseModel):
+    project_id: UUID
+
+
 @router.post("/pre-tickets/{pt_id}/approve", summary="批准预工单 → 创建真实工单")
-async def approve(pt_id: str, current_user: AnyUser, db: AsyncSession = Depends(get_db)):
-    return await email_service.approve_pre_ticket(pt_id, db, current_user)
+async def approve(pt_id: UUID, body: ApproveRequest, current_user: AnyUser, db: AsyncSession = Depends(get_db)):
+    return await email_service.approve_pre_ticket(pt_id, db, current_user, body.project_id)
 
 
 @router.post("/pre-tickets/{pt_id}/reject", summary="拒绝预工单")

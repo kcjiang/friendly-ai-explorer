@@ -1,14 +1,23 @@
 // frontend/src/config/site.tsx
-
-import { Gauge, type LucideIcon, SquareKanban, MessagesSquare, BookOpen, Usb, Cable, Settings } from "lucide-react";
+import {
+  BookOpen,
+  Cable,
+  Database,
+  Gauge,
+  type LucideIcon,
+  MessagesSquare,
+  Settings,
+  SquareKanban,
+  Usb,
+} from "lucide-react";
 
 export type SiteConfig = typeof siteConfig;
 export type Role = "developer" | "leader" | "engineer" | "guest";
 export type Navigation = {
-  icon:   LucideIcon;
-  name:   string;
-  href:   string;
-  accessible?: Role[];   // 可访问角色，空置为全员访问
+  icon: LucideIcon;
+  name: string;
+  href: string;
+  accessible?: Role[]; // 可访问角色，空置为全员访问
 };
 
 export const siteConfig = {
@@ -26,6 +35,11 @@ export const navigations: Navigation[] = [
     icon: SquareKanban,
     name: "Ticket",
     href: "/ticket",
+  },
+  {
+    icon: Database,
+    name: "数据维护",
+    href: "/catalog",
   },
   {
     icon: BookOpen,

@@ -20,7 +20,8 @@ from app.models.ticket import Ticket
 from app.models.user import User
 from app.schemas.email_schema import EmailAccountSetup, UpdatePreTicketRequest
 from app.ai.tasks.email_analyzer import analyze_email
-from app.services.ticket_service import _generate_ticket_no
+from app.services.ticket_service import create_ticket
+from app.schemas.ticket import CreateTicketRequest
 
 
 # ── 加密工具 ─────────────────────────────────────────────────
@@ -318,35 +319,25 @@ async def update_pre_ticket(pt_id: str, body: UpdatePreTicketRequest, db: AsyncS
     return {"message": "更新成功"}
 
 
-async def approve_pre_ticket(pt_id: str, db: AsyncSession, user: User) -> dict:
-    r = await db.execute(select(PreTicket).where(PreTicket.id == pt_id, PreTicket.creator_id == user.id))
-    pt = r.scalar_one_or_none()
+async def approve_pre_ticket(pt_id: str, db: AsyncSession, user: User, project_id) -> dict:
+    pt = await db.scalar(select(PreTicket).where(PreTicket.id == pt_id, PreTicket.creator_id == user.id).with_for_update())
     if not pt:
-        raise HTTPException(status_code=404, detail="预工单不存在")
+        raise HTTPException(404, "预工单不存在")
     if pt.status != "pending_review":
-        raise HTTPException(status_code=400, detail=f"当前状态为 {pt.status}，无法批准")
-
-    ticket_no = await _generate_ticket_no(db)
-    ticket = Ticket(
-        ticket_no=ticket_no,
-        title=pt.title,
-        description=pt.description,
-        customer_name=pt.customer_name,
-        customer_contact=pt.customer_contact,
-        product_name=pt.product_name,
-        firmware_version=pt.firmware_version,
-        priority=pt.priority,
-        creator_id=user.id,
-    )
-    db.add(ticket)
-    await db.commit()
-    await db.refresh(ticket)
-
-    pt.status            = "approved"
+        raise HTTPException(400, "此预工单已处理，请刷新")
+    email = await db.get(SyncedEmail, pt.email_id)
+    priority = {'low': 'trivial', 'medium': 'major', 'high': 'major'}.get(pt.priority, pt.priority)
+    ticket = await create_ticket(CreateTicketRequest(
+        title=pt.title, description=pt.description or '', source='Email', project_id=project_id,
+        raw_report=email.body_text or '' if email else '', priority=priority,
+    ), db, user, commit=False)
+    # Preserve previously extracted details for historical reference.
+    ticket.customer_contact = pt.customer_contact
+    ticket.firmware_version = pt.firmware_version
+    pt.status = 'approved'
     pt.created_ticket_id = ticket.id
     await db.commit()
-
-    return {"message": "工单已创建", "ticket_no": ticket_no, "ticket_id": str(ticket.id)}
+    return {'message': '工单已创建', 'ticket_no': ticket.ticket_no, 'ticket_id': str(ticket.id)}
 
 
 async def reject_pre_ticket(pt_id: str, db: AsyncSession, user: User) -> dict:
