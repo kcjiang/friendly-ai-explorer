@@ -5,7 +5,9 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Plus, Upload, Search, Eye, Lock, RefreshCw } from "lucide-react";
 import apiClient from "@/lib/api";
-import { Document, CONTENT_TYPE_LABEL } from "@/types/document";
+import type { Document } from "@/types/document";
+import { CONTENT_TYPE_LABEL, INDEX_STATUS_LABEL } from "@/types/document";
+import { errorMessage } from "@/lib/errors";
 import UploadModal from "@/components/knowledge/upload-modal";
 
 export default function KnowledgePage() {
@@ -78,6 +80,7 @@ export default function KnowledgePage() {
 
       {/* 文档列表 */}
       <div className="p-6">
+        <p className="text-xs text-muted-foreground mb-4">AI 只检索已发布且你有权访问的文档。向量服务不可用时仍可通过产品型号、名称等关键词检索；旧文档可点击“重建索引”。</p>
         {loading ? (
           <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
             加载中...
@@ -125,6 +128,15 @@ function DocCard({
 }) {
   const isAuthor = doc.author.id === currentUserId;
   const isDev    = currentUserRole === "developer";
+  const [indexing, setIndexing] = useState(false);
+  const [indexError, setIndexError] = useState("");
+
+  async function handleReindex(e: React.MouseEvent) {
+    e.stopPropagation(); setIndexing(true); setIndexError("");
+    try { await apiClient.post(`/api/v1/knowledge/${doc.id}/reindex`, {}, { timeout: 60_000 }); onDeleted(); }
+    catch (error) { setIndexError(errorMessage(error)); }
+    finally { setIndexing(false); }
+  }
 
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
@@ -166,6 +178,8 @@ function DocCard({
                      group-hover:text-primary transition-colors">
         {doc.title}
       </h3>
+      <p className={`text-xs mb-2 ${doc.index_status === "ready" ? "text-green-600" : "text-muted-foreground"}`}>{INDEX_STATUS_LABEL[doc.index_status ?? "pending"]}{doc.indexed_chunks ? ` · ${doc.indexed_vectors ?? 0}/${doc.indexed_chunks} 向量块` : ""}</p>
+      {indexError && <p className="text-xs text-red-600 mb-2" role="alert">{indexError}</p>}
 
       {/* 标签 */}
       {doc.tags && doc.tags.length > 0 && (
@@ -188,6 +202,7 @@ function DocCard({
           <span className="text-xs text-muted-foreground">{doc.author.name}</span>
         </div>
         <div className="flex items-center gap-2">
+          {isAuthor && doc.is_published && doc.index_status !== "empty" && <button disabled={indexing} onClick={handleReindex} className="text-xs text-primary hover:underline disabled:opacity-50">{indexing ? "重建中…" : "重建索引"}</button>}
           <span className="text-xs text-muted-foreground flex items-center gap-1">
             <Eye size={11} /> {doc.view_count}
           </span>

@@ -1,0 +1,200 @@
+"""Knowledge indexing/retrieval regression tests. DB writes roll back; API calls mocked."""
+import math
+import unittest
+from unittest.mock import AsyncMock, patch
+from uuid import uuid4
+
+import httpx
+from google.api_core.exceptions import NotFound
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.main import app
+from app.config import settings
+from app.database import engine, get_db
+from app.middleware.auth import get_current_user
+from app.models.document import Document, DocumentChunk, DocVisibility
+from app.models.user import User, UserRole
+from app.ai import embeddings, rag_engine
+from app.services import knowledge_service, ai_service
+
+VECTOR = [1.0] + [0.0] * 767
+
+
+class EmbeddingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_batch_dimensions_normalization_and_task_types(self):
+        embeddings._cooldowns.clear()
+        vectors = [[2.0] + [0.0] * 767, [0.0, 3.0] + [0.0] * 766]
+        with patch.object(settings, "google_api_key", "non-secret-test-key"), patch("app.ai.embeddings.genai.embed_content_async", AsyncMock(return_value={"embedding": vectors})) as api:
+            results = await embeddings.embed_chunks(["first", "second"])
+        self.assertEqual(api.await_count, 1)
+        self.assertEqual(api.await_args.kwargs["task_type"], "retrieval_document")
+        self.assertEqual(api.await_args.kwargs["output_dimensionality"], 768)
+        self.assertTrue(all(abs(sum(v*v for v in row) - 1) < 1e-8 for row in results))
+        for bad in ([1.0], [0.0] * 768, [float("nan")] * 768):
+            with self.assertRaises(embeddings.EmbeddingUnavailable):
+                embeddings.normalize_vector(bad)
+
+    async def test_unavailable_model_uses_short_cooldown(self):
+        embeddings._cooldowns.clear()
+        try:
+            with patch.object(settings, "google_api_key", "non-secret-test-key"), patch("app.ai.embeddings.genai.embed_content_async", AsyncMock(side_effect=NotFound("model retired"))) as api:
+                for _ in range(2):
+                    with self.assertRaises(embeddings.EmbeddingUnavailable) as raised:
+                        await embeddings.embed_text("test")
+                    self.assertEqual(raised.exception.reason, "model_not_found")
+                self.assertEqual(api.await_count, 1)
+        finally:
+            embeddings._cooldowns.clear()
+
+
+class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.connection = await engine.connect()
+        self.transaction = await self.connection.begin()
+        self.db = AsyncSession(bind=self.connection, expire_on_commit=False, join_transaction_mode="create_savepoint")
+        self.owner = User(id=uuid4(), name="RAG owner", email=f"{uuid4()}@example.test", password_hash="test-only", role=UserRole.engineer, is_active=True)
+        self.other = User(id=uuid4(), name="RAG other", email=f"{uuid4()}@example.test", password_hash="test-only", role=UserRole.engineer, is_active=True)
+        self.db.add_all([self.owner, self.other])
+        await self.db.flush()
+        self.code = "RAGSKU-" + uuid4().hex[:12]
+        self.failure = patch("app.services.knowledge_service.embed_chunks", AsyncMock(side_effect=embeddings.EmbeddingUnavailable("model_not_found")))
+        self.failure.start()
+        self.query_embedding = patch("app.ai.rag_engine.embed_text", AsyncMock(side_effect=embeddings.EmbeddingUnavailable("upstream_unavailable")))
+        self.query_embedding.start()
+        async def database():
+            yield self.db
+        async def user():
+            return self.owner
+        app.dependency_overrides[get_db] = database
+        app.dependency_overrides[get_current_user] = user
+        self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+
+    async def asyncTearDown(self):
+        app.dependency_overrides.clear()
+        self.failure.stop()
+        self.query_embedding.stop()
+        await self.client.aclose()
+        await self.db.close()
+        await self.transaction.rollback()
+        await self.connection.close()
+        await engine.dispose()
+
+    async def create(self, **overrides):
+        body = {"title": self.code + " 产品资料", "content": self.code + " 由星河制造，额定电压为19V。", "is_published": True, "visibility": "public"}
+        body.update(overrides)
+        response = await self.client.post("/api/v1/knowledge", json=body)
+        self.assertEqual(response.status_code, 201, response.text)
+        return response.json()
+
+    async def test_failed_embeddings_keep_text_and_answer_context(self):
+        row = await self.create()
+        self.assertEqual(row["index_status"], "text_only")
+        self.assertEqual(row["indexed_vectors"], 0)
+        self.assertGreater(row["indexed_chunks"], 0)
+        context = await rag_engine.retrieve_context(self.code + " 电压是多少？", self.db, user=self.owner)
+        self.assertIn("19V", context)
+        self.assertIn("星河制造", context)
+        rows = (await self.db.scalars(select(DocumentChunk).where(DocumentChunk.document_id == row["id"]))).all()
+        self.assertTrue(all(r.embedding is None for r in rows))
+
+    async def test_legacy_saved_document_without_chunks_is_searchable(self):
+        doc = Document(author_id=self.owner.id, title=self.code, content=self.code + " 厂家是凌云，功率77W。", is_published=True, visibility=DocVisibility.public)
+        self.db.add(doc)
+        await self.db.commit()
+        context = await rag_engine.retrieve_context(self.code + " 是谁生产的？", self.db, user=self.owner)
+        self.assertIn("凌云", context)
+        self.assertIn("77W", context)
+
+    async def test_publication_and_private_visibility_apply_to_keyword_path(self):
+        await self.create(content=self.code + " PUBLIC_MARKER")
+        await self.create(title=self.code + " own private", content=self.code + " OWN_PRIVATE_MARKER", visibility="private")
+        await self.create(title=self.code + " draft", content=self.code + " DRAFT_MARKER", is_published=False)
+        self.db.add(Document(author_id=self.other.id, title=self.code + " other", content=self.code + " OTHER_PRIVATE_MARKER", is_published=True, visibility=DocVisibility.private))
+        await self.db.commit()
+        context = await rag_engine.retrieve_context(self.code, self.db, top_k=8, user=self.owner)
+        self.assertIn("PUBLIC_MARKER", context)
+        self.assertIn("OWN_PRIVATE_MARKER", context)
+        self.assertNotIn("OTHER_PRIVATE_MARKER", context)
+        self.assertNotIn("DRAFT_MARKER", context)
+        public_only = await rag_engine.retrieve_context(self.code, self.db, top_k=8)
+        self.assertNotIn("OWN_PRIVATE_MARKER", public_only)
+
+    async def test_vector_path_filters_private_and_incompatible_models(self):
+        docs = [Document(author_id=self.owner.id, title=self.code, content="VECTOR_PUBLIC", visibility=DocVisibility.public, is_published=True),
+                Document(author_id=self.other.id, title="private fixture", content="VECTOR_HIDDEN", visibility=DocVisibility.private, is_published=True),
+                Document(author_id=self.owner.id, title="old fixture", content="VECTOR_OLD_MODEL", visibility=DocVisibility.public, is_published=True)]
+        self.db.add_all(docs)
+        await self.db.flush()
+        for index, doc in enumerate(docs):
+            self.db.add(DocumentChunk(document_id=doc.id, chunk_index=0, content=doc.content, embedding=VECTOR,
+                metadata_={"embedding_model": embeddings.embedding_identity() if index < 2 else "models/text-embedding-004:768"}))
+        await self.db.commit()
+        with patch("app.ai.rag_engine.embed_text", AsyncMock(return_value=VECTOR)):
+            context = await rag_engine.retrieve_context("unmatchedsemantic" + uuid4().hex, self.db, user=self.owner)
+        self.assertIn("VECTOR_PUBLIC", context)
+        self.assertNotIn("VECTOR_HIDDEN", context)
+        self.assertNotIn("VECTOR_OLD_MODEL", context)
+
+    async def test_reindex_is_author_only_and_reports_ready(self):
+        row = await self.create()
+        async def vectors(chunks):
+            return [VECTOR for _ in chunks]
+        with patch("app.services.knowledge_service.embed_chunks", vectors):
+            response = await self.client.post(f"/api/v1/knowledge/{row['id']}/reindex")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["index_status"], "ready")
+        self.assertEqual(response.json()["indexed_vectors"], response.json()["indexed_chunks"])
+        self.assertIn("gemini-embedding-001", response.json()["index_model"])
+        async def other():
+            return self.other
+        app.dependency_overrides[get_current_user] = other
+        self.assertEqual((await self.client.post(f"/api/v1/knowledge/{row['id']}/reindex")).status_code, 403)
+
+    async def test_update_empty_or_unpublish_removes_stale_chunks(self):
+        row = await self.create()
+        response = await self.client.patch(f"/api/v1/knowledge/{row['id']}", json={"content": ""})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["index_status"], "empty")
+        self.assertEqual(response.json()["indexed_chunks"], 0)
+        await self.client.patch(f"/api/v1/knowledge/{row['id']}", json={"content": self.code + " newer text"})
+        response = await self.client.patch(f"/api/v1/knowledge/{row['id']}", json={"is_published": False})
+        self.assertEqual(response.json()["index_status"], "draft")
+        self.assertEqual(response.json()["indexed_chunks"], 0)
+        self.assertEqual((await self.client.post(f"/api/v1/knowledge/{row['id']}/reindex")).status_code, 409)
+
+    async def test_empty_retrieval_does_not_ask_model_to_invent_answer(self):
+        with patch("app.services.ai_service.retrieve_context", AsyncMock(return_value="")), patch("app.services.ai_service.stream") as model:
+            result = "".join([chunk async for chunk in ai_service.stream_rag_answer("unknown", self.db, self.owner)])
+        self.assertIn("未在", result)
+        model.assert_not_called()
+
+    async def test_actual_context_reaches_stream_prompt(self):
+        await self.create()
+        prompts = []
+        async def model(task, prompt):
+            prompts.append(prompt)
+            yield "根据知识库，额定电压为19V。"
+        with patch("app.services.ai_service.stream", model):
+            result = "".join([chunk async for chunk in ai_service.stream_rag_answer(self.code + " 电压？", self.db, self.owner)])
+        self.assertIn("19V", result)
+        self.assertIn("资料来源：", result)
+        self.assertIn(self.code + " 产品资料", result)
+        self.assertIn("星河制造", prompts[0])
+        self.assertIn("以文档记载为准", prompts[0])
+
+    async def test_small_model_ignoring_title_shows_retrieved_original(self):
+        await self.create()
+        async def model(task, prompt):
+            for chunk in ("知识库", "未提供", "相关信息。"):
+                yield chunk
+        with patch("app.services.ai_service.stream", model):
+            result = "".join([chunk async for chunk in ai_service.stream_rag_answer(self.code, self.db, self.owner)])
+        self.assertIn("检索到的知识库原文", result)
+        self.assertIn("星河制造", result)
+        self.assertIn("19V", result)
+        self.assertNotIn("未提供相关信息", result)
+
+
+if __name__ == "__main__":
+    unittest.main()

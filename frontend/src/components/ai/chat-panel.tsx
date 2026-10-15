@@ -53,7 +53,7 @@ export default function AiChatPanel() {
     try {
       const token = session?.accessToken;
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/ai/chat`,
+        `${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/v1/ai/chat`,
         {
           method: "POST",
           headers: {
@@ -69,23 +69,26 @@ export default function AiChatPanel() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let accumulated = "";
+      let buffer = "";
+      let finished = false;
 
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const raw = decoder.decode(value, { stream: true });
-        // SSE 格式解析：每行 "data: <内容>"
-        const lines = raw.split("\n");
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const chunk = line.slice(6);
-          if (chunk === "[DONE]") break;
-          if (chunk.startsWith("[错误]")) {
-            accumulated = chunk;
-            break;
+        buffer += decoder.decode(value, { stream: true });
+        let boundary = buffer.indexOf("\n\n");
+        while (boundary !== -1) {
+          const event = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const data = event.split("\n").filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n");
+          if (data === "[DONE]") { finished = true; break; }
+          if (data) {
+            const chunk: { text?: string; error?: string } = JSON.parse(data);
+            if (chunk.error) accumulated += `\n\n[错误] ${chunk.error}`;
+            else accumulated += chunk.text ?? "";
           }
-          accumulated += chunk;
+          boundary = buffer.indexOf("\n\n");
         }
 
         // 实时更新最后一条 assistant 消息
@@ -94,7 +97,9 @@ export default function AiChatPanel() {
           next[next.length - 1] = { role: "assistant", content: accumulated };
           return next;
         });
+        if (finished) { await reader.cancel(); break; }
       }
+      reader.releaseLock();
     } catch {
       setMessages((prev) => {
         const next = [...prev];

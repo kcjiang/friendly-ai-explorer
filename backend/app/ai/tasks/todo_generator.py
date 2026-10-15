@@ -1,8 +1,9 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.ai.gemini_client import gemini
+from app.ai.router import chat, parse_json
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User, UserRole
+import logging
 
 TODO_PROMPT = """你是一位 FAE 团队的 AI 助理，请根据工程师当前的工单情况，生成今日的工作 TODO 清单。
 
@@ -13,17 +14,17 @@ TODO_PROMPT = """你是一位 FAE 团队的 AI 助理，请根据工程师当前
 {ticket_list}
 
 请生成一份简洁的今日 TODO 清单，要求：
-1. 按优先级排序（Critical > Major > Trivial）
+1. 按优先级排序（critical > major > trivial）
 2. 每条不超过 30 字
 3. 最多 8 条
-4. 输出格式为 JSON 数组，每个元素包含 "task" 和 "priority" 字段
+4. 输出 JSON 对象，顶层只有 "todos" 数组，每个元素只有 "task" 和 "priority" 字段
 5. 只输出 JSON，不要其他内容
 
 示例输出：
-[
+{{"todos": [
   {{"task": "跟进 KC-2024-001 客户网络问题，等待客户提供日志", "priority": "critical"}},
   {{"task": "更新 KC-2024-003 固件升级方案", "priority": "major"}}
-]
+]}}
 """
 
 
@@ -48,7 +49,7 @@ async def generate_todos(user: User, db: AsyncSession) -> list[dict]:
         return [{"task": "今日暂无活跃工单，可整理知识库或学习新技术", "priority": "trivial"}]
 
     ticket_lines = "\n".join(
-        f"- [{t.priority.value.upper()}] {t.ticket_no}: {t.title}（状态：{t.status.value}）"
+        f"- [{t.priority.value.upper()}] {t.ticket_no}: {t.title[:100]}（状态：{t.status.value}）"
         for t in tickets[:15]  # 最多传 15 条给 AI
     )
 
@@ -59,12 +60,10 @@ async def generate_todos(user: User, db: AsyncSession) -> list[dict]:
     )
 
     try:
-        raw = await gemini.chat(prompt)
+        raw = await chat("todo", prompt)
         # 清除可能的 markdown 代码块
-        raw = raw.strip().strip("```json").strip("```").strip()
-        import json
-        todos = json.loads(raw)
+        todos = parse_json(raw)
         return todos if isinstance(todos, list) else []
-    except Exception as e:
-        print(f"[TODO] 生成失败: {e}")
+    except Exception:
+        logging.getLogger(__name__).warning("TODO 生成失败，返回简化清单", exc_info=True, extra={"details": {"task": "todo", "active_ticket_count": len(tickets)}})
         return [{"task": f"共 {len(tickets)} 个活跃工单待处理", "priority": "major"}]

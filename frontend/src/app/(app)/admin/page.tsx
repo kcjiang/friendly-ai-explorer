@@ -7,8 +7,10 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Users, Settings, Terminal, Loader2, Trash2, Edit2, Plus, X, RefreshCw } from "lucide-react";
 import apiClient from "@/lib/api";
+import AISettings from "@/components/admin/ai-settings";
+import AppLogs from "@/components/admin/app-logs";
 
-type Tab = "users" | "configs" | "api-tester";
+type Tab = "users" | "configs" | "api-tester" | "ai" | "logs";
 
 // ── 类型 ──────────────────────────────────────────────────────
 interface UserItem {
@@ -33,6 +35,7 @@ export default function AdminPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("users");
+  const [logRequestId, setLogRequestId] = useState("");
 
   // 非开发者重定向
   useEffect(() => {
@@ -42,6 +45,8 @@ export default function AdminPage() {
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: "users",      label: "用户管理", icon: <Users size={15} /> },
     { key: "configs",    label: "系统配置", icon: <Settings size={15} /> },
+    { key: "ai",         label: "AI 服务与调度", icon: <Settings size={15} /> },
+    { key: "logs",       label: "应用日志", icon: <Terminal size={15} /> },
     { key: "api-tester", label: "API 测试", icon: <Terminal size={15} /> },
   ];
 
@@ -53,12 +58,12 @@ export default function AdminPage() {
       </div>
 
       {/* Tab 切换 */}
-      <div className="flex gap-1 border-b border-border mb-6">
+      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
         {tabs.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium
+            className={`flex shrink-0 whitespace-nowrap items-center gap-1.5 px-4 py-2.5 text-sm font-medium
                         border-b-2 transition-colors -mb-px ${
               tab === t.key
                 ? "border-primary text-primary"
@@ -72,6 +77,8 @@ export default function AdminPage() {
 
       {tab === "users"      && <UsersTab />}
       {tab === "configs"    && <ConfigsTab />}
+      {tab === "ai"         && <AISettings onInspectRequest={id => { setLogRequestId(id); setTab("logs"); }} />}
+      {tab === "logs"       && <AppLogs initialRequestId={logRequestId} />}
       {tab === "api-tester" && <ApiTesterTab />}
     </div>
   );

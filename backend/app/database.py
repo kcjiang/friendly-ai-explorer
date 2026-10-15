@@ -7,7 +7,9 @@ from app.config import settings
 
 engine = create_async_engine(
     settings.database_url,
-    echo=(settings.environment == "development"),
+    # SQL parameters can contain business data and credentials; keep them out of logs.
+    echo=False,
+    hide_parameters=True,
     pool_size=10,
     max_overflow=20,
 )

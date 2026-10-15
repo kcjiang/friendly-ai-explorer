@@ -9,6 +9,13 @@ const apiClient = axios.create({
 
 // 请求拦截：自动附加 Bearer Token
 apiClient.interceptors.request.use(async (config) => {
+  // AI requests can include a primary and fallback attempt (up to 300s each).
+  if (config.url?.startsWith("/api/v1/ai/") && config.timeout === 30_000) {
+    config.timeout = 610_000;
+  }
+  if (config.url?.startsWith("/api/v1/knowledge") && ["post", "patch"].includes(config.method ?? "") && config.timeout === 30_000) {
+    config.timeout = 60_000;
+  }
   if (typeof window !== "undefined") {
     const session = await getSession();
     if (session?.accessToken) {

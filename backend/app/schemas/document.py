@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel
 from app.models.document import DocVisibility
 
@@ -11,7 +11,14 @@ class AuthorBrief(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class DocumentListOut(BaseModel):
+class IndexState(BaseModel):
+    index_status: Literal["draft", "empty", "pending", "ready", "text_only"] = "pending"
+    indexed_chunks: int = 0
+    indexed_vectors: int = 0
+    index_model: str = ""
+
+
+class DocumentListOut(IndexState):
     """文档列表条目（不含正文，轻量）"""
     id:                 uuid.UUID
     title:              str
@@ -27,7 +34,7 @@ class DocumentListOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class DocumentOut(BaseModel):
+class DocumentOut(IndexState):
     """文档详情（含正文）"""
     id:                 uuid.UUID
     title:              str

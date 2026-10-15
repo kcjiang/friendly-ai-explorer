@@ -1,5 +1,5 @@
-import json
-from app.ai.gemini_client import gemini
+from app.ai.router import chat, parse_json
+import logging
 
 ANALYZE_PROMPT = """你是一名 FAE（技术支持工程师）的 AI 助理，请分析以下邮件。
 
@@ -45,12 +45,11 @@ async def analyze_email(sender: str, subject: str, body: str) -> dict:
     )
 
     try:
-        raw = await gemini.chat(prompt)
-        raw = raw.strip().strip("```json").strip("```").strip()
-        result = json.loads(raw)
+        raw = await chat("email_analysis", prompt)
+        result = parse_json(raw)
         return result
-    except Exception as e:
-        print(f"[EmailAnalyzer] AI 分析失败: {e}")
+    except Exception:
+        logging.getLogger(__name__).warning("邮件 AI 分析失败，返回空分析", exc_info=True)
         return {
             "is_customer_email": False,
             "is_defect_report":  False,

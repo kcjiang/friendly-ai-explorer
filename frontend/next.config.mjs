@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  // A routed AI request can take two 300s attempts plus transport overhead.
+  experimental: { proxyTimeout: 660_000 },
   // 开发环境：将 /api/v1/* 代理到 FastAPI 后端
   // 生产环境由 Nginx 负责，此配置不生效
   // 生产镜像构建时固定 Docker 服务名，浏览器使用同源请求。

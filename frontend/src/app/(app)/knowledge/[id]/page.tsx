@@ -5,7 +5,11 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { ArrowLeft, Edit2, Eye, EyeOff, Loader2, Save } from "lucide-react";
 import apiClient from "@/lib/api";
-import { Document } from "@/types/document";
+import type { Document } from "@/types/document";
+import { INDEX_STATUS_LABEL } from "@/types/document";
+import type MarkdownRenderer from "react-markdown";
+import type GfmPlugin from "remark-gfm";
+import { errorMessage } from "@/lib/errors";
 
 export default function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -17,6 +21,8 @@ export default function DocumentDetailPage() {
   const [editing,  setEditing]  = useState(false);
   const [preview,  setPreview]  = useState(true);
   const [saving,   setSaving]   = useState(false);
+  const [indexing, setIndexing] = useState(false);
+  const [error, setError] = useState("");
 
   // 编辑表单状态
   const [title,       setTitle]       = useState("");
@@ -42,8 +48,17 @@ export default function DocumentDetailPage() {
 
   const isAuthor = doc?.author.id === session?.user?.id;
 
+  async function handleReindex() {
+    setIndexing(true); setError("");
+    try {
+      const response = await apiClient.post(`/api/v1/knowledge/${id}/reindex`, {}, { timeout: 60_000 });
+      setDoc(prev => prev ? { ...prev, ...response.data } : prev);
+    } catch (e) { setError(errorMessage(e)); }
+    finally { setIndexing(false); }
+  }
+
   async function handleSave() {
-    setSaving(true);
+    setSaving(true); setError("");
     try {
       const res = await apiClient.patch(`/api/v1/knowledge/${id}`, {
         title:        title.trim(),
@@ -56,7 +71,7 @@ export default function DocumentDetailPage() {
       setEditing(false);
       setPreview(true);
     } catch (e) {
-      console.error(e);
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -96,6 +111,7 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
         </button>
 
         <div className="flex items-center gap-2">
+          {isAuthor && !editing && doc.is_published && doc.index_status !== "empty" && <button onClick={handleReindex} disabled={indexing} className="text-sm px-3 py-1.5 border border-border rounded-lg disabled:opacity-50">{indexing ? "重建中…" : "重建索引"}</button>}
           {editing && (
             <button
               onClick={() => setPreview(p => !p)}
@@ -138,6 +154,9 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
           )}
         </div>
       </div>
+
+      {error && <p role="alert" className="mx-6 mt-3 text-sm text-red-600">{error}</p>}
+      {!editing && <p className="px-8 py-3 text-xs text-muted-foreground">{INDEX_STATUS_LABEL[doc.index_status ?? "pending"]} · 当前向量块 {doc.indexed_vectors ?? 0}/{doc.indexed_chunks ?? 0}。私有文档仅作者可用于 AI 问答。</p>}
 
       <div className="flex flex-1 overflow-hidden">
         {/* 主内容区 */}
@@ -244,8 +263,8 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
 
 // ── Markdown 预览 ─────────────────────────────────────────────
 function MarkdownPreview({ content }: { content: string }) {
-  const [ReactMarkdown, setRM]  = useState<typeof import("react-markdown").default | null>(null);
-  const [remarkGfm,     setGfm] = useState<typeof import("remark-gfm").default | null>(null);
+  const [ReactMarkdown, setRM]  = useState<typeof MarkdownRenderer | null>(null);
+  const [remarkGfm,     setGfm] = useState<typeof GfmPlugin | null>(null);
 
   useState(() => {
     import("react-markdown").then(m => setRM(() => m.default));

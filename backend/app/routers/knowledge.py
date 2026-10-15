@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form
+from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -46,6 +47,11 @@ async def get_document(
     db: AsyncSession = Depends(get_db),
 ):
     return await knowledge_service.get_document(doc_id, db, current_user)
+
+
+@router.post("/{doc_id}/reindex", summary="重建已发布文档索引（仅作者）")
+async def reindex_document(doc_id: UUID, current_user: AnyUser, db: AsyncSession = Depends(get_db)):
+    return await knowledge_service.reindex_document(doc_id, db, current_user)
 
 
 @router.patch("/{doc_id}", response_model=DocumentOut, summary="修改文档（仅作者）")

@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends
+import json
+import logging
 from uuid import UUID
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -7,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.middleware.rbac import AnyUser
 from app.services import ai_service
+from app.ai.provider_client import AIError
 
 router = APIRouter()
 
@@ -27,11 +30,14 @@ async def chat(
     """
     async def event_stream():
         try:
-            async for chunk in ai_service.stream_rag_answer(body.message, db):
-                # SSE 格式：data: <内容>\n\n
-                yield f"data: {chunk}\n\n"
-        except Exception as e:
-            yield f"data: [错误] {str(e)}\n\n"
+            async for chunk in ai_service.stream_rag_answer(body.message, db, current_user):
+                # JSON keeps newlines inside model chunks intact across SSE/network boundaries.
+                yield "data: " + json.dumps({"text": chunk}, ensure_ascii=False) + "\n\n"
+        except AIError as e:
+            yield "data: " + json.dumps({"error": str(e)}, ensure_ascii=False) + "\n\n"
+        except Exception:
+            logging.getLogger(__name__).warning("AI chat failed before completion")
+            yield 'data: {"error":"AI 请求失败，请稍后重试或联系管理员"}\n\n'
         finally:
             yield "data: [DONE]\n\n"
 

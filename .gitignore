@@ -26,6 +26,7 @@ npm-debug.log*
 
 # 上传文件
 backend/uploads/
+backend/logs/
 
 # 其他文件
 drafts/

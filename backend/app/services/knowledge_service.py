@@ -1,11 +1,13 @@
 import os
 import uuid
+import asyncio
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
 import aiofiles
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import select, delete, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -14,7 +16,9 @@ from app.models.document import Document, DocumentChunk, DocVisibility
 from app.models.user import User, UserRole
 from app.schemas.document import CreateDocumentRequest, UpdateDocumentRequest
 from app.ai.file_parser import parse_file
-from app.ai.embeddings import chunk_text, embed_chunks
+from app.ai.embeddings import chunk_text, embed_chunks, embedding_identity, EmbeddingUnavailable
+
+logger = logging.getLogger(__name__)
 
 
 # ── 可见性过滤 ────────────────────────────────────────────────
@@ -31,34 +35,52 @@ def _visibility_filter(user: User):
 # ── 向量化入库（内部使用）────────────────────────────────────
 
 async def _vectorize_document(doc: Document, text: str, db: AsyncSession):
-    """将文档文本切块、向量化，写入 document_chunks"""
-    # 清除旧的 chunks
-    old = await db.execute(
-        select(DocumentChunk).where(DocumentChunk.document_id == doc.id)
-    )
-    for chunk in old.scalars().all():
-        await db.delete(chunk)
-
+    """Always keep searchable text, even if the external embedding service fails."""
+    doc_id, title = doc.id, doc.title
     chunks = chunk_text(text)
-    if not chunks:
+    embeddings, error = [None] * len(chunks), None
+    if chunks:
+        try:
+            vectors = await asyncio.wait_for(embed_chunks([f"{title}\n{chunk}" for chunk in chunks]), timeout=45)
+            if len(vectors) != len(chunks):
+                raise EmbeddingUnavailable("batch_size_mismatch")
+            embeddings = vectors
+        except Exception as exc:
+            error = exc.reason if isinstance(exc, EmbeddingUnavailable) else "embedding_failed"
+            logger.warning("知识库向量化失败，已保留文本索引供关键词检索", exc_info=True,
+                           extra={"details": {"document_id": str(doc_id), "embedding_model": embedding_identity(), "reason": error}})
+    current = await db.scalar(select(Document).where(Document.id == doc_id).with_for_update().execution_options(populate_existing=True))
+    if not current or current.content != text or current.title != title or not current.is_published:
+        await db.commit()  # release the lock; a newer edit owns its own indexing operation
         return
-
-    try:
-        embeddings = await embed_chunks(chunks)
-    except Exception as e:
-        # 向量化失败不影响文档保存，仅记录日志
-        print(f"[Embeddings] 向量化失败 doc={doc.id}: {e}")
-        return
-
+    await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc_id))
     for i, (content, emb) in enumerate(zip(chunks, embeddings)):
         db.add(DocumentChunk(
-            document_id=doc.id,
+            document_id=doc_id,
             chunk_index=i,
             content=content,
             embedding=emb,
+            metadata_={"embedding_model": embedding_identity() if emb is not None else None, "embedding_error": error},
         ))
 
     await db.commit()
+    logger.info("知识库索引更新完成", extra={"details": {"document_id": str(doc_id), "chunks": len(chunks), "vectors": sum(v is not None for v in embeddings), "embedding_model": embedding_identity()}})
+
+
+async def _index_states(docs, db):
+    if not docs:
+        return docs
+    counts = (await db.execute(select(DocumentChunk.document_id, func.count().label("chunks"),
+        func.sum(case(((DocumentChunk.embedding.is_not(None)) & (DocumentChunk.metadata_["embedding_model"].astext == embedding_identity()), 1), else_=0)).label("vectors"))
+        .where(DocumentChunk.document_id.in_([d.id for d in docs])).group_by(DocumentChunk.document_id))).all()
+    stats = {row.document_id: row for row in counts}
+    for doc in docs:
+        row = stats.get(doc.id)
+        doc.indexed_chunks = row.chunks if row else 0
+        doc.indexed_vectors = int(row.vectors or 0) if row else 0
+        doc.index_model = embedding_identity()
+        doc.index_status = "draft" if not doc.is_published else "empty" if not (doc.content or "").strip() else "pending" if not row else "ready" if doc.indexed_vectors == doc.indexed_chunks else "text_only"
+    return docs
 
 
 # ── CRUD ─────────────────────────────────────────────────────
@@ -70,7 +92,7 @@ async def list_documents(db: AsyncSession, user: User) -> list[Document]:
         .where(_visibility_filter(user))
         .order_by(Document.updated_at.desc())
     )
-    return list(result.scalars().all())
+    return await _index_states(list(result.scalars().all()), db)
 
 
 async def get_document(doc_id: str, db: AsyncSession, user: User) -> Document:
@@ -88,7 +110,7 @@ async def get_document(doc_id: str, db: AsyncSession, user: User) -> Document:
     # 增加浏览量
     doc.view_count += 1
     await db.commit()
-    return doc
+    return (await _index_states([doc], db))[0]
 
 
 async def create_document(body: CreateDocumentRequest, db: AsyncSession, user: User) -> Document:
@@ -112,7 +134,7 @@ async def create_document(body: CreateDocumentRequest, db: AsyncSession, user: U
     result = await db.execute(
         select(Document).options(selectinload(Document.author)).where(Document.id == doc.id)
     )
-    return result.scalar_one()
+    return (await _index_states([result.scalar_one()], db))[0]
 
 
 async def update_document(
@@ -131,15 +153,17 @@ async def update_document(
     await db.commit()
 
     # 内容或发布状态有变化时重新向量化
-    if (body.content is not None or body.is_published is not None) and doc.is_published:
+    if (body.content is not None or body.is_published is not None or body.title is not None) and doc.is_published:
         text = body.content if body.content is not None else doc.content
-        if text:
-            await _vectorize_document(doc, text, db)
+        await _vectorize_document(doc, text or "", db)
+    elif not doc.is_published:
+        await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc.id))
+        await db.commit()
 
     result = await db.execute(
         select(Document).options(selectinload(Document.author)).where(Document.id == doc_id)
     )
-    return result.scalar_one()
+    return (await _index_states([result.scalar_one()], db))[0]
 
 
 async def delete_document(doc_id: str, db: AsyncSession, user: User) -> dict:
@@ -215,4 +239,18 @@ async def upload_document(
     result = await db.execute(
         select(Document).options(selectinload(Document.author)).where(Document.id == doc.id)
     )
-    return result.scalar_one()
+    return (await _index_states([result.scalar_one()], db))[0]
+
+
+async def reindex_document(doc_id: str, db: AsyncSession, user: User):
+    doc = await db.get(Document, doc_id)
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    if doc.author_id != user.id:
+        raise HTTPException(403, "只有作者可以重建文档索引")
+    if not doc.is_published:
+        raise HTTPException(409, "请先发布文档，再重建索引")
+    await _vectorize_document(doc, doc.content or "", db)
+    await _index_states([doc], db)
+    return {"document_id": str(doc.id), "index_status": doc.index_status, "indexed_chunks": doc.indexed_chunks,
+            "indexed_vectors": doc.indexed_vectors, "index_model": doc.index_model}

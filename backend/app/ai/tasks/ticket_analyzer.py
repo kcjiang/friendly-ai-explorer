@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.ai.gemini_client import gemini
+from app.ai.router import chat
 from app.ai.rag_engine import retrieve_context
 
 ANALYZE_PROMPT = """你是一名资深的技术支持工程师（FAE），请分析以下客户工单，给出专业的技术支持建议。
@@ -31,13 +31,13 @@ ANALYZE_PROMPT = """你是一名资深的技术支持工程师（FAE），请分
 """
 
 
-async def analyze_ticket(ticket: dict, db: AsyncSession) -> str:
+async def analyze_ticket(ticket: dict, db: AsyncSession, user=None) -> str:
     """
     AI 分析工单，结合知识库生成排查建议。
     ticket: 包含 title, description, product_name, firmware_version, customer_name 的字典
     """
     query = f"{ticket.get('title', '')} {ticket.get('description', '')}"
-    context = await retrieve_context(query, db, top_k=4)
+    context = await retrieve_context(query, db, top_k=4, user=user)
 
     prompt = ANALYZE_PROMPT.format(
         title=ticket.get("title") or "未填写",
@@ -49,4 +49,4 @@ async def analyze_ticket(ticket: dict, db: AsyncSession) -> str:
         context=context or "（暂无相关知识库内容）",
     )
 
-    return await gemini.chat(prompt)
+    return await chat("ticket_analysis", prompt)
