@@ -1,19 +1,27 @@
-import Link from "next/link";
-import { GeminiLogo } from "@/components/icons";
+import Image from "next/image";
 
-export default function GeminiBrand() {
+export default function AIBrand() {
   return (
-    <Link
-      href="https://aistudio.google.com"
-      target="_blank"
-      className="relative my-2 flex flex-col items-center justify-center gap-y-2 px-4 py-4"
-    >
-      <div className="dot-matrix absolute left-0 top-0 -z-10 h-full w-full" />
-      <span className="text-xs text-muted-foreground">Powered by</span>
-      <div className="flex items-center space-x-2">
-        <GeminiLogo size={24} />
-        <span className="text-md text-accent-foreground">Gemini 2.5</span>
+    <div className="mx-3 mb-4 flex shrink-0 flex-col items-center border-t border-border/70 pt-4 text-center">
+      <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+        Powered by
+      </span>
+      <Image
+        src="/nvidia-dgx-spark.svg"
+        alt="NVIDIA DGX Spark"
+        width={72}
+        height={52}
+        className="mb-2 mt-3 h-[52px] w-[72px] opacity-80 dark:invert"
+      />
+      <span className="text-sm font-semibold tracking-tight text-foreground">
+        2× DGX Spark
+      </span>
+      <div className="mt-3 space-y-0.5">
+        <p className="text-xl font-medium leading-7 tracking-tight text-foreground">
+          128 <span className="text-sm font-normal text-muted-foreground">GB</span>
+        </p>
+        <p className="text-[11px] leading-5 text-muted-foreground">高达 200 B 参数</p>
       </div>
-    </Link>
+    </div>
   );
 }

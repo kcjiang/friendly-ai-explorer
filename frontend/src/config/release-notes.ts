@@ -2,6 +2,15 @@
 // Keep all published entries and insert new versions at the top (newest first).
 export const releaseNotes: Record<string, { title: string; items: string[] }> =
   {
+    "0.2.1-dev.1": {
+      title: "支持本地 Embedding 选择与 AI任务",
+      items: [
+        "新增独立的知识库 Embedding 配置，支持本地 OpenAI 兼容服务、Gemini 及仅关键词检索，可测试连接并配置模型、密钥与查询前缀。",
+        "优化知识库向量索引与检索兼容性，更换向量模型后按配置隔离索引，并支持手动重建。",
+        "新增 AI任务页面，支持加密托管 Jira 账户、通过项目或 JQL 筛选问题、手动检查与后台定时执行。",
+        "支持将 Jira 问题按缺陷模板整理为草稿，提供模板管理、预览编辑、缺失信息标红与复制；手动标记已处理，保留来源和执行记录。",
+      ],
+    },
     "0.2.0-dev.1": {
       title: "支持多模型调度与 AI 调试",
       items: [

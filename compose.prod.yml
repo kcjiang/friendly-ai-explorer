@@ -17,6 +17,8 @@ services:
       - ./db/migration_v7_catalog_trash.sql:/docker-entrypoint-initdb.d/07_catalog_trash.sql:ro
       - ./db/migration_v8_ai_routing.sql:/docker-entrypoint-initdb.d/08_ai_routing.sql:ro
       - ./db/migration_v9_ai_diagnostics.sql:/docker-entrypoint-initdb.d/09_ai_diagnostics.sql:ro
+      - ./db/migration_v10_embedding_settings.sql:/docker-entrypoint-initdb.d/10_embedding_settings.sql:ro
+      - ./db/migration_v11_ai_tasks.sql:/docker-entrypoint-initdb.d/11_ai_tasks.sql:ro
     healthcheck:
       test: [CMD-SHELL, pg_isready -U admin -d fae_app_pgdb]
       interval: 5s
@@ -31,6 +33,8 @@ services:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini-embedding-001}
       AI_ENCRYPTION_KEY: ${AI_ENCRYPTION_KEY:-}
+      TASK_ENCRYPTION_KEY: ${TASK_ENCRYPTION_KEY:-}
+      JIRA_ALLOWED_HOSTS: ${JIRA_ALLOWED_HOSTS:-jira.sdmctech.com:9380}
       LOG_DIR: /app/logs
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY}
@@ -47,6 +51,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    restart: unless-stopped
+
+  task-worker:
+    image: ${IMAGE_PREFIX:-ghcr.io/kcjiang/fae}-backend:${IMAGE_TAG:-latest}
+    command: [python, -m, app.task_worker]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://admin:${DB_PASSWORD:?Set DB_PASSWORD}@postgres:5432/fae_app_pgdb
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      AI_ENCRYPTION_KEY: ${AI_ENCRYPTION_KEY:-}
+      TASK_ENCRYPTION_KEY: ${TASK_ENCRYPTION_KEY:-}
+      JIRA_ALLOWED_HOSTS: ${JIRA_ALLOWED_HOSTS:-jira.sdmctech.com:9380}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY}
+      LOG_DIR: /app/logs
+      ENVIRONMENT: production
+    volumes:
+      - ${FAE_DATA_DIR:-/opt/fae}/logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:

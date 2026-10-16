@@ -37,7 +37,7 @@ docker compose --env-file .env.production -f compose.prod.yml up -d backend fron
 
 保存后测试“普通回答”和“JSON 输出”；在“任务分配”中把“今日 AI TODO”主服务设为该服务。其余任务继续跟随 Gemini，或分别指定其他服务。也可以设置 OpenAI 官方地址 `https://api.openai.com/v1` 和账号可用的 Chat Completions 模型。不同模型支持的接口和参数可能不同，以测试结果为准。
 
-Gemini 原生 Base URL 默认 `https://generativelanguage.googleapis.com/v1beta`，模型填写 `gemini-2.5-flash` 等实际可用名称。切换聊天服务不会修改知识库向量配置；向量化默认使用 `EMBEDDING_MODEL=gemini-embedding-001`、`GOOGLE_API_KEY` 和 768 维索引。旧 `text-embedding-004` 已停用，旧文档需重建索引，详见 [知识库检索与索引](knowledge-rag.md)。独立日志 AI 分析尚无业务入口。
+Gemini 原生 Base URL 默认 `https://generativelanguage.googleapis.com/v1beta`，模型填写实际可用名称。切换聊天服务不会修改知识库向量配置；“知识库向量服务”可独立设置 Gemini、OpenAI 兼容本地 Embedding 接口或仅关键词检索。已有部署须执行 v10 迁移；切换编码器后重建文档索引，详见 [知识库检索与索引](knowledge-rag.md)。独立日志 AI 分析尚无业务入口。
 
 ## 路由、失败和缓存
 
@@ -58,7 +58,7 @@ Gemini 原生 Base URL 默认 `https://generativelanguage.googleapis.com/v1beta`
 - 接收完整 `<think>...</think>` 后的最终 JSON、Markdown 代码块，以及说明文字包围的唯一完整 JSON。不会从未结束的思考或截断数组中猜测答案。TODO 同时兼容原数组与 `{"todos": [...]}`，并规范化 high/medium/low 等已知优先级。
 - “应用本地轻量任务参数”可设置 180 秒、1024 输出 Token、并发 1、关闭思考、自动 JSON、温度 0.7 和重试 1 次；需点击保存后生效。该按钮不会改变模型、地址、密钥或任务分配。
 - 模型大小、量化、vLLM 模板和网关透传能力会影响速度。27B 在 GB10 上的实际延迟仍需实测，可单独设置较长超时与较低输出上限；应用重试无法消除上游 503 或硬件性能限制。
-- RAG 查询向量化异步执行并设置 16 秒总等待上限，失败后改用知识库关键词检索。聊天没有检索到资料时明确提示，不再用通用知识猜测内部产品信息。向量检索使用独立保存点，失败不会使后续工单写回事务失效。
+- RAG 查询向量化使用独立服务及可配置超时，失败后改用知识库关键词检索。聊天没有检索到资料时仍可进行通用问答，提示词要求不编造内部产品信息。向量检索使用独立保存点，失败不会使后续工单写回事务失效。
 
 ## 管理后台应用日志
 

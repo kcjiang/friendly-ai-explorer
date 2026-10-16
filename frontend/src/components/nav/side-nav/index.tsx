@@ -5,7 +5,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import Navigation from "./components/navigation";
 import User from "./components/user";
-import GeminiBrand from "./components/footer-brand";
+import AIBrand from "./components/footer-brand";
 
 export default function SideNav() {
   const [isOpen, setIsOpen] = useState(false);
@@ -35,7 +35,7 @@ export default function SideNav() {
       >
         <User />
         <Navigation />
-        <GeminiBrand />
+        <AIBrand />
       </aside>
     </>
   );

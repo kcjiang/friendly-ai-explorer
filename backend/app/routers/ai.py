@@ -3,7 +3,8 @@ import json
 import logging
 from uuid import UUID
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -14,8 +15,25 @@ from app.ai.provider_client import AIError
 router = APIRouter()
 
 
+class ChatTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
 class ChatRequest(BaseModel):
-    message: str
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    message: str = Field(min_length=1, max_length=8000)
+    history: list[ChatTurn] = Field(default_factory=list, max_length=10)
+    page: Literal["dashboard", "tickets", "knowledge", "email", "debug", "catalog", "admin", "other"] = "other"
+
+    @model_validator(mode="after")
+    def bounded_history(self):
+        if sum(len(turn.content) for turn in self.history) > 16000:
+            raise ValueError("对话历史过长，请开始新对话")
+        if any(turn.role != ("user" if index % 2 == 0 else "assistant") for index, turn in enumerate(self.history)) or len(self.history) % 2:
+            raise ValueError("历史必须是完整的用户与助手对话轮次")
+        return self
 
 
 @router.post("/chat", summary="RAG 流式问答（SSE）")
@@ -30,7 +48,7 @@ async def chat(
     """
     async def event_stream():
         try:
-            async for chunk in ai_service.stream_rag_answer(body.message, db, current_user):
+            async for chunk in ai_service.stream_rag_answer(body.message, db, current_user, history=[turn.model_dump() for turn in body.history], page=body.page):
                 # JSON keeps newlines inside model chunks intact across SSE/network boundaries.
                 yield "data: " + json.dumps({"text": chunk}, ensure_ascii=False) + "\n\n"
         except AIError as e:

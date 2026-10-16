@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
-TASKS = {"default": "默认服务", "todo": "今日 AI TODO", "ticket_analysis": "工单分析", "email_analysis": "邮件分析", "rag_chat": "知识库问答"}
+TASKS = {"default": "默认服务", "todo": "今日 AI TODO", "ticket_analysis": "工单分析", "email_analysis": "邮件分析", "rag_chat": "AI 对话（知识库优先）"}
 
 
 class ProviderInput(BaseModel):

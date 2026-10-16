@@ -7,8 +7,24 @@ from app.database import get_db
 from app.middleware.rbac import DevOnly
 from app.schemas.ai_config import ProviderInput, RoutesInput, TestInput
 from app.services import ai_admin_service as service
+from app.services import embedding_admin_service as embedding
 
 router = APIRouter()
+
+
+@router.get("/embedding")
+async def embedding_settings(user: DevOnly, db: AsyncSession = Depends(get_db)):
+    return await embedding.public_config(db)
+
+
+@router.put("/embedding")
+async def save_embedding_settings(body: embedding.EmbeddingInput, user: DevOnly, db: AsyncSession = Depends(get_db)):
+    return await embedding.save_config(db, body)
+
+
+@router.post("/embedding/test")
+async def test_embedding_settings(user: DevOnly, db: AsyncSession = Depends(get_db)):
+    return await embedding.test_config(db)
 
 
 @router.get("/providers")

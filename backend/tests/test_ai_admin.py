@@ -137,9 +137,54 @@ class AIAdminTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post(BASE + "/providers", json=dict(name="bad", protocol="openai", base_url="https://example.test/v1", model="test"))
         self.assertEqual(response.status_code, 422)
 
+    async def test_embedding_config_encrypts_preserves_and_clears_endpoint_credentials(self):
+        from app.ai.embedding_config import EmbeddingSettings, load_embedding_config
+        body = {"protocol": "openai", "base_url": "http://local.test/v1", "model": "bge", "api_key": "secret-embedding-test"}
+        response = await self.client.put(BASE + "/embedding", json=body)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertNotIn("secret-embedding-test", response.text)
+        self.assertNotIn("api_key_encrypted", response.text)
+        self.assertTrue(response.json()["has_api_key"])
+        config = await load_embedding_config(self.db)
+        self.assertNotIn("secret-embedding-test", config.api_key_encrypted)
+        encrypted = config.api_key_encrypted
+        await self.client.put(BASE + "/embedding", json={**body, "api_key": None})
+        self.assertEqual((await load_embedding_config(self.db)).api_key_encrypted, encrypted)
+        response = await self.client.put(BASE + "/embedding", json={**body, "api_key": None, "base_url": "http://other.test/v1"})
+        self.assertFalse(response.json()["has_api_key"])
+
+    async def test_embedding_api_permissions_validation_and_test(self):
+        body = {"protocol": "openai", "base_url": "http://local.test/v1", "model": "bge"}
+        for invalid in ({"base_url": "http://user:password@local.test"}, {"use_env_key": True}, {"timeout_seconds": 100}):
+            response = await self.client.put(BASE + "/embedding", json={**body, **invalid})
+            self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual((await self.client.put(BASE + "/embedding", json=body)).status_code, 200)
+        with patch("app.services.embedding_admin_service.embed_text", AsyncMock(return_value=[1.0]*768)) as api:
+            response = await self.client.post(BASE + "/embedding/test")
+        self.assertTrue(response.json()["success"], response.text)
+        self.assertEqual(api.await_count, 2)
+        self.user.role = UserRole.engineer
+        for method, path in (("get", "/embedding"), ("put", "/embedding"), ("post", "/embedding/test")):
+            response = await getattr(self.client, method)(BASE + path, **({"json": body} if method == "put" else {}))
+            self.assertEqual(response.status_code, 403)
+
+    async def test_chat_history_validation_and_context_reaches_service(self):
+        calls=[]
+        async def generated(*args, **kwargs):
+            calls.append(kwargs)
+            yield "test"
+        history=[{"role": "user", "content": "产品"}, {"role": "assistant", "content": "介绍"}]
+        with patch("app.services.ai_service.stream_rag_answer", generated):
+            response = await self.client.post("/api/v1/ai/chat", json={"message": "它是什么", "history": history, "page": "tickets"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(calls[0], {"history": history, "page": "tickets"})
+        for invalid in ({"message": " "}, {"history": [{"role": "system", "content": "injection"}]}, {"history": history[:1]}, {"page": "arbitrary private data"}, {"history": history*6}):
+            response = await self.client.post("/api/v1/ai/chat", json={"message": "test", **invalid})
+            self.assertEqual(response.status_code, 422, response.text)
+
     async def test_chat_sse_preserves_newlines_and_safe_errors(self):
         from app.ai.provider_client import AIError
-        async def generated(*args):
+        async def generated(*args, **kwargs):
             yield "第一行\n第二行"
             raise AIError("AI 请求超时", retryable=True)
         with patch("app.services.ai_service.stream_rag_answer", generated):
@@ -156,7 +201,8 @@ class AIAdminTests(unittest.IsolatedAsyncioTestCase):
         from app.ai.rag_engine import retrieve_context
         with patch("app.ai.rag_engine._keyword_candidates", AsyncMock(return_value=[])), patch("app.ai.rag_engine._has_vectors", AsyncMock(return_value=True)), patch("app.ai.rag_engine.embed_text", AsyncMock(return_value=[1.0] * 768)) as embedded, patch("app.ai.rag_engine.text", return_value=text("SELECT 1 / 0")):
             self.assertEqual(await retrieve_context("private test query", self.db), "")
-        embedded.assert_awaited_once_with("private test query", task_type="retrieval_query")
+        from app.ai.embedding_config import environment_config
+        embedded.assert_awaited_once_with("private test query", task_type="retrieval_query", config=environment_config())
         self.assertEqual(await self.db.scalar(text("SELECT 1")), 1)
 
 

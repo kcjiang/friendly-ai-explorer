@@ -193,7 +193,7 @@ def unsupported_option(response, names):
     return any(name.lower() in text for name in names)
 
 
-async def generate(provider, prompt, *, stream=False, timeout=None, max_tokens=None, usage=None, task=None):
+async def generate(provider, prompt, *, stream=False, timeout=None, max_tokens=None, usage=None, task=None, history=None):
     from app.ai.structured import schema_for, strip_thinking
     usage = usage if usage is not None else {}
     diagnostics = usage.setdefault("diagnostics", {})
@@ -208,7 +208,7 @@ async def generate(provider, prompt, *, stream=False, timeout=None, max_tokens=N
     if provider.protocol == "openai":
         url = provider.base_url + "/chat/completions"
         headers = {"Authorization": "Bearer " + key}
-        body = {"model": provider.model, "messages": [{"role": "user", "content": prompt}], "stream": stream,
+        body = {"model": provider.model, "messages": [*(history or []), {"role": "user", "content": prompt}], "stream": stream,
                 "max_completion_tokens": limit}
         # New API/vLLM commonly expect max_tokens; configurable through protocol-specific adapter.
         if "api.openai.com" != httpx.URL(provider.base_url).host:
@@ -216,7 +216,7 @@ async def generate(provider, prompt, *, stream=False, timeout=None, max_tokens=N
             if thinking in ("on", "off") or classic:
                 body["chat_template_kwargs"] = {"enable_thinking": thinking == "on"}
                 if thinking != "on" and classic:
-                    body["messages"][0]["content"] += "\n/no_think"
+                    body["messages"][-1]["content"] += "\n/no_think"
                 diagnostics["thinking_disabled"] = thinking != "on"
         if getattr(provider, "temperature", None) is not None:
             body["temperature"] = provider.temperature
@@ -230,7 +230,7 @@ async def generate(provider, prompt, *, stream=False, timeout=None, max_tokens=N
         model = quote(provider.model.removeprefix("models/"), safe="")
         url = f"{provider.base_url}/models/{model}:" + ("streamGenerateContent?alt=sse" if stream else "generateContent")
         headers = {"x-goog-api-key": key}
-        body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": {"maxOutputTokens": limit}}
+        body = {"contents": [{"role": "model" if turn["role"] == "assistant" else "user", "parts": [{"text": turn["content"]}]} for turn in (history or [])] + [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": {"maxOutputTokens": limit}}
         if getattr(provider, "temperature", None) is not None:
             body["generationConfig"]["temperature"] = provider.temperature
         if structured != "off":

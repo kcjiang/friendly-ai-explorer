@@ -50,6 +50,22 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
         await self.collect(provider(base_url="https://api.openai.com/v1"), handler)
 
+    async def test_multi_turn_roles_reach_both_provider_protocols(self):
+        history = [{"role": "user", "content": "previous question"}, {"role": "assistant", "content": "previous answer"}]
+        def openai_handler(request):
+            messages = json.loads(request.content)["messages"]
+            self.assertEqual(messages[:2], history)
+            self.assertTrue(messages[-1]["content"].startswith("你好"))
+            return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+        await self.collect(provider(model="Qwen3-0.6B"), openai_handler, history=history)
+        self.assertEqual(history[0]["content"], "previous question")
+        def gemini_handler(request):
+            contents = json.loads(request.content)["contents"]
+            self.assertEqual([turn["role"] for turn in contents], ["user", "model", "user"])
+            self.assertEqual(contents[1]["parts"][0]["text"], "previous answer")
+            return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": "OK"}]}}]})
+        await self.collect(provider("gemini", model="gemini-2.5-flash"), gemini_handler, history=history)
+
     async def test_gemini_native_and_usage(self):
         def handler(request):
             self.assertEqual(request.headers["x-goog-api-key"], "sk-test-secret")
@@ -162,11 +178,13 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_embeddings_use_bounded_async_request(self):
         from app.ai.embeddings import embed_text
-        with patch("app.ai.embeddings.genai.embed_content_async", AsyncMock(return_value={"embedding": [1.0] + [0.0] * 767})) as embedded:
-            self.assertEqual(await embed_text("query", task_type="retrieval_query"), [1.0] + [0.0] * 767)
-        self.assertEqual(embedded.await_args.kwargs["request_options"], {"timeout": 15})
-        self.assertEqual(embedded.await_args.kwargs["task_type"], "retrieval_query")
-        self.assertEqual(embedded.await_args.kwargs["output_dimensionality"], 768)
+        from app.ai.embedding_config import EmbeddingConfig
+        response = httpx.Response(200, json={"data": [{"index": 0, "embedding": [1.0] + [0.0] * 767}]})
+        config = EmbeddingConfig(protocol="openai", base_url="http://embedding.test/v1", model="local", use_env_key=False)
+        with patch("httpx.AsyncClient.post", AsyncMock(return_value=response)) as embedded:
+            self.assertEqual(await embed_text("query", task_type="retrieval_query", config=config), [1.0] + [0.0] * 767)
+        self.assertEqual(embedded.await_args.args[0], "http://embedding.test/v1/embeddings")
+        self.assertEqual(embedded.await_args.kwargs["json"]["input"], ["query"])
 
 
 class RoutingTests(unittest.IsolatedAsyncioTestCase):

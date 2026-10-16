@@ -1,6 +1,4 @@
 from typing import AsyncGenerator
-import logging
-import re
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
@@ -14,35 +12,20 @@ from app.ai.tasks.todo_generator import generate_todos
 from app.services import ticket_service
 
 
-async def stream_rag_answer(message: str, db: AsyncSession, user: User | None = None) -> AsyncGenerator[str, None]:
+async def stream_rag_answer(message: str, db: AsyncSession, user: User | None = None, *, history=None, page=None) -> AsyncGenerator[str, None]:
     """RAG 问答：检索知识库 → 构建 Prompt → 流式返回"""
     sources = []
-    context = await retrieve_context(message, db, user=user, sources=sources)
-    if not context:
-        yield "未在你可访问的已发布知识库中找到相关资料。请确认文档已发布，并在问题中提供产品名称或型号；我不会用通用知识猜测内部产品信息。"
-        return
-    prompt  = build_prompt(context, message)
-    prefix, direct, unusable = "", False, False
-    async for chunk in stream("rag_chat", prompt):
-        if direct:
-            yield chunk
-            continue
-        if unusable:
-            continue
-        prefix += chunk
-        clean = re.sub(r"[\s*#]", "", prefix)
-        if re.match(r"^(?:抱歉[，,。]?)?(?:知识库(?:中)?|资料(?:中)?|文档(?:中)?)(?:未提供|没有提供|未找到|未包含|没有相关)", clean):
-            unusable = True
-        elif len(prefix) >= 32:
-            direct = True
-            yield prefix
-    if unusable:
-        logging.getLogger(__name__).warning("聊天模型未能利用已命中资料，显示知识库原文", extra={"details": {"document_ids": [s["id"] for s in sources]}})
-        yield "检索到的知识库原文：\n\n" + context
-    elif not direct:
-        yield prefix
+    import re
+    query = message
+    if history and len(message) < 100 and re.search(r"它|这个|上述|刚才|继续|\b(it|that|those)\b", message, re.I):
+        previous = next((turn["content"] for turn in reversed(history) if turn["role"] == "user"), "")
+        query = previous[:1500] + "\n" + message
+    context = await retrieve_context(query, db, user=user, sources=sources)
+    prompt = build_prompt(context, message, page=page)
+    async for chunk in stream("rag_chat", prompt, history=history):
+        yield chunk
     if sources:
-        yield "\n\n资料来源：" + "、".join(f"《{source['title']}》" for source in sources)
+        yield "\n\n知识库参考资料：" + "、".join(f"《{source['title']}》" for source in sources)
 
 
 async def analyze_ticket_by_id(ticket_id: str, db: AsyncSession, user: User) -> dict:

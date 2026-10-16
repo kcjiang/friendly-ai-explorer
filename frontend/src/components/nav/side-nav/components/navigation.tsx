@@ -20,7 +20,7 @@ export default function Navigation() {
   });
 
   return (
-    <nav className="flex flex-grow flex-col gap-y-1 p-2">
+    <nav className="flex min-h-0 flex-grow flex-col gap-y-1 overflow-y-auto p-2">
       {visibleItems.map((navigation) => {
         const Icon = navigation.icon;
         return (

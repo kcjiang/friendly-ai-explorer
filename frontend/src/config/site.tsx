@@ -1,6 +1,7 @@
 // frontend/src/config/site.tsx
 import {
   BookOpen,
+  Bot,
   Cable,
   Database,
   Gauge,
@@ -50,6 +51,11 @@ export const navigations: Navigation[] = [
     icon: MessagesSquare,
     name: "Email Analysis",
     href: "/email",
+  },
+  {
+    icon: Bot,
+    name: "AI任务",
+    href: "/ai-tasks",
   },
   {
     icon: Usb,

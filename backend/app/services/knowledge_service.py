@@ -17,6 +17,7 @@ from app.models.user import User, UserRole
 from app.schemas.document import CreateDocumentRequest, UpdateDocumentRequest
 from app.ai.file_parser import parse_file
 from app.ai.embeddings import chunk_text, embed_chunks, embedding_identity, EmbeddingUnavailable
+from app.ai.embedding_config import load_embedding_config
 
 logger = logging.getLogger(__name__)
 
@@ -37,18 +38,19 @@ def _visibility_filter(user: User):
 async def _vectorize_document(doc: Document, text: str, db: AsyncSession):
     """Always keep searchable text, even if the external embedding service fails."""
     doc_id, title = doc.id, doc.title
+    config = await load_embedding_config(db)
     chunks = chunk_text(text)
     embeddings, error = [None] * len(chunks), None
-    if chunks:
+    if chunks and config.protocol != "disabled":
         try:
-            vectors = await asyncio.wait_for(embed_chunks([f"{title}\n{chunk}" for chunk in chunks]), timeout=45)
+            vectors = await asyncio.wait_for(embed_chunks([f"{title}\n{chunk}" for chunk in chunks], config=config), timeout=45)
             if len(vectors) != len(chunks):
                 raise EmbeddingUnavailable("batch_size_mismatch")
             embeddings = vectors
         except Exception as exc:
             error = exc.reason if isinstance(exc, EmbeddingUnavailable) else "embedding_failed"
             logger.warning("知识库向量化失败，已保留文本索引供关键词检索", exc_info=True,
-                           extra={"details": {"document_id": str(doc_id), "embedding_model": embedding_identity(), "reason": error}})
+                           extra={"details": {"document_id": str(doc_id), "embedding_model": embedding_identity(config), "reason": error}})
     current = await db.scalar(select(Document).where(Document.id == doc_id).with_for_update().execution_options(populate_existing=True))
     if not current or current.content != text or current.title != title or not current.is_published:
         await db.commit()  # release the lock; a newer edit owns its own indexing operation
@@ -60,25 +62,26 @@ async def _vectorize_document(doc: Document, text: str, db: AsyncSession):
             chunk_index=i,
             content=content,
             embedding=emb,
-            metadata_={"embedding_model": embedding_identity() if emb is not None else None, "embedding_error": error},
+            metadata_={"embedding_model": embedding_identity(config) if emb is not None else None, "embedding_error": error},
         ))
 
     await db.commit()
-    logger.info("知识库索引更新完成", extra={"details": {"document_id": str(doc_id), "chunks": len(chunks), "vectors": sum(v is not None for v in embeddings), "embedding_model": embedding_identity()}})
+    logger.info("知识库索引更新完成", extra={"details": {"document_id": str(doc_id), "chunks": len(chunks), "vectors": sum(v is not None for v in embeddings), "embedding_model": embedding_identity(config)}})
 
 
 async def _index_states(docs, db):
     if not docs:
         return docs
+    config = await load_embedding_config(db)
     counts = (await db.execute(select(DocumentChunk.document_id, func.count().label("chunks"),
-        func.sum(case(((DocumentChunk.embedding.is_not(None)) & (DocumentChunk.metadata_["embedding_model"].astext == embedding_identity()), 1), else_=0)).label("vectors"))
+        func.sum(case(((DocumentChunk.embedding.is_not(None)) & (DocumentChunk.metadata_["embedding_model"].astext == embedding_identity(config)), 1), else_=0)).label("vectors"))
         .where(DocumentChunk.document_id.in_([d.id for d in docs])).group_by(DocumentChunk.document_id))).all()
     stats = {row.document_id: row for row in counts}
     for doc in docs:
         row = stats.get(doc.id)
         doc.indexed_chunks = row.chunks if row else 0
         doc.indexed_vectors = int(row.vectors or 0) if row else 0
-        doc.index_model = embedding_identity()
+        doc.index_model = embedding_identity(config)
         doc.index_status = "draft" if not doc.is_published else "empty" if not (doc.content or "").strip() else "pending" if not row else "ready" if doc.indexed_vectors == doc.indexed_chunks else "text_only"
     return docs
 

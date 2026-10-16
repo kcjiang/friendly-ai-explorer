@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, Plus, RefreshCw } from "lucide-react";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
+import EmbeddingSettings from "./embedding-settings";
 
 interface Provider {
   id: string; name: string; protocol: "openai" | "gemini"; base_url: string; model: string;
@@ -120,6 +121,7 @@ export default function AISettings({ onInspectRequest }: { onInspectRequest?: (i
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin" size={20} /></div>;
 
   return <div className="space-y-8">
+    <EmbeddingSettings />
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="text-sm text-muted-foreground">管理服务、测试模型，并为每项任务选择 AI。配置保存后对新请求生效。</p>
       <div className="flex gap-2">
@@ -186,7 +188,7 @@ export default function AISettings({ onInspectRequest }: { onInspectRequest?: (i
         </tr>)}
       </tbody></table></div>
       <button className={primary} disabled={saving || !!busy || !dirty} onClick={() => void saveRoutes()}>{saving ? "保存中…" : "保存任务分配"}</button>
-      <p className="text-xs text-muted-foreground">知识库向量化仍使用原有 Gemini 环境配置；更换聊天服务不会改变已有向量。独立日志 AI 分析尚无业务入口，本页当前管理四项已接入任务。</p>
+      <p className="text-xs text-muted-foreground">聊天与知识库向量服务分别配置。切换向量模型后需重建文档索引；切换聊天服务不影响向量索引。独立日志 AI 分析尚无业务入口。</p>
     </section>
 
     <section className="space-y-3">

@@ -115,7 +115,7 @@ async def record_call(provider, task, success, fallback, started, usage, error=N
         logger.warning("AI 调用记录写入失败，应用日志中仍保留本次记录", exc_info=True)
 
 
-async def stream(task, prompt, *, streaming=True, plan=None, report=None):
+async def stream(task, prompt, *, streaming=True, plan=None, report=None, history=None):
     providers, timeout, max_tokens = plan or await resolve(task)
     for index, provider in enumerate(providers):
         deadline = time.monotonic() + (timeout or provider.timeout_seconds)
@@ -132,14 +132,14 @@ async def stream(task, prompt, *, streaming=True, plan=None, report=None):
                 if remaining <= 0:
                     raise AIError("AI 请求总预算已用尽", retryable=True, kind="timeout")
                 if streaming:
-                    async for chunk in generate(provider, current_prompt, stream=True, timeout=remaining, max_tokens=limit, usage=usage, task=task):
+                    async for chunk in generate(provider, current_prompt, stream=True, timeout=remaining, max_tokens=limit, usage=usage, task=task, history=history):
                         if chunk:
                             emitted = True
                             yield chunk
                     if not emitted:
                         raise AIError("模型返回空回答", retryable=True, kind="invalid_output")
                 else:
-                    raw = "".join([chunk async for chunk in generate(provider, current_prompt, timeout=remaining, max_tokens=limit, usage=usage, task=task)])
+                    raw = "".join([chunk async for chunk in generate(provider, current_prompt, timeout=remaining, max_tokens=limit, usage=usage, task=task, history=history)])
                     result = validate_result(task, raw)
                     emitted = True
                     yield result

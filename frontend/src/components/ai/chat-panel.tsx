@@ -1,6 +1,7 @@
 "use client";
 
-import { Bot, ChevronDown, Loader2, Send } from "lucide-react";
+import { Bot, ChevronDown, Loader2, Send, Trash2 } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
@@ -9,16 +10,22 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   loading?: boolean;
+  failed?: boolean;
 }
 
 export default function AiChatPanel() {
   const { data: session } = useSession();
+  const pathname = usePathname();
+  const pathSection = pathname.split("/")[1] || "dashboard";
+  const section = pathSection === "ticket" ? "tickets" : ["adb", "serial"].includes(pathSection) ? "debug" : pathSection;
+  const page = ["dashboard", "tickets", "knowledge", "email", "debug", "catalog", "admin"].includes(section) ? section : "other";
+  const pageNames: Record<string, string> = { dashboard: "工作台", tickets: "工单", knowledge: "知识库", email: "邮件", debug: "调试", catalog: "资料库", admin: "管理后台", other: "当前页面" };
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
       content:
-        "你好！我是 FAE AI 助手，可以帮你查询知识库、分析技术问题。有什么需要帮助的吗？",
+        "你好！我是 FAE AI 助手，可以进行通用对话、查询知识库、分析技术问题。我会优先参考知识库，也可以结合你当前所在的页面提供操作建议。",
     },
   ]);
   const [input, setInput] = useState("");
@@ -39,6 +46,16 @@ export default function AiChatPanel() {
   async function sendMessage() {
     const text = input.trim();
     if (!text || thinking) return;
+    const history: { role: "user" | "assistant"; content: string }[] = [];
+    let budget = 16000;
+    for (let i = messages.length - 2; i >= 1 && history.length < 10; i -= 2) {
+      const user = messages[i], assistant = messages[i + 1];
+      if (user.role !== "user" || assistant.role !== "assistant" || assistant.failed || assistant.loading || !assistant.content) continue;
+      const pair = [{ role: "user" as const, content: user.content.slice(0, 4000) }, { role: "assistant" as const, content: assistant.content.slice(0, 4000) }];
+      const size = pair[0].content.length + pair[1].content.length;
+      if (size > budget) break;
+      history.unshift(...pair); budget -= size;
+    }
 
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: text }]);
@@ -60,7 +77,7 @@ export default function AiChatPanel() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ message: text }),
+          body: JSON.stringify({ message: text, history, page }),
         },
       );
 
@@ -71,6 +88,7 @@ export default function AiChatPanel() {
       let accumulated = "";
       let buffer = "";
       let finished = false;
+      let failed = false;
 
       for (;;) {
         const { done, value } = await reader.read();
@@ -85,7 +103,7 @@ export default function AiChatPanel() {
           if (data === "[DONE]") { finished = true; break; }
           if (data) {
             const chunk: { text?: string; error?: string } = JSON.parse(data);
-            if (chunk.error) accumulated += `\n\n[错误] ${chunk.error}`;
+            if (chunk.error) { failed = true; accumulated += `\n\n[错误] ${chunk.error}`; }
             else accumulated += chunk.text ?? "";
           }
           boundary = buffer.indexOf("\n\n");
@@ -94,18 +112,20 @@ export default function AiChatPanel() {
         // 实时更新最后一条 assistant 消息
         setMessages((prev) => {
           const next = [...prev];
-          next[next.length - 1] = { role: "assistant", content: accumulated };
+          next[next.length - 1] = { role: "assistant", content: accumulated, failed };
           return next;
         });
         if (finished) { await reader.cancel(); break; }
       }
       reader.releaseLock();
+      if (!finished || !accumulated.trim()) throw new Error("回答中断");
     } catch {
       setMessages((prev) => {
         const next = [...prev];
         next[next.length - 1] = {
           role: "assistant",
           content: "抱歉，请求出现错误，请稍后重试。",
+          failed: true,
         };
         return next;
       });
@@ -158,13 +178,17 @@ export default function AiChatPanel() {
             </span>
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
           </div>
+          <button type="button" title="开始新对话" aria-label="开始新对话" disabled={thinking} className="ml-auto mr-3 text-white/70 disabled:opacity-40" onClick={() => setMessages(prev => prev.slice(0, 1))}><Trash2 size={16} /></button>
           <button
+            aria-label="收起 AI 助手"
             onClick={() => setOpen(false)}
             className="text-white/70 transition-colors hover:text-white"
           >
             <ChevronDown size={18} />
           </button>
         </div>
+
+        <p className="border-b border-border px-4 py-2 text-xs text-muted-foreground">{pageNames[page]} · 知识库优先，无相关资料时通用回答</p>
 
         {/* 消息列表 */}
         <div
@@ -213,6 +237,7 @@ export default function AiChatPanel() {
         <div className="flex flex-shrink-0 items-center gap-2 border-t border-border px-3 py-3">
           <input
             ref={inputRef}
+            maxLength={8000}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -226,6 +251,7 @@ export default function AiChatPanel() {
             className="flex-1 rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
           />
           <button
+            aria-label="发送消息"
             onClick={sendMessage}
             disabled={thinking || !input.trim()}
             className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 transition-opacity hover:opacity-90 disabled:opacity-40"
