@@ -66,3 +66,21 @@ class TaskRun(Base):
     found: Mapped[int] = mapped_column(Integer, default=0)
     added: Mapped[int] = mapped_column(Integer, default=0)
     message: Mapped[str] = mapped_column(Text)
+
+
+class TaskPrompt(Base):
+    __tablename__ = "task_prompts"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    name: Mapped[str] = mapped_column(String(150))
+    content: Mapped[str] = mapped_column(Text)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class TaskPreference(Base):
+    __tablename__ = "task_preferences"
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    prompt_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("task_prompts.id", ondelete="SET NULL"), nullable=True)
+    language: Mapped[str] = mapped_column(String(10), default="zh-CN")

@@ -10,15 +10,6 @@ services:
     volumes:
       - ${FAE_DATA_DIR:-/opt/fae}/postgres/data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
-      - ./db/migration_v2_email.sql:/docker-entrypoint-initdb.d/02_email.sql:ro
-      - ./db/migration_v4_debug.sql:/docker-entrypoint-initdb.d/04_debug.sql:ro
-      - ./db/migration_v5_catalog.sql:/docker-entrypoint-initdb.d/05_catalog.sql:ro
-      - ./db/migration_v6_tickets.sql:/docker-entrypoint-initdb.d/06_tickets.sql:ro
-      - ./db/migration_v7_catalog_trash.sql:/docker-entrypoint-initdb.d/07_catalog_trash.sql:ro
-      - ./db/migration_v8_ai_routing.sql:/docker-entrypoint-initdb.d/08_ai_routing.sql:ro
-      - ./db/migration_v9_ai_diagnostics.sql:/docker-entrypoint-initdb.d/09_ai_diagnostics.sql:ro
-      - ./db/migration_v10_embedding_settings.sql:/docker-entrypoint-initdb.d/10_embedding_settings.sql:ro
-      - ./db/migration_v11_ai_tasks.sql:/docker-entrypoint-initdb.d/11_ai_tasks.sql:ro
     healthcheck:
       test: [CMD-SHELL, pg_isready -U admin -d fae_app_pgdb]
       interval: 5s

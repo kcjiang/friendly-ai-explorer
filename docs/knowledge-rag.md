@@ -1,3 +1,5 @@
+> 全新数据库统一执行 `db/init.sql`；下文归档迁移命令仅适用于旧版本升级，不应在新基线之后执行。清空重建参见 [数据库重建](database-reset.md)。
+
 # 知识库问答与索引
 
 ## 本次修复
@@ -32,7 +34,7 @@ Google 的 `text-embedding-004` 已在 2026-01-14 停用，继续调用会得到
 已有 v0.2.0-dev.1 部署需要先备份并执行新增的 v10 迁移，再更新前后端镜像。迁移不修改原文和现有向量。开发环境代码挂载会热更新，环境变量变化需重新创建容器。
 
 ```sh
-docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/migration_v10_embedding_settings.sql
+docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/archive/migration_v10_embedding_settings.sql
 ```
 
 ```text

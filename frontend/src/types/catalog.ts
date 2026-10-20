@@ -22,8 +22,8 @@ export type CatalogRecord = {
   company_name?: string;
   country_code?: string;
   country_name?: string;
-  city_id?: string;
-  city_name?: string;
+  business?: string[];
+  identification_name?: string;
   level?: string;
   contacts?: Contact[];
   notes?: string;
@@ -32,9 +32,12 @@ export type CatalogRecord = {
   chipset?: string;
   system?: string;
   repository_url?: string;
+  fingerprint?: string;
   number?: string;
   pm?: string;
-  start_month?: string;
+  fae_id?: string | null;
+  fae_name?: string | null;
+  start_date?: string;
   stage?: string;
   customer_id?: string;
   product_id?: string;
@@ -42,7 +45,7 @@ export type CatalogRecord = {
   product_name?: string;
 };
 export type CatalogPage = { items: CatalogRecord[]; total: number };
-export type Option = { value: string; label: string; region?: string };
+export type Option = { value: string; label: string };
 export const labels: Record<Kind, string> = {
   customers: "客户库",
   products: "产品库",

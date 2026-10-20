@@ -1,5 +1,6 @@
 from typing import Annotated, Literal
 from uuid import UUID
+from datetime import date
 from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
@@ -28,18 +29,19 @@ class Contact(StrictModel):
 class CustomerInput(StrictModel):
     company_name: Name
     country_code: Annotated[str, StringConstraints(pattern=r'^[A-Z]{2}$')]
-    city_id: Annotated[str, StringConstraints(min_length=1, max_length=30)]
-    level: Literal['KA', 'LA', 'SMB']
+    business: list[ShortName] = Field(default_factory=list, max_length=30)
+    level: ShortName
     contacts: list[Contact] = Field(default_factory=list, max_length=100)
     notes: Notes = ''
 
 
 class ProductInput(StrictModel):
-    type: Literal['OTT', 'IPC', 'NetCom']
+    type: ShortName
     model: Name
     chipset: Name
     system: Name
     repository_url: Annotated[str, StringConstraints(max_length=2000)] = ''
+    fingerprint: Annotated[str, StringConstraints(max_length=10000)] = ''
     notes: Notes = ''
 
     @field_validator('repository_url')
@@ -48,14 +50,19 @@ class ProductInput(StrictModel):
         if value:
             parsed = urlsplit(value)
             if parsed.scheme not in ('http', 'https') or not parsed.netloc:
-                raise ValueError('软件库链接必须是 http 或 https 地址')
+                raise ValueError('固件下载地址必须是 http 或 https 地址')
         return value
 
 
 class ProjectInput(StrictModel):
     number: ShortName
     pm: ShortName
-    start_month: Annotated[str, StringConstraints(pattern=r'^[1-9][0-9]{3}-(0[1-9]|1[0-2])$')]
-    stage: Literal['EV', 'EVT', 'DVT', 'PVT', 'MR', 'MP']
+    fae_id: UUID | None = None
+    start_date: date
+    stage: ShortName
     customer_id: UUID
     product_id: UUID
+
+
+class CatalogOptionInput(StrictModel):
+    value: ShortName

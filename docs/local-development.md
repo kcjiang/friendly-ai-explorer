@@ -1,3 +1,5 @@
+> 全新数据库统一执行 `db/init.sql`；下文归档迁移命令仅适用于旧版本升级，不应在新基线之后执行。清空重建参见 [数据库重建](database-reset.md)。
+
 # 本地开发环境
 
 ## 文件说明
@@ -31,17 +33,17 @@ docker compose -f docker-compose.yml ps
 
 ### AI 服务与调度
 
-已有数据库还需依次执行 `db/migration_v8_ai_routing.sql`、`db/migration_v9_ai_diagnostics.sql`。后台可配置多个 Gemini/OpenAI 兼容服务、思考/JSON 模式，为四类任务指定主备服务并查看应用日志，详见 [AI 服务与任务调度](ai-services.md)。
+已有数据库还需依次执行 `db/archive/migration_v8_ai_routing.sql`、`db/archive/migration_v9_ai_diagnostics.sql`。后台可配置多个 Gemini/OpenAI 兼容服务、思考/JSON 模式，为四类任务指定主备服务并查看应用日志，详见 [AI 服务与任务调度](ai-services.md)。
 
 ### 工单库升级
 
-工单重构新增 `db/migration_v6_tickets.sql`，最近删除新增 `db/migration_v7_catalog_trash.sql`。已有数据库需按 v5 → v6 → v7 顺序迁移；无需删除数据库。编号、权限、新旧状态映射及完整操作步骤见 [工单库与看板](tickets.md)。
+工单重构新增 `db/archive/migration_v6_tickets.sql`，最近删除新增 `db/archive/migration_v7_catalog_trash.sql`。已有数据库需按 v5 → v6 → v7 顺序迁移；无需删除数据库。编号、权限、新旧状态映射及完整操作步骤见 [工单库与看板](tickets.md)。
 
 ### 团队资料库
 
 知识库使用新的向量模型与关键词兜底，旧文档需由作者点击“重建索引”。见 [知识库检索与索引](knowledge-rag.md)。
 
-访问 `/catalog` 可维护客户、产品和项目。已有开发数据库需先执行 `db/migration_v5_catalog.sql`，再重建后端以安装离线城市目录依赖；全新数据库会自动初始化。具体命令和功能说明见 [团队资料库](catalog.md)。
+访问 `/catalog` 可维护客户、产品和项目。已有开发数据库需先执行 `db/archive/migration_v5_catalog.sql`，再重建后端以安装离线城市目录依赖；全新数据库会自动初始化。具体命令和功能说明见 [团队资料库](catalog.md)。
 
 ### 丢弃旧开发数据库并重新初始化
 

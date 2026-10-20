@@ -1,3 +1,5 @@
+> 全新数据库统一执行 `db/init.sql`；下文归档迁移命令仅适用于旧版本升级，不应在新基线之后执行。清空重建参见 [数据库重建](database-reset.md)。
+
 # AI 服务与任务调度
 
 管理后台 → **AI 服务与调度**（仅 developer 角色）可添加 Gemini 原生或 OpenAI 兼容服务。所有调用和测试由后端发起，浏览器不持有供应商密钥。
@@ -7,16 +9,16 @@
 先按原部署流程备份数据库；已有 v7 数据库执行以下新增迁移，无需删除数据卷：
 
 ```powershell
-Get-Content db/migration_v8_ai_routing.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
-Get-Content db/migration_v9_ai_diagnostics.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
+Get-Content db/archive/migration_v8_ai_routing.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
+Get-Content db/archive/migration_v9_ai_diagnostics.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
 docker compose up -d --build backend frontend
 ```
 
 Linux 生产环境先更新部署目录中的 Compose、SQL 和对应应用镜像，再执行：
 
 ```sh
-docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/migration_v8_ai_routing.sql
-docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/migration_v9_ai_diagnostics.sql
+docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/archive/migration_v8_ai_routing.sql
+docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/archive/migration_v9_ai_diagnostics.sql
 # If FAE_DATA_DIR differs from /opt/fae, use its actual value below.
 sudo install -d -o 10001 -g 10001 -m 750 /opt/fae/logs
 docker compose --env-file .env.production -f compose.prod.yml up -d backend frontend

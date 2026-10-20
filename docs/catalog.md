@@ -1,16 +1,40 @@
+> 当前全新初始化只执行 `db/init.sql`，旧迁移已归档。清空重建请参见 [数据库重建](database-reset.md)。
+
 # 团队资料库
 
 入口：侧栏 Ticket 下方的「数据维护」或 `/catalog`。所有已登录且启用的团队成员可新建、浏览、编辑、软删除和恢复客户、产品及项目；工单通过项目引用客户和产品信息。
 
 ## 使用
 
-- 顶部单行操作栏切换三个库，提供搜索、排序、刷新、最近删除和新建入口；列表每页 20 条。操作栏与标题栏均为 64px 高，小屏时可横向滚动。
-- 点击记录打开只读预览，再点击「编辑」解锁。保存后显示最新记录和审计信息。
+- 顶部图标 Tabs 切换三个库，提供搜索、Columns、刷新、最近删除和新建入口。每页 30 条，通过页码翻页；默认按更新时间降序，点击表头切换升降序并显示对应方向箭头，排序覆盖全部记录。小屏时工具栏和表格可横向滚动。
+- 客户公司名、产品型号、项目编号为不可隐藏的首列；其他列通过 Columns 勾选，各库分别维护本次会话中的列设置。首列悬浮卡片展示「识别名称」，用于关联调用。最近删除使用相同表格与分页，三点菜单提供恢复。
+- 正常列表的三点菜单提供编辑、复制、删除；复制会将业务字段预填到新建草稿，保存后才生成独立记录与审计信息。
+- 点击记录打开只读预览，右下角提供编辑与删除。仅右上角叉号可关闭，点击模糊遮罩和 Escape 不关闭。编辑后的关闭或取消编辑先弹出普通确认，删除使用破坏性确认；取消删除保留原预览。保存后显示最新记录和审计信息。
+- 客户只维护国家/地区；「业务」支持历史姓名多选、手动输入后按 Enter 添加，最多 30 名，重复姓名自动去重。
+- 客户识别名称为「国家/地区-公司名」，重名依次尝试原名称、` (2)`、` (3)`，使用当前未占用的第一个名称；最近删除继续占号，彻底删除或改名释放名称，已有记录不自动重排。修改国家或公司名时分配新名称，其他资料修改保留编号。
+- 产品提供固件下载地址和手填项目指纹。只读预览中地址可在新标签页打开，点击指纹可复制并显示成功 Toast；剪贴板不可用时提示失败。
+- 项目立项时间保存到具体日期，可直接输入或通过弹出日历选择。
+- 项目 FAE 关联已注册且启用的工程师账号，按姓名选择，不允许自由输入非工程师；可留空或清除，旧项目默认未指定。表格可显示、搜索并按 FAE 姓名排序。
+- 表格首列前提供复选框，支持本页全选、部分选择和选中行底色，选择不会打开预览；切换库、搜索或刷新时重置选择，翻页保留选择。底部采用「0 of 5 row(s) selected.」格式，分母为当前检索条件下所有分页的记录总数。排序期间保留现有数据行，避免列宽在加载状态下重新分配。
 - 客户可以添加多名联系人，每名联系人可维护多条「类型＋内容」联系方式。
-- 产品的型号、芯片和系统根据已保存产品提供可选联想，仍允许自行输入新值。
-- 项目从客户和产品库检索选择，保存真实外键。相关名称变化会实时反映到项目名称。
+- 产品的型号、芯片和系统根据已保存产品提供可选联想，仍允许自行输入新值，不需按 Enter 即可保存。
+- 项目客户和产品采用与国家/地区一致的弹出式搜索选择器，输入后查询后端，保存真实外键。相关名称变化会实时反映到项目名称。
 - 更新采用 revision 乐观锁；其他成员已修改时返回 409，需关闭重开再编辑。
 - 创建人、更新人和时间来自后端登录身份及 UTC 时钟，页面按浏览器本地时间显示。
+
+## UI 样式基准
+
+数据维护页采用 shadcn/ui 官方 `base-nova` 原始组件（`frontend/src/components/ui/base/`），保留源码来源链接，仅替换图标库占位符、项目导入路径和中文可访问名称。项目已升级 Tailwind CSS 4，直接加载官方状态变体与动画；全局使用统一中性色主题、圆角和 Geist 字体，不再维护数据维护页专属 CSS。旧页面的 Radix 组件接口保留，新页面统一使用 Base Nova 公共组件，迁移约定见 `docs/ui-design-system.md`。
+
+- Button：默认高 32px、圆角 10px、图文间距 6px；小号高 28px；图标按钮 32px。
+- Tabs：外框高 32px、圆角 10px、内边距 3px；选项高 25px、圆角 8px。
+- Input / Combobox：高 32px、圆角 10px；多选使用同框 Chips，支持历史选项与回车新增姓名。
+- Table：使用 TanStack Table v9 的列定义、FlexRender、行选择、列显隐、排序和分页特性。后端模式配置 `manualSorting` / `manualPagination`，搜索仍由 API 完成；表格外框圆角 8px、空状态 96px，表头高 40px、单元格内边距 8px，行操作使用 24px 图标按钮。Columns 只列出允许隐藏的列。搜索使用官方 InputGroup。
+- Dialog / Alert Dialog：编辑弹窗最大宽度 384px，破坏性确认使用 320px 小尺寸和警告图标；圆角及底部均为 14px。表单使用 DialogHeader、FieldSet、FieldGroup、FieldLabel 和 FieldError，标签均关联控件，字段错误关联 aria-invalid / aria-describedby，保留单列内部滚动。
+- Hover Card：宽 256px、内边距 10px、圆角 10px。日期采用官方 InputGroup + Calendar 结构，显示与保存为 `YYYY-MM-DD`。
+- Toast 使用官方成功类型提示，分页使用官方 Pagination 组合。
+
+参考来源：[Button](https://ui.shadcn.com/docs/components/base/button)、[Tabs](https://ui.shadcn.com/docs/components/base/tabs#icons)、[Data Table](https://ui.shadcn.com/docs/components/base/data-table)、[Combobox](https://ui.shadcn.com/docs/components/base/combobox)、[Dialog](https://ui.shadcn.com/docs/components/base/dialog)。
 
 ## 删除与恢复
 
@@ -21,46 +45,48 @@
 - 清空需要二次确认，会永久删除该库全部最近删除记录，**包括当前搜索未显示的记录**，无法通过界面恢复。后端再次检查开发者权限与引用关系。
 - 删除联系人仅影响客户编辑草稿，保存后才写入数据库，不会单独进入最近删除。
 
-## 数据库迁移
+## 开发者维护选项
 
-资料库使用 `db/migration_v5_catalog.sql`，工单关联使用 v6，最近删除新增 `db/migration_v7_catalog_trash.sql`。全新数据库由开发和生产 Compose 按顺序自动执行。已有数据库需要显式执行尚未应用的迁移，不需要删除数据卷。
+客户级别、产品类型、项目经理、项目阶段统一存入 `catalog_options`。所有启用成员可读取和单选；只有开发者可以在下拉框中点击「新增选项」添加，或点击选项旁删除按钮并确认。后端同步校验角色，拒绝未维护的字段值。
 
-Win11 开发环境，在项目根目录执行：
+删除检查覆盖全部记录，包括最近删除。记录保存会对使用的选项加共享锁，删除会加排他锁，避免并发保存与删除绕过引用检查。旧值（含已删除记录使用的值）在迁移时自动导入；每个名称最多 100 字符。新建表单不再硬编码一个可能已被删除的默认选项。
 
-```powershell
-Get-Content db/migration_v5_catalog.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
-Get-Content db/migration_v6_tickets.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
-Get-Content db/migration_v7_catalog_trash.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
-docker compose -f docker-compose.yml up -d --build
-```
+接口为 `GET/POST/DELETE /api/v1/catalog/options/{category}`，category 为 `customer_level`、`product_type`、`project_pm`、`project_stage`、`contact_method`。POST body 为 `{ "value": "名称" }`；DELETE 使用 `value` 查询参数。重复名称和仍被引用的选项返回 409。
 
-正式部署前先备份数据库，将新 SQL 复制到服务器 `/opt/fae/db/`，更新 Compose 和应用镜像。Ubuntu 上对已有数据库执行：
+## 数据库初始化
 
-```bash
-cd /opt/fae
-sudo docker compose --env-file .env.production -f compose.prod.yml stop backend
-sudo docker compose --env-file .env.production -f compose.prod.yml exec -T postgres \
-  psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/migration_v5_catalog.sql
-sudo docker compose --env-file .env.production -f compose.prod.yml exec -T postgres \
-  psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/migration_v6_tickets.sql
-sudo docker compose --env-file .env.production -f compose.prod.yml exec -T postgres \
-  psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/migration_v7_catalog_trash.sql
-sudo docker compose --env-file .env.production -f compose.prod.yml up -d --wait
-```
+当前唯一初始化入口为 `db/init.sql`，开发和生产 Compose 仅挂载此文件。它包含最终结构和默认种子数据；更新文件不会清空已有数据库。清空本地或服务器数据库、备份及重新启动步骤见 [数据库重建](database-reset.md)。
 
-初始化脚本可重复执行，不会删除现有表和数据。此次未发布新镜像，生产部署应等待包含本功能的镜像版本。
+历史迁移位于 `db/archive/`，只用于旧版本审计与迁移回归测试，不应在新基线之后重新执行。已移除的城市字段、旧永久占号表不参与当前运行逻辑。
 
 ## 地理目录
 
-使用 geonamescache 3.0.2 的离线数据，国家/地区名及城市名默认使用数据源英文名称。城市库使用人口 15,000 以上的主要城市数据；搜索支持数据集中的别名。单次显示最多 100 个城市结果，可输入关键词缩小范围。数据不是所有乡镇的完整清单。
+使用 geonamescache 3.0.2 的 GeoNames 离线国家/地区数据，名称保持数据源英文。国家弹出式 Combobox 支持按名称或两位国家代码搜索和键盘选择。应用不再加载、返回或保存城市数据，原城市接口已移除。
 
-数据来源：[GeoNames](https://www.geonames.org/)，[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。库代码：[geonamescache](https://github.com/mick/geonamescache)，MIT 许可。运行时不向第三方发送客户资料或位置查询。后续扩展城市目录可在 `backend/app/services/catalog_locations.py` 中集中维护。
+数据来源：[GeoNames](https://www.geonames.org/)，[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。库代码：[geonamescache](https://github.com/mick/geonamescache)，MIT 许可。运行时不向第三方发送客户资料或位置查询。国家目录在 `backend/app/services/catalog_locations.py` 中集中维护。
 
 ## 验证
 
 ```powershell
 docker compose -f docker-compose.yml exec -T backend python -m unittest discover -s tests -v
 docker compose -f docker-compose.yml exec -T frontend pnpm exec tsc --noEmit
+docker compose run --rm --no-deps -v "${PWD}/db:/catalog-migrations:ro" backend python -m unittest discover -s tests -p test_catalog_migration.py -v
 ```
 
-`test_catalog.py` 使用当前本地测试数据库的表结构和一个启用用户，覆盖创建、修改、审计、关联名称更新、冲突、搜索及认证，以及引用拦截、软删除、恢复、联想排除和清空权限。测试事务结束后回滚业务记录；工单全局序列已领取的号码不回收。应只在开发/测试数据库运行。
+`test_catalog.py` 使用当前本地测试数据库的表结构和一个启用用户，覆盖创建、修改、审计、关联名称更新、冲突、搜索及认证，以及引用拦截、软删除、恢复、联想排除和清空权限。新增测试覆盖重名分配、原名称及中间编号复用、最近删除占号、业务去重、项目指纹和 30 条分页；隔离模式迁移测试覆盖历史日期、城市移除和重复执行（需上述只读挂载，不挂载时跳过）。测试事务结束后回滚业务记录；工单全局序列已领取的号码不回收。应只在开发/测试数据库运行。
+
+
+### 联系方式与短选项
+客户级别、产品类型、项目经理、项目阶段和联系方式工具使用不带搜索的单选列表；开发者可在列表内新增或删除选项，其他用户仅选择。选项修改即时保存，不随记录草稿取消而撤销。删除时校验所有引用，包括最近删除中的客户联系人。v16 迁移原样导入历史联系方式工具名称。联系人性别使用官方 Base Select，预览中的联系方式内容使用框内右侧按钮复制；复制反馈 Toast 显示在弹窗蒙版上方。
+
+数据维护工具栏上下内边距为 8px（单行约 49px）。记录弹窗正文使用官方 Base Scroll Area，正文两侧内边距保留焦点光圈空间；通讯工具为必填字段，未选时在字段下提示并定位，记录内容占位文字为“请填写记录”。项目指纹采用整行只读输入组，右侧为独立复制按钮。
+
+浏览状态的联系方式内容和产品项目指纹统一采用官方 InputGroupInput（只读）＋inline-end InputGroupAddon＋icon-xs InputGroupButton；仅右侧按钮触发复制，文字单行省略但复制完整值。
+
+### 重名分配
+
+客户和产品识别名称依次分配原名称、` (2)`、` (3)` 中当前首个可用值。最近删除占号，彻底删除或改名释放名称，不重排其他记录。新建、改名与清空采用统一事务锁，数据库唯一索引作为最终保护。历史 v17/v18 转换只保留在归档迁移中；全新初始化已直接使用最终结构。
+
+产品识别名称已持久化，按“类型-型号”依次分配原名称、` (2)`、` (3)`；最近删除占号，彻底删除或改名释放名称。项目关联产品选项展示完整识别名称。
+
+记录弹窗的必填/必选项统一使用“请填写此字段。”和字段红色状态，前端一次校验所有缺失项，后端字段错误映射回字段；定位第一个错误，修正后清除必填错误。基本字段在 md（768px）起双列，弹窗最大宽度 768px；联系人区域、备注、固件地址和指纹保持整行。审计折叠区标题为“编辑记录”，默认收起。

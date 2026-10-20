@@ -1,4 +1,5 @@
 import re
+from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 from pydantic import BaseModel, Field, SecretStr, field_validator
@@ -47,6 +48,26 @@ class TemplateBody(BaseModel):
 
 class ConvertBody(BaseModel):
     template_id: UUID | None = None
+    prompt_id: UUID | None = None
+    language: Literal["zh-CN", "en"] | None = None
+
+
+class PromptBody(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    content: str = Field(min_length=10, max_length=20000)
+    revision: int | None = Field(default=None, ge=1)
+
+    @field_validator("name", "content")
+    @classmethod
+    def not_blank(cls, value):
+        if not value.strip():
+            raise ValueError("内容不能为空")
+        return value.strip()
+
+
+class PreferenceBody(BaseModel):
+    prompt_id: UUID | None = None
+    language: Literal["zh-CN", "en"] = "zh-CN"
 
 
 class DraftBody(BaseModel):

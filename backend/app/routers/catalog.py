@@ -6,36 +6,75 @@ from pydantic import ValidationError
 from sqlalchemy import select, func, or_, cast, String, text
 from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert
 from app.database import get_db
 from app.middleware.rbac import AnyUser, DevOnly
-from app.models.user import User
-from app.models.catalog import Customer, Product, Project
+from app.models.user import User, UserRole
+from app.models.catalog import Customer, Product, Project, CatalogOption
 from app.models.ticket import Ticket
+from app.services.duplicate_names import first_available_name
 from app.services.catalog_references import require_active
-from app.schemas.catalog import CustomerInput, ProductInput, ProjectInput
+from app.schemas.catalog import CustomerInput, ProductInput, ProjectInput, CatalogOptionInput
 from app.services.catalog_locations import locations, resolve_location
 
 router = APIRouter()
 Kind = Literal['customers', 'products', 'projects']
 MODELS = {'customers': Customer, 'products': Product, 'projects': Project}
 SCHEMAS = {'customers': CustomerInput, 'products': ProductInput, 'projects': ProjectInput}
+OptionCategory = Literal['customer_level', 'product_type', 'project_pm', 'project_stage', 'contact_method']
+OPTION_COLUMNS = {'customer_level': Customer.level, 'product_type': Product.type,
+                  'project_pm': Project.pm, 'project_stage': Project.stage}
+
+
+@router.get('/options/{category}')
+async def list_options(category: OptionCategory, current_user: AnyUser, db: AsyncSession = Depends(get_db)):
+    values = await db.scalars(select(CatalogOption.value).where(CatalogOption.category == category).order_by(CatalogOption.value))
+    return [{'value': value, 'label': value} for value in values]
+
+
+@router.post('/options/{category}', status_code=201)
+async def add_option(category: OptionCategory, current_user: DevOnly, body: CatalogOptionInput, db: AsyncSession = Depends(get_db)):
+    created = await db.scalar(insert(CatalogOption).values(category=category, value=body.value)
+                              .on_conflict_do_nothing().returning(CatalogOption.value))
+    if created is None:
+        raise HTTPException(409, '此选项已存在')
+    await db.commit()
+    return {'value': created, 'label': created}
+
+
+@router.delete('/options/{category}')
+async def delete_option(category: OptionCategory, current_user: DevOnly, value: str = Query(min_length=1, max_length=100), db: AsyncSession = Depends(get_db)):
+    option = await db.scalar(select(CatalogOption).where(CatalogOption.category == category, CatalogOption.value == value).with_for_update())
+    if option is None:
+        raise HTTPException(404, '选项不存在，请刷新列表')
+    # Include trash. The same option row is share-locked during record writes.
+    if category == 'contact_method':
+        references = select(Customer.id).where(Customer.contacts.contains([{'methods': [{'type': value}]}]))
+    else:
+        column = OPTION_COLUMNS[category]
+        references = select(column).where(column == value)
+    if await db.scalar(references.limit(1)) is not None:
+        raise HTTPException(409, '仍有记录使用此选项（包括最近删除中的记录），无法删除')
+    await db.delete(option)
+    await db.commit()
+    return {'message': '选项已删除'}
 
 
 @router.get('/locations/countries')
 async def countries(current_user: AnyUser):
-    data, _ = locations()
-    return sorted([{'value': key, 'label': value['name']} for key, value in data.items()], key=lambda x: x['label'])
+    return sorted([{'value': key, 'label': value['name']} for key, value in locations().items()], key=lambda x: x['label'])
 
 
-@router.get('/locations/cities')
-async def cities(current_user: AnyUser, country: str = Query(min_length=2, max_length=2), q: str = Query('', max_length=100)):
-    _, data = locations()
-    rows = [c for c in data.values() if c['countrycode'] == country]
-    if q.strip():
-        needle = q.strip().casefold()
-        rows = [c for c in rows if any(needle in n.casefold() for n in [c['name'], *c.get('alternatenames', [])])]
-    rows.sort(key=lambda c: (-c['population'], c['name']))
-    return [{'value': str(c['geonameid']), 'label': c['name'], 'region': c.get('admin1code', '')} for c in rows[:100]]
+@router.get('/business-options')
+async def business_options(current_user: AnyUser, db: AsyncSession = Depends(get_db)):
+    rows = await db.scalars(select(Customer.business).where(Customer.deleted_at.is_(None)))
+    return sorted({name for names in rows for name in names}, key=str.casefold)
+
+
+@router.get('/fae-options')
+async def fae_options(current_user: AnyUser, db: AsyncSession = Depends(get_db)):
+    rows = await db.execute(select(User.id, User.name).where(User.role == UserRole.engineer, User.is_active.is_(True)).order_by(User.name, User.id))
+    return [{'value': str(row.id), 'label': row.name} for row in rows]
 
 
 @router.get('/suggestions/{field}')
@@ -49,26 +88,28 @@ def query_for(kind):
     model = MODELS[kind]
     creator, updater, deleter = aliased(User), aliased(User), aliased(User)
     if kind == 'customers':
-        display = Customer.country_name + '-' + Customer.city_name + '-' + Customer.company_name
-        searchable = [display, Customer.company_name, Customer.country_name, Customer.country_code, Customer.city_name, Customer.level, Customer.notes, cast(Customer.contacts, String)]
-        filters = {'level': Customer.level, 'country_code': Customer.country_code, 'city_name': Customer.city_name}
-        sortable = {'name': display, 'company_name': Customer.company_name, 'level': Customer.level}
+        display = Customer.identification_name
+        searchable = [display, Customer.company_name, Customer.country_name, Customer.country_code, cast(Customer.business, String), Customer.level, Customer.notes, cast(Customer.contacts, String)]
+        filters = {'level': Customer.level, 'country_code': Customer.country_code}
+        sortable = {'name': display, 'company_name': Customer.company_name, 'level': Customer.level, 'country_name': Customer.country_name, 'business': cast(Customer.business, String)}
     elif kind == 'products':
-        display = Product.type + '-' + Product.model
-        searchable = [display, Product.type, Product.model, Product.chipset, Product.system, Product.repository_url, Product.notes]
+        display = Product.identification_name
+        searchable = [display, Product.type, Product.model, Product.chipset, Product.system, Product.repository_url, Product.fingerprint, Product.notes]
         filters = {'type': Product.type, 'chipset': Product.chipset, 'system': Product.system}
-        sortable = {'name': display, 'model': Product.model, 'type': Product.type}
+        sortable = {'name': display, 'model': Product.model, 'type': Product.type, 'chipset': Product.chipset, 'system': Product.system}
     else:
+        fae = aliased(User)
         display = Customer.country_name + '-' + Customer.company_name + '-' + Product.model + '-' + Project.number
-        searchable = [display, Project.number, Project.pm, Project.stage, Project.start_month, Customer.company_name, Customer.country_name, Product.model]
+        searchable = [display, Project.number, Project.pm, fae.name, Project.stage, cast(Project.start_date, String), Customer.company_name, Customer.country_name, Product.model]
         filters = {'stage': Project.stage, 'pm': Project.pm, 'customer_id': Project.customer_id, 'product_id': Project.product_id}
-        sortable = {'name': display, 'number': Project.number, 'start_month': Project.start_month, 'stage': Project.stage}
+        sortable = {'name': display, 'number': Project.number, 'start_date': Project.start_date, 'stage': Project.stage, 'pm': Project.pm, 'fae_name': fae.name}
     stmt = select(model, display.label('display_name'), creator.name.label('created_by_name'), updater.name.label('updated_by_name'))
     stmt = stmt.join(creator, model.created_by == creator.id).join(updater, model.updated_by == updater.id)
     stmt = stmt.outerjoin(deleter, model.deleted_by == deleter.id).add_columns(deleter.name.label('deleted_by_name'))
     if kind == 'projects':
+        stmt = stmt.outerjoin(fae, Project.fae_id == fae.id).add_columns(fae.name.label('fae_name'))
         stmt = stmt.join(Customer, Project.customer_id == Customer.id).join(Product, Project.product_id == Product.id)
-        stmt = stmt.add_columns((Customer.country_name + '-' + Customer.city_name + '-' + Customer.company_name).label('customer_name'), (Product.type + '-' + Product.model).label('product_name'))
+        stmt = stmt.add_columns(Customer.identification_name.label('customer_name'), Product.identification_name.label('product_name'))
     sortable.update({'created_at': model.created_at, 'updated_at': model.updated_at, 'deleted_at': model.deleted_at})
     return stmt, searchable, filters, sortable
 
@@ -84,7 +125,7 @@ def serialize(row):
 async def list_records(kind: Kind, current_user: AnyUser, q: str = Query('', max_length=200),
                        filter_field: str = '', filter_value: str = Query('', max_length=200),
                        sort: str = 'updated_at', direction: Literal['asc', 'desc'] = 'desc',
-                       page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
+                       page: int = Query(1, ge=1), page_size: int = Query(30, ge=1, le=100),
                        trash: bool = False,
                        db: AsyncSession = Depends(get_db)):
     stmt, searchable, filters, sortable = query_for(kind)
@@ -116,20 +157,55 @@ async def validate_data(kind, data, db):
     except ValidationError as exc:
         raise HTTPException(422, exc.errors(include_context=False))
     values = parsed.model_dump()
+    categories = {'customers': [('customer_level', 'level')], 'products': [('product_type', 'type')],
+                  'projects': [('project_pm', 'pm'), ('project_stage', 'stage')]}
+    for category, field in categories[kind]:
+        option = await db.scalar(select(CatalogOption).where(CatalogOption.category == category, CatalogOption.value == values[field]).with_for_update(read=True))
+        if option is None:
+            raise HTTPException(422, f'请选择已维护的选项：{field}')
     if kind == 'customers':
-        location = resolve_location(values['country_code'], values['city_id'])
+        for tool in sorted({method['type'] for contact in values['contacts'] for method in contact['methods']}):
+            option = await db.scalar(select(CatalogOption).where(CatalogOption.category == 'contact_method', CatalogOption.value == tool).with_for_update(read=True))
+            if option is None:
+                raise HTTPException(422, '请选择已维护的联系方式工具')
+        location = resolve_location(values['country_code'])
         if not location:
-            raise HTTPException(422, '请选择有效的国家和对应城市')
+            raise HTTPException(422, '请选择有效的国家 / 地区')
         values.update(location)
+        values['business'] = list(dict.fromkeys(values['business']))
     elif kind == 'projects':
         await require_active(db, Customer, values['customer_id'], '客户')
         await require_active(db, Product, values['product_id'], '产品')
+        if values['fae_id'] is not None:
+            fae = await db.scalar(select(User).where(User.id == values['fae_id'], User.role == UserRole.engineer, User.is_active.is_(True)))
+            if not fae:
+                raise HTTPException(422, 'FAE 必须选择已注册且启用的工程师账号')
     return values
+
+
+async def lock_record_names(db, kind):
+    # Acquire before record/option locks in every named-record write path.
+    # One lock covers literal suffix collisions across different base names.
+    if kind in ('customers', 'products'):
+        await db.execute(text('SELECT pg_advisory_xact_lock(73130913)'))
+
+
+async def allocate_record_name(db, kind, values):
+    model = MODELS[kind]
+    base = (values['country_name'] + '-' + values['company_name'] if kind == 'customers'
+            else values['type'] + '-' + values['model'])
+    occupied = await db.scalars(select(model.identification_name).where(
+        model.identification_name.startswith(base, autoescape=True)))
+    # Trash intentionally occupies names; historical/permanently deleted rows do not.
+    return first_available_name(base, occupied.all())
 
 
 @router.post('/{kind}', status_code=201)
 async def create_record(kind: Kind, current_user: AnyUser, body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    await lock_record_names(db, kind)
     values = await validate_data(kind, body, db)
+    if kind in ('customers', 'products'):
+        values['identification_name'] = await allocate_record_name(db, kind, values)
     record = MODELS[kind](**values, created_by=current_user.id, updated_by=current_user.id)
     db.add(record)
     await db.commit()
@@ -138,6 +214,7 @@ async def create_record(kind: Kind, current_user: AnyUser, body: dict = Body(...
 
 @router.put('/{kind}/{record_id}')
 async def update_record(kind: Kind, record_id: UUID, current_user: AnyUser, body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    await lock_record_names(db, kind)
     revision = body.pop('revision', None)
     if type(revision) is not int or revision < 1:
         raise HTTPException(422, '缺少有效的数据版本号')
@@ -149,6 +226,10 @@ async def update_record(kind: Kind, record_id: UUID, current_user: AnyUser, body
     if record.deleted_at is not None:
         raise HTTPException(409, '此记录已移至最近删除，请先恢复后再编辑')
     values = await validate_data(kind, body, db)
+    name_changed = ((kind == 'customers' and (record.company_name != values['company_name'] or record.country_code != values['country_code']))
+                    or (kind == 'products' and (record.type != values['type'] or record.model != values['model'])))
+    if name_changed:
+        values['identification_name'] = await allocate_record_name(db, kind, values)
     for key, value in values.items():
         setattr(record, key, value)
     record.updated_by = current_user.id
@@ -180,6 +261,7 @@ def audit_change(record, user):
 
 @router.delete('/{kind}/trash')
 async def empty_trash(kind: Kind, current_user: DevOnly, db: AsyncSession = Depends(get_db)):
+    await lock_record_names(db, kind)
     model = MODELS[kind]
     records = list((await db.scalars(select(model).where(model.deleted_at.is_not(None))
                                    .order_by(model.id).with_for_update().execution_options(populate_existing=True))).all())

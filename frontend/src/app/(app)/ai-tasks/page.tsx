@@ -16,6 +16,17 @@ import {
   X,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
+import {
+  type TaskPreference,
+  type TaskPrompt,
+  TaskPrompts,
+} from "@/components/ai/task-prompts";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 
@@ -49,6 +60,12 @@ type Draft = {
   field_order?: string[];
   generated_at: string;
   source_updated: string;
+  language?: "zh-CN" | "en";
+  field_labels?: Record<string, string>;
+  prompt_id?: string;
+  prompt_name?: string;
+  prompt_revision?: number;
+  prompt_content?: string;
 };
 type Issue = {
   id: string;
@@ -71,6 +88,8 @@ type Overview = {
   issues: Issue[];
   runs: Run[];
   default_template: Omit<Template, "id">;
+  prompts: TaskPrompt[];
+  preferences: TaskPreference;
 };
 const ROOT = "/api/v1/ai-tasks";
 const input =
@@ -99,6 +118,8 @@ export default function AITasksPage() {
   const [selected, setSelected] = useState<Issue | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [templateId, setTemplateId] = useState("");
+  const [promptId, setPromptId] = useState("");
+  const [language, setLanguage] = useState<TaskPreference["language"]>("zh-CN");
   const [form, setForm] = useState<"account" | "task" | "template" | null>(
     null,
   );
@@ -165,6 +186,22 @@ export default function AITasksPage() {
     setSelected(issue);
     setDraft(issue.draft);
     setTemplateId("");
+    setPromptId(issue.draft?.prompt_id ?? data?.preferences.prompt_id ?? "");
+    setLanguage(issue.draft?.language ?? data?.preferences.language ?? "zh-CN");
+  }
+  function closePreview() {
+    if (busy || !selected) return;
+    const previous = selected.draft;
+    const dirty =
+      draft &&
+      (!previous ||
+        Object.keys(draft.fields).length !==
+          Object.keys(previous.fields).length ||
+        Object.entries(draft.fields).some(
+          ([key, value]) => value !== previous.fields[key],
+        ));
+    if (dirty && !confirm("存在未保存修改，确认关闭？")) return;
+    setSelected(null);
   }
   async function saveForm(event: FormEvent) {
     event.preventDefault();
@@ -232,6 +269,7 @@ export default function AITasksPage() {
     { id: "tasks", label: "检查任务", icon: Clock3 },
     { id: "accounts", label: "托管账户", icon: KeyRound },
     { id: "templates", label: "缺陷模板", icon: Bot },
+    { id: "prompts", label: "共享提示词", icon: FileText },
     { id: "runs", label: "执行记录", icon: CheckCircle2 },
   ];
 
@@ -758,6 +796,13 @@ export default function AITasksPage() {
         </>
       )}
 
+      {tab === "prompts" && data && (
+        <TaskPrompts
+          prompts={data.prompts}
+          preferences={data.preferences}
+          onRefresh={load}
+        />
+      )}
       {form && (
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4"
@@ -986,38 +1031,32 @@ export default function AITasksPage() {
       )}
 
       {selected && (
-        <div
-          className="fixed inset-0 z-[70] flex justify-end bg-black/40"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="preview-title"
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) closePreview();
+          }}
         >
-          <div className="flex h-full w-full max-w-5xl flex-col border-l border-border bg-background shadow-xl">
-            <div className="flex items-center justify-between border-b border-border p-5">
+          <DialogContent
+            className="z-[70] h-[90dvh] w-[calc(100vw-2rem)] max-w-6xl overflow-hidden p-0"
+            onEscapeKeyDown={(e) => {
+              if (busy) e.preventDefault();
+            }}
+            onInteractOutside={(e) => {
+              if (busy) e.preventDefault();
+            }}
+          >
+            <div className="shrink-0 border-b border-border p-5 pr-12">
               <div>
-                <h2 id="preview-title" className="text-lg font-semibold">
+                <DialogTitle className="text-lg font-semibold">
                   {selected.issue_key} · 缺陷导入预览
-                </h2>
-                <p className="mt-1 text-xs text-muted-foreground">
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs text-muted-foreground">
                   生成草稿不会标记已处理；红色字段需要补充。
-                </p>
+                </DialogDescription>
               </div>
-              <button
-                aria-label="关闭预览"
-                disabled={!!busy}
-                onClick={() => {
-                  if (
-                    JSON.stringify(draft) !== JSON.stringify(selected.draft) &&
-                    !confirm("存在未保存修改，确认关闭？")
-                  )
-                    return;
-                  setSelected(null);
-                }}
-              >
-                <X size={20} />
-              </button>
             </div>
-            <div className="flex-1 overflow-auto p-5">
+            <div className="min-h-0 flex-1 overflow-auto p-5">
               <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
                 <div className="max-h-72 space-y-4 overflow-auto pr-2 lg:max-h-none">
                   <h3 className="font-medium">客户原始问题</h3>
@@ -1057,11 +1096,77 @@ export default function AITasksPage() {
                   ))}
                 </div>
                 <div className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-[1fr_160px]">
+                    <label className="space-y-1 text-sm">
+                      <span>转换提示词</span>
+                      <select
+                        disabled={!!busy}
+                        className={input}
+                        value={promptId}
+                        onChange={(e) => setPromptId(e.target.value)}
+                      >
+                        {data?.prompts.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} · v{p.revision}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-sm">
+                      <span>输出语言</span>
+                      <select
+                        disabled={!!busy}
+                        className={input}
+                        value={language}
+                        onChange={(e) =>
+                          setLanguage(
+                            e.target.value as TaskPreference["language"],
+                          )
+                        }
+                      >
+                        <option value="zh-CN">中文 · 简体</option>
+                        <option value="en">English</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      只改变本次转换；已有草稿需重新转换后才应用。
+                    </p>
+                    <button
+                      className={button}
+                      disabled={!!busy || !promptId}
+                      onClick={() =>
+                        action("preferences", async () => {
+                          await api.put(`${ROOT}/preferences`, {
+                            prompt_id: promptId,
+                            language,
+                          });
+                          setNotice("已保存为我的默认转换选项");
+                        })
+                      }
+                    >
+                      保存为我的默认
+                    </button>
+                  </div>
+                  <details className="rounded-lg border border-border p-3 text-sm">
+                    <summary className="cursor-pointer font-medium">
+                      查看本次选用的提示词
+                    </summary>
+                    <pre className="mt-3 whitespace-pre-wrap break-words font-sans leading-relaxed text-muted-foreground">
+                      {data?.prompts.find((p) => p.id === promptId)?.content}
+                    </pre>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      系统自动补充所选语言、模板结构及 Jira
+                      原文。可在“共享提示词”中创建、复制或编辑。
+                    </p>
+                  </details>
                   <div className="flex flex-wrap gap-2">
                     <select
                       aria-label="选择转换模板"
                       className={`${input} min-w-0 flex-1`}
                       value={templateId}
+                      disabled={!!busy}
                       onChange={(e) => setTemplateId(e.target.value)}
                     >
                       <option value="">{data?.default_template.name}</option>
@@ -1073,7 +1178,7 @@ export default function AITasksPage() {
                     </select>
                     <button
                       className={primary}
-                      disabled={!!busy}
+                      disabled={!!busy || !promptId}
                       onClick={() => {
                         if (
                           draft &&
@@ -1083,7 +1188,11 @@ export default function AITasksPage() {
                         action("convert", async () => {
                           const r = await api.post<Draft>(
                             `${ROOT}/issues/${selected.id}/convert`,
-                            { template_id: templateId || null },
+                            {
+                              template_id: templateId || null,
+                              prompt_id: promptId,
+                              language,
+                            },
                             { timeout: 650000 },
                           );
                           setDraft(r.data);
@@ -1107,7 +1216,20 @@ export default function AITasksPage() {
                     <>
                       <p className="text-xs text-muted-foreground">
                         {draft.template_name} · {date(draft.generated_at)}
+                        {draft.language &&
+                          ` · ${draft.language === "en" ? "English" : "简体中文"}`}
                       </p>
+                      {draft.prompt_content && (
+                        <details className="rounded-lg bg-muted/30 p-3 text-xs text-muted-foreground">
+                          <summary className="cursor-pointer">
+                            草稿提示词快照：{draft.prompt_name} · v
+                            {draft.prompt_revision}
+                          </summary>
+                          <pre className="mt-2 whitespace-pre-wrap break-words font-sans">
+                            {draft.prompt_content}
+                          </pre>
+                        </details>
+                      )}
                       {draft.source_updated !== selected.source.updated && (
                         <p className="text-sm text-amber-600">
                           Jira 在草稿生成后有更新，请检查原文并按需重新转换。
@@ -1118,16 +1240,25 @@ export default function AITasksPage() {
                           <span
                             className={`font-medium ${!value.trim() ? "text-red-600" : ""}`}
                           >
-                            {key}：
+                            {draft.field_labels?.[key] ?? key}：
                             {!value.trim() && (
-                              <span className="ml-2 text-xs">待补充</span>
+                              <span className="ml-2 text-xs">
+                                {draft.language === "en"
+                                  ? "Missing information"
+                                  : "待补充"}
+                              </span>
                             )}
                           </span>
                           <textarea
                             rows={key === "客户缺陷原始描述" ? 5 : 3}
                             className={`${input} ${!value.trim() ? "border-red-400 bg-red-500/5" : ""}`}
                             value={value}
-                            placeholder="来源信息缺失，请补充"
+                            disabled={busy === "convert"}
+                            placeholder={
+                              draft.language === "en"
+                                ? "Information missing from source; please complete"
+                                : "来源信息缺失，请补充"
+                            }
                             onChange={(e) =>
                               setDraft({
                                 ...draft,
@@ -1149,7 +1280,7 @@ export default function AITasksPage() {
                 </div>
               </div>
             </div>
-            <div className="space-y-3 border-t border-border p-4">
+            <div className="shrink-0 space-y-3 border-t border-border p-4">
               {error && (
                 <p role="alert" className="text-sm text-red-600">
                   {error}
@@ -1185,9 +1316,10 @@ export default function AITasksPage() {
                         draftEntries
                           .map(
                             ([k, v]) =>
-                              `**${k}：**\n${v.trim() || "【待补充】"}`,
+                              `**${draft.field_labels?.[k] ?? k}：**\n${v.trim() || (draft.language === "en" ? "[Missing information]" : "【待补充】")}`,
                           )
-                          .join("\n\n") + `\n\n来源：${selected.source.url}`,
+                          .join("\n\n") +
+                          `\n\n${draft.language === "en" ? "Source" : "来源"}：${selected.source.url}`,
                       );
                       setNotice("已复制，请在 TAPD 提交后标记已处理");
                     })
@@ -1218,8 +1350,8 @@ export default function AITasksPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

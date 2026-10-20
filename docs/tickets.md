@@ -1,3 +1,5 @@
+> 全新数据库统一执行 `db/init.sql`；下文归档迁移命令仅适用于旧版本升级，不应在新基线之后执行。清空重建参见 [数据库重建](database-reset.md)。
+
 # 工单库与看板
 
 入口：`/ticket`。默认卡片视图仅展示分配给当前用户的工单；列表视图可切换「只看分配给我 / 所有人的工单」。所有启用的已登录成员都可查看工单。同一浏览器按账户记住最后选择的卡片/列表视图；清除站点数据后恢复默认。
@@ -44,9 +46,9 @@
 Windows 本地开发（项目根目录 PowerShell）：
 
 ```powershell
-Get-Content db/migration_v5_catalog.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
-Get-Content db/migration_v6_tickets.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
-Get-Content db/migration_v7_catalog_trash.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
+Get-Content db/archive/migration_v5_catalog.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
+Get-Content db/archive/migration_v6_tickets.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
+Get-Content db/archive/migration_v7_catalog_trash.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
 docker compose -f docker-compose.yml up -d --build
 ```
 
@@ -55,9 +57,9 @@ docker compose -f docker-compose.yml up -d --build
 ```bash
 cd /opt/fae
 sudo docker compose --env-file .env.production -f compose.prod.yml stop backend
-sudo docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/migration_v5_catalog.sql
-sudo docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/migration_v6_tickets.sql
-sudo docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/migration_v7_catalog_trash.sql
+sudo docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/archive/migration_v5_catalog.sql
+sudo docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/archive/migration_v6_tickets.sql
+sudo docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/archive/migration_v7_catalog_trash.sql
 sudo docker compose --env-file .env.production -f compose.prod.yml pull backend frontend
 sudo docker compose --env-file .env.production -f compose.prod.yml up -d --wait
 ```

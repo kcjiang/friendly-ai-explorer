@@ -1,9 +1,12 @@
 """Local development integration tests. Records roll back; sequence numbers stay consumed."""
 import unittest
+from datetime import date
 import httpx
 from uuid import uuid4
 from unittest.mock import patch, AsyncMock
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from app.models.catalog import CatalogOption
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.main import app
 from app.database import engine, get_db
@@ -16,6 +19,7 @@ class TicketTests(unittest.IsolatedAsyncioTestCase):
         self.connection = await engine.connect()
         self.transaction = await self.connection.begin()
         self.db = AsyncSession(bind=self.connection, expire_on_commit=False, join_transaction_mode='create_savepoint')
+        await self.db.execute(insert(CatalogOption).values(category='project_pm', value='Test PM').on_conflict_do_nothing())
         self.users = []
         for role in (UserRole.developer, UserRole.leader, UserRole.engineer, UserRole.engineer, UserRole.engineer):
             user = User(name='Ticket test', email=f'{uuid4()}@example.com', role=role, password_hash='test-only', is_active=True)
@@ -29,13 +33,13 @@ class TicketTests(unittest.IsolatedAsyncioTestCase):
         app.dependency_overrides[get_current_user] = current
         self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test')
         c = self.client
-        customer = await c.post('/api/v1/catalog/customers', json={'company_name':'Ticket test company','country_code':'CN','city_id':'1795565','level':'KA'})
+        customer = await c.post('/api/v1/catalog/customers', json={'company_name':'Ticket test company','country_code':'CN','level':'KA'})
         self.assertEqual(customer.status_code,201,customer.text)
         product = await c.post('/api/v1/catalog/products',json={'type':'OTT','model':'TestModel','chipset':'Chip','system':'OS'})
         self.assertEqual(product.status_code,201,product.text)
         self.projects=[]
         for number in ('A','B'):
-            response=await c.post('/api/v1/catalog/projects',json={'number':number,'pm':'Test PM','start_month':'2026-09','stage':'EV','customer_id':customer.json()['id'],'product_id':product.json()['id']})
+            response=await c.post('/api/v1/catalog/projects',json={'number':number,'pm':'Test PM','start_date':'2026-09-01','stage':'EV','customer_id':customer.json()['id'],'product_id':product.json()['id']})
             self.assertEqual(response.status_code,201,response.text)
             self.projects.append(response.json()['id'])
         self.body={'title':'Test ticket','description':'## Repro\n- Step one','project_id':self.projects[0],'source':'Email','raw_report':'Original report'}
@@ -260,10 +264,10 @@ class TicketConcurrencyTests(unittest.IsolatedAsyncioTestCase):
         async with AsyncSessionLocal() as db:
             user=await db.scalar(select(User).where(User.is_active.is_(True),User.role==UserRole.developer).limit(1))
             self.assertIsNotNone(user)
-            db.add(Customer(id=customer_id,company_name='Concurrent test',country_code='CN',country_name='China',city_id='1795565',city_name='Shenzhen',level='KA',created_by=user.id,updated_by=user.id))
-            db.add(Product(id=product_id,type='OTT',model='Concurrent test',chipset='Test',system='Test',created_by=user.id,updated_by=user.id))
+            db.add(Customer(id=customer_id,company_name='Concurrent test',country_code='CN',country_name='China',identification_name=f'China-Concurrent-{customer_id}',level='KA',created_by=user.id,updated_by=user.id))
+            db.add(Product(id=product_id,identification_name=f'OTT-Concurrent test-{product_id}',type='OTT',model='Concurrent test',chipset='Test',system='Test',created_by=user.id,updated_by=user.id))
             await db.flush()
-            db.add(Project(id=project_id,number='Concurrent test',pm='Test',start_month='2026-09',stage='EV',customer_id=customer_id,product_id=product_id,created_by=user.id,updated_by=user.id))
+            db.add(Project(id=project_id,number='Concurrent test',pm='Test',start_date=date(2026, 9, 1),stage='EV',customer_id=customer_id,product_id=product_id,created_by=user.id,updated_by=user.id))
             await db.commit()
         try:
             async def create():
