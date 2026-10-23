@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 import { errorMessage } from "@/lib/errors";
 
@@ -7,25 +8,29 @@ import { X, Upload, Loader2, FileText, Image } from "lucide-react";
 import apiClient from "@/lib/api";
 
 interface Props {
-  onClose:   () => void;
+  onClose: () => void;
   onSuccess: () => void;
 }
 
 export default function UploadModal({ onClose, onSuccess }: Props) {
-  const inputRef  = useRef<HTMLInputElement>(null);
-  const [file,       setFile]       = useState<File | null>(null);
-  const [title,      setTitle]      = useState("");
+  const t = useUiTranslations();
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [title, setTitle] = useState("");
   const [visibility, setVisibility] = useState<"public" | "private">("public");
-  const [uploading,  setUploading]  = useState(false);
-  const [error,      setError]      = useState("");
-  const [dragging,   setDragging]   = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const [dragging, setDragging] = useState(false);
 
   const ALLOWED = [".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg", ".webp"];
 
   function handleFileSelect(f: File) {
     const ext = "." + f.name.split(".").pop()?.toLowerCase();
     if (!ALLOWED.includes(ext)) {
-      setError(`不支持的格式，仅支持：${ALLOWED.join(", ")}`);
+      setError(
+        t("dynamic.unsupportedFormatAllowed", { p0: ALLOWED.join(", ") }),
+      );
       return;
     }
     setError("");
@@ -46,32 +51,41 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
     setError("");
     try {
       const fd = new FormData();
-      fd.append("file",       file);
-      fd.append("title",      title.trim());
+      fd.append("file", file);
+      fd.append("title", title.trim());
       fd.append("visibility", visibility);
       await apiClient.post("/api/v1/knowledge/upload", fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       onSuccess();
     } catch (e: unknown) {
-      setError(errorMessage(e, "上传失败，请重试"));
+      setError(errorMessage(e, t("ui.uploadFailedTryAgain")));
     } finally {
       setUploading(false);
     }
   }
 
-  const FileIcon = file?.name.match(/\.(png|jpg|jpeg|webp)$/i) ? Image : FileText;
+  const FileIcon = file?.name.match(/\.(png|jpg|jpeg|webp)$/i)
+    ? Image
+    : FileText;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div className="bg-background border border-border rounded-2xl shadow-2xl w-full max-w-md">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="font-semibold text-base">上传文件到知识库</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <h2 className="font-semibold text-base">
+            {t("ui.uploadToKnowledgeBase")}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground"
+          >
             <X size={20} />
           </button>
         </div>
@@ -79,7 +93,10 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
         <div className="p-6 space-y-4">
           {/* 拖拽区域 */}
           <div
-            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
             onClick={() => inputRef.current?.click()}
@@ -94,7 +111,10 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
               type="file"
               accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,.webp"
               className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFileSelect(f);
+              }}
             />
             {file ? (
               <div className="flex flex-col items-center gap-2">
@@ -104,28 +124,36 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
                   {(file.size / 1024 / 1024).toFixed(2)} MB
                 </p>
                 <button
-                  onClick={e => { e.stopPropagation(); setFile(null); setTitle(""); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFile(null);
+                    setTitle("");
+                  }}
                   className="text-xs text-muted-foreground hover:text-foreground underline"
                 >
-                  重新选择
+                  {t("ui.chooseAnotherFile")}
                 </button>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-2 text-muted-foreground">
                 <Upload size={32} />
-                <p className="text-sm">拖拽文件到此处，或点击选择</p>
-                <p className="text-xs">支持 PDF、Word、PNG、JPG</p>
+                <p className="text-sm">
+                  {t("ui.dropAFileHereOrClickToSelect")}
+                </p>
+                <p className="text-xs">{t("ui.supportsPdfWordPngAndJpg")}</p>
               </div>
             )}
           </div>
 
           {/* 标题 */}
           <div>
-            <label className="block text-sm font-medium mb-1.5">文档标题</label>
+            <label className="block text-sm font-medium mb-1.5">
+              {t("ui.documentTitle2")}
+            </label>
             <input
               value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="输入文档标题"
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={t("ui.enterADocumentTitle")}
               className="w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm
                          focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
@@ -133,10 +161,15 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
 
           {/* 可见性 */}
           <div>
-            <label className="block text-sm font-medium mb-1.5">可见性</label>
+            <label className="block text-sm font-medium mb-1.5">
+              {t("ui.visibility")}
+            </label>
             <div className="flex gap-4">
-              {(["public", "private"] as const).map(v => (
-                <label key={v} className="flex items-center gap-2 cursor-pointer">
+              {(["public", "private"] as const).map((v) => (
+                <label
+                  key={v}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
                   <input
                     type="radio"
                     name="vis"
@@ -145,7 +178,9 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
                     onChange={() => setVisibility(v)}
                     className="accent-primary"
                   />
-                  <span className="text-sm">{v === "public" ? "🌐 公开" : "🔒 私有"}</span>
+                  <span className="text-sm">
+                    {v === "public" ? t("ui.public") : t("ui.private")}
+                  </span>
                 </label>
               ))}
             </div>
@@ -153,8 +188,10 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
 
           {/* 错误提示 */}
           {error && (
-            <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30
-                          border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+            <p
+              className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30
+                          border border-red-200 dark:border-red-800 rounded-lg px-3 py-2"
+            >
               {error}
             </p>
           )}
@@ -166,7 +203,7 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
             onClick={onClose}
             className="text-sm px-4 py-2 border border-border rounded-lg hover:bg-muted/50"
           >
-            取消
+            {t("ui.cancel")}
           </button>
           <button
             onClick={handleUpload}
@@ -175,8 +212,12 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
                        text-primary-foreground rounded-lg hover:bg-primary/90
                        disabled:opacity-50 transition-colors"
           >
-            {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-            {uploading ? "上传中..." : "上传"}
+            {uploading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Upload size={14} />
+            )}
+            {uploading ? t("ui.uploading") : t("ui.upload")}
           </button>
         </div>
       </div>

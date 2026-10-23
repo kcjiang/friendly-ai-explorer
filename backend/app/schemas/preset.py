@@ -20,7 +20,7 @@ class PresetCommandOut(BaseModel):
 class CreatePresetRequest(BaseModel):
     name:        str
     command:     str
-    group_name:  str  = "通用"
+    group_name:  str  = "General"
     device_type: str  # adb | serial
     is_public:   bool = False
     is_danger:   bool = False

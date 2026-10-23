@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 // Source: https://ui.shadcn.com/r/styles/base-nova/toast.json
 import {
@@ -121,10 +122,12 @@ function ToastClose({
   render = <Button variant="ghost" size="icon-sm" />,
   ...props
 }: ToastPrimitive.Close.Props) {
+  const t = useUiTranslations();
+
   return (
     <ToastPrimitive.Close
       data-slot="toast-close"
-      aria-label="Close toast"
+      aria-label={t("ui.additionalClosetoast")}
       render={render}
       className={cn(
         "text-muted-foreground hover:text-foreground relative shrink-0 after:absolute after:-inset-2 after:content-['']",

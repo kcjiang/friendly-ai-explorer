@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 // Source: https://ui.shadcn.com/r/styles/base-nova/dialog.json
 import { XIcon } from "lucide-react";
@@ -47,6 +48,8 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
 }) {
+  const t = useUiTranslations();
+
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -71,7 +74,7 @@ function DialogContent({
             }
           >
             <XIcon />
-            <span className="sr-only">关闭</span>
+            <span className="sr-only">{t("ui.closed")}</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
@@ -97,6 +100,7 @@ function DialogFooter({
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean;
 }) {
+  const t = useUiTranslations();
   return (
     <div
       data-slot="dialog-footer"
@@ -109,7 +113,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close render={<Button variant="outline" />}>
-          Close
+          {t("ui.extraClose")}
         </DialogPrimitive.Close>
       )}
     </div>

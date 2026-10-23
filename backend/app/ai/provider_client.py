@@ -1,4 +1,5 @@
 """HTTP adapters. Never surface provider bodies, URLs or credentials in errors."""
+from app.i18n import message as system_message
 import asyncio
 import json
 import re
@@ -35,9 +36,9 @@ def provider_key(provider) -> str:
         value = (cipher().decrypt(provider.api_key_encrypted.encode()).decode()
                  if provider.api_key_encrypted else "")
     except InvalidToken:
-        raise AIError("密钥无法解密，请重新填写 API Key") from None
+        raise AIError(system_message("errors.cannotDecryptTheKeyEnterTheApiKeyAgain")) from None
     if not value and getattr(provider, "auth_required", True):
-        raise AIError("未配置 API Key")
+        raise AIError(system_message("errors.apiKeyIsNotConfigured"))
     register_secret(value)
     return value
 
@@ -50,7 +51,7 @@ _active = defaultdict(int)
 async def provider_slot(provider):
     key = str(provider.id)
     if _active[key] >= provider.max_concurrency:
-        raise AIError("服务并发已满，请稍后重试", retryable=True, kind="busy")
+        raise AIError(system_message("errors.serviceConcurrencyLimitReachedTryAgainLater"), retryable=True, kind="busy")
     _active[key] += 1
     try:
         yield
@@ -61,9 +62,9 @@ async def provider_slot(provider):
 
 
 def status_error(code: int, response=None):
-    labels = {400: "请求参数不被模型支持", 401: "API Key 无效", 403: "无权访问模型", 404: "模型或 API 路径不存在", 429: "服务限流或额度不足"}
+    labels = {400: system_message("errors.unsupportedParameters"), 401: system_message("errors.apiKeyInvalid"), 403: system_message("errors.modelAccessDenied"), 404: system_message("errors.modelNotFound"), 429: system_message("errors.providerRateLimit")}
     details = {"http_status": code}
-    message = labels.get(code, f"AI 服务返回 HTTP {code}")
+    message = labels.get(code, system_message("errors.aiUnavailable"))
     if response is not None:
         upstream_id = response.headers.get("x-request-id", response.headers.get("request-id", ""))
         if re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", upstream_id):
@@ -76,16 +77,16 @@ def status_error(code: int, response=None):
             text = response.content[:4096].decode("utf-8", errors="replace").lower()
             # Record a known category instead of an upstream body that may echo inputs.
             if any(word in text for word in ("context length", "context_length", "maximum context", "max_model_len")):
-                message = "输入或输出预算超出模型上下文限制，请缩短输入或降低输出上限"
+                message = system_message("errors.contextLimit")
                 details["upstream_category"] = "context_limit"
             elif any(word in text for word in ("cuda out of memory", "cuda error: out of memory", "outofmemoryerror")):
-                message = "推理服务显存不足，请降低并发或模型资源占用"
+                message = system_message("errors.providerMemory")
                 details["upstream_category"] = "out_of_memory"
             elif "chat_template_kwargs" in text or "enable_thinking" in text:
-                message = "接口不支持当前思考参数，请切换自动兼容模式或调整网关"
+                message = system_message("errors.thinkingUnsupported")
                 details["upstream_category"] = "thinking_parameter"
             elif "response_format" in text or "json_schema" in text:
-                message = "接口不支持当前结构化输出模式，请使用自动兼容模式"
+                message = system_message("errors.jsonUnsupported")
                 details["upstream_category"] = "structured_parameter"
     kind = "rate_limit" if code == 429 else "upstream_unavailable" if code >= 500 else "timeout" if code == 408 else "invalid_parameter" if code in (400, 422) else "auth" if code in (401, 403) else "http_error"
     return AIError(message, code in (408, 429) or code >= 500, kind=kind, details=details)
@@ -94,19 +95,19 @@ def status_error(code: int, response=None):
 def parse_payload(data, protocol, usage, streaming):
     diagnostics = usage.setdefault("diagnostics", {})
     if "error" in data:
-        raise AIError("AI 服务返回错误事件", retryable=True, kind="upstream_unavailable")
+        raise AIError(system_message("errors.aiServiceReturnedAnErrorEvent"), retryable=True, kind="upstream_unavailable")
     if protocol == "responses":
         if streaming:
             kind = data.get("type")
             if kind in ("response.failed", "response.incomplete", "error"):
-                raise AIError("Responses 输出失败或未完成", retryable=True, kind="invalid_output")
+                raise AIError(system_message("errors.responsesRequestFailedOrIsIncomplete"), retryable=True, kind="invalid_output")
             if kind == "response.output_text.delta":
                 return data.get("delta", "")
             if kind != "response.completed":
                 return ""
             data = data.get("response", {})
         if data.get("status") != "completed":
-            raise AIError("Responses 输出未完成", retryable=True, kind="truncated")
+            raise AIError(system_message("errors.responsesOutputIsIncomplete"), retryable=True, kind="truncated")
         tokens = data.get("usage") or {}
         usage.update(input_tokens=tokens.get("input_tokens"), output_tokens=tokens.get("output_tokens"))
         return "" if streaming else "".join(part.get("text", "") for item in data.get("output", [])
@@ -126,7 +127,7 @@ def parse_payload(data, protocol, usage, streaming):
         if isinstance(reasoning, str):
             diagnostics["reasoning_chars"] = diagnostics.get("reasoning_chars", 0) + len(reasoning)
         if choice.get("finish_reason") in ("length", "content_filter"):
-            raise AIError("模型输出达到长度上限" if choice["finish_reason"] == "length" else "模型输出被安全过滤", retryable=choice["finish_reason"] == "length", kind="truncated" if choice["finish_reason"] == "length" else "filtered")
+            raise AIError(system_message("errors.outputLimit") if choice["finish_reason"] == "length" else system_message("errors.outputFiltered"), retryable=choice["finish_reason"] == "length", kind="truncated" if choice["finish_reason"] == "length" else "filtered")
         content = message.get("content")
         return content if isinstance(content, str) else ""
     tokens = data.get("usageMetadata") or {}
@@ -143,7 +144,7 @@ def parse_payload(data, protocol, usage, streaming):
         diagnostics["finish_reason"] = candidate["finishReason"]
     if candidate.get("finishReason") not in (None, "STOP"):
         truncated = candidate["finishReason"] == "MAX_TOKENS"
-        raise AIError("模型输出达到长度上限" if truncated else "模型输出被安全过滤", retryable=truncated, kind="truncated" if truncated else "filtered")
+        raise AIError(system_message("errors.outputLimit") if truncated else system_message("errors.outputFiltered"), retryable=truncated, kind="truncated" if truncated else "filtered")
     return "".join(p.get("text", "") for p in candidate.get("content", {}).get("parts", []) if not p.get("thought"))
 
 
@@ -194,7 +195,7 @@ class ThinkingFilter:
 
     def finish(self):
         if self.thinking:
-            raise AIError("模型仍在思考，未生成最终答案", retryable=True, kind="reasoning_only")
+            raise AIError(system_message("errors.theModelReturnedThinkingButNoFinalAnswer"), retryable=True, kind="reasoning_only")
         return self.buffer
 
 
@@ -276,7 +277,7 @@ async def generate(provider, prompt, *, stream=False, timeout=None, max_tokens=N
                         if response.status_code >= 300:
                             raise status_error(response.status_code, response)
                         if "text/event-stream" not in response.headers.get("content-type", ""):
-                            raise AIError("接口未返回 SSE 流", retryable=True, kind="invalid_response")
+                            raise AIError(system_message("errors.theApiDidNotReturnAnSseStream"), retryable=True, kind="invalid_response")
                         finished = False
                         thinking_filter = ThinkingFilter()
                         async for event in sse_events(response):
@@ -297,7 +298,7 @@ async def generate(provider, prompt, *, stream=False, timeout=None, max_tokens=N
                                 diagnostics["response_chars"] = diagnostics.get("response_chars", 0) + len(chunk)
                                 yield chunk
                         if not finished:
-                            raise AIError("流式连接在生成完成前中断", retryable=True, kind="connection")
+                            raise AIError(system_message("errors.theStreamEndedBeforeCompletion"), retryable=True, kind="connection")
                         final = thinking_filter.finish()
                         diagnostics["reasoning_chars"] = diagnostics.get("reasoning_chars", 0) + thinking_filter.removed
                         if final:
@@ -341,11 +342,11 @@ async def generate(provider, prompt, *, stream=False, timeout=None, max_tokens=N
                     hidden_chars = len(raw) - len(content) if raw.lstrip().lower().startswith("<think") or "</think>" in raw and not raw.lstrip().startswith(("{", "[", "```")) else 0
                     diagnostics["reasoning_chars"] = diagnostics.get("reasoning_chars", 0) + hidden_chars
                     if not content and diagnostics.get("reasoning_chars"):
-                        raise AIError("模型只返回思考内容，未生成最终答案", retryable=True, kind="reasoning_only")
+                        raise AIError(system_message("errors.theModelReturnedOnlyThinkingAndNoFinalAnswer"), retryable=True, kind="reasoning_only")
                     yield content
     except (TimeoutError, httpx.TimeoutException):
-        raise AIError("AI 请求超时", retryable=True, kind="timeout", details={"phase": "generation", "timeout_seconds": round(seconds, 2)}) from None
+        raise AIError(system_message("errors.aiRequestTimedOut"), retryable=True, kind="timeout", details={"phase": "generation", "timeout_seconds": round(seconds, 2)}) from None
     except httpx.RequestError:
-        raise AIError("无法连接 AI 服务，请检查地址和网络", retryable=True, kind="connection") from None
+        raise AIError(system_message("errors.cannotConnectToTheAiServiceCheckItsUrlAndNetwork"), retryable=True, kind="connection") from None
     except (ValueError, KeyError, TypeError, AttributeError):
-        raise AIError("AI 服务响应格式无效", retryable=True, kind="invalid_response") from None
+        raise AIError(system_message("errors.invalidAiResponseFormat"), retryable=True, kind="invalid_response") from None

@@ -1,24 +1,24 @@
 import { type CatalogRecord, type Kind } from "@/types/catalog";
 
-export const requiredMessage = "请填写此字段。";
+export const requiredMessage = "This field is required.";
 export const fieldLabels: Record<string, string> = {
-  company_name: "公司名",
-  country_code: "国家 / 地区",
-  level: "客户级别",
-  business: "业务",
-  type: "类型",
-  model: "型号",
-  chipset: "芯片",
-  system: "系统",
-  repository_url: "固件下载地址",
-  fingerprint: "项目指纹",
-  number: "项目编号",
-  pm: "项目经理（PM）",
+  company_name: "Company name",
+  country_code: "Country / region",
+  level: "Customer tier",
+  business: "Business",
+  type: "Type",
+  model: "Model",
+  chipset: "Chipset",
+  system: "System",
+  repository_url: "Firmware download URL",
+  fingerprint: "Project fingerprint",
+  number: "Project number",
+  pm: "Project manager (PM)",
   fae_id: "FAE",
-  start_date: "立项时间",
-  stage: "项目阶段",
-  customer_id: "客户",
-  product_id: "产品",
+  start_date: "Start date",
+  stage: "Project stage",
+  customer_id: "Customer",
+  product_id: "Product",
 };
 export function requiredErrors(kind: Kind, draft: Partial<CatalogRecord>) {
   const errors: Record<string, string> = {};
@@ -61,7 +61,7 @@ export function serverFieldErrors(
     if (key)
       errors[key] = ["missing", "string_too_short"].includes(entry.type ?? "")
         ? requiredMessage
-        : "请检查此字段的填写内容。";
+        : "Check this field.";
   }
   return errors;
 }

@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 import logging
 import time
 from fastapi import HTTPException
@@ -48,7 +49,7 @@ class EmbeddingInput(BaseModel):
     @model_validator(mode="after")
     def configured_endpoint(self):
         if self.protocol != "disabled" and (not self.base_url or not self.model):
-            raise ValueError("请填写向量服务地址和模型名称")
+            raise ValueError(system_message("errors.enterAnEmbeddingUrlAndModelName"))
         return self
 
 
@@ -60,7 +61,7 @@ class ProfileInput(EmbeddingInput):
     @classmethod
     def nonblank_name(cls, value):
         if not value.strip():
-            raise ValueError("请输入服务名称")
+            raise ValueError(system_message("errors.embeddingServiceNameAlreadyExists"))
         return value.strip()
 
 
@@ -89,7 +90,7 @@ def profile_public(row):
 async def get_profile(db, profile_id):
     row = await db.get(EmbeddingProfile, profile_id)
     if not row:
-        raise HTTPException(404, "向量服务不存在")
+        raise HTTPException(404, system_message("errors.embeddingServiceNotFound"))
     return row
 
 
@@ -115,7 +116,7 @@ def encrypted_config(body, old):
         else old.api_key_encrypted
     )
     if body.protocol == "gemini" and not encrypted:
-        raise HTTPException(422, "请在管理页面填写 Gemini 向量服务的 API Key")
+        raise HTTPException(422, system_message("errors.enterTheGeminiApiKeyOnTheSettingsPage"))
     return {
         **body.model_dump(exclude={"name", "api_key", "clear_api_key"}),
         "api_key_encrypted": encrypted,
@@ -128,7 +129,7 @@ async def save_profile(db, body, profile_id=None):
         row = await get_profile(db, profile_id)
     else:
         if await db.scalar(select(func.count()).select_from(EmbeddingProfile)) >= 50:
-            raise HTTPException(422, "最多保存 50 个向量服务")
+            raise HTTPException(422, system_message("errors.atMost50EmbeddingServicesCanBeSaved"))
         row = EmbeddingProfile(config={})
     row.config = encrypted_config(body, EmbeddingConfig(**row.config))
     row.name = body.name
@@ -150,10 +151,10 @@ async def delete_profile(db, profile_id):
     settings = await lock_settings(db)
     row = await get_profile(db, profile_id)
     if settings.active_profile_id == profile_id:
-        raise HTTPException(409, "请先切换到其他向量服务或仅关键词检索，再删除当前服务")
+        raise HTTPException(409, system_message("errors.switchToAnotherServiceOrKeywordOnlySearchBeforeDeletingTheActive"))
     await db.delete(row)
     await db.commit()
-    return {"message": "已删除向量服务"}
+    return {"message": system_message("errors.embeddingDeleted")}
 
 
 async def public_config(db):
@@ -211,7 +212,7 @@ async def test_config(db, profile_id=None):
     if config.protocol == "disabled":
         return {
             "success": False,
-            "message": "当前仅使用关键词检索，未启用向量服务",
+            "message": system_message("errors.keywordOnly"),
             "elapsed_ms": 0,
         }
     started = time.monotonic()
@@ -219,9 +220,9 @@ async def test_config(db, profile_id=None):
         # Validate query and document paths, including prefixes, dimensions and finite values.
         for task in ("retrieval_query", "retrieval_document"):
             await embed_text("知识库连接测试", task_type=task, config=config)
-        ok, message = True, "连接成功，查询和文档向量均为有效的 768 维向量"
+        ok, message = True, system_message("errors.embeddingTestPassed")
     except EmbeddingUnavailable as exc:
-        ok, message = False, "向量服务测试失败：" + exc.reason
+        ok, message = False, system_message("errors.embeddingTestFailed")
     elapsed = round((time.monotonic() - started) * 1000)
     logging.getLogger(__name__).log(
         logging.INFO if ok else logging.WARNING,

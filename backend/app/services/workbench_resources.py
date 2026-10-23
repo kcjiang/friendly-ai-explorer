@@ -1,4 +1,5 @@
 """Host validation and canonical resource payloads."""
+from app.i18n import message as system_message
 
 from urllib.parse import urlsplit
 
@@ -17,7 +18,7 @@ def validate_source_url(url):
         or parts.fragment
     ):
         raise HTTPException(
-            422, "请填写有效的 HTTPS 平台根地址，不含账号、查询参数或片段"
+            422, system_message("errors.enterAValidHttpsPlatformRootUrlWithoutCredentialsQueryParametersOr")
         )
 
 

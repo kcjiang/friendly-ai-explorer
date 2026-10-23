@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
@@ -37,7 +38,7 @@ async def add_option(category: OptionCategory, current_user: DevOnly, body: Cata
     created = await db.scalar(insert(CatalogOption).values(category=category, value=body.value)
                               .on_conflict_do_nothing().returning(CatalogOption.value))
     if created is None:
-        raise HTTPException(409, '此选项已存在')
+        raise HTTPException(409, system_message("errors.thisOptionAlreadyExists"))
     await db.commit()
     return {'value': created, 'label': created}
 
@@ -46,7 +47,7 @@ async def add_option(category: OptionCategory, current_user: DevOnly, body: Cata
 async def delete_option(category: OptionCategory, current_user: DevOnly, value: str = Query(min_length=1, max_length=100), db: AsyncSession = Depends(get_db)):
     option = await db.scalar(select(CatalogOption).where(CatalogOption.category == category, CatalogOption.value == value).with_for_update())
     if option is None:
-        raise HTTPException(404, '选项不存在，请刷新列表')
+        raise HTTPException(404, system_message("errors.optionNotFoundRefreshTheList"))
     # Include trash. The same option row is share-locked during record writes.
     if category == 'contact_method':
         references = select(Customer.id).where(Customer.contacts.contains([{'methods': [{'type': value}]}]))
@@ -54,10 +55,10 @@ async def delete_option(category: OptionCategory, current_user: DevOnly, value: 
         column = OPTION_COLUMNS[category]
         references = select(column).where(column == value)
     if await db.scalar(references.limit(1)) is not None:
-        raise HTTPException(409, '仍有记录使用此选项（包括最近删除中的记录），无法删除')
+        raise HTTPException(409, system_message("errors.thisOptionIsUsedByRecordsIncludingRecentlyDeletedRecordsAndCannot"))
     await db.delete(option)
     await db.commit()
-    return {'message': '选项已删除'}
+    return {'message': system_message("errors.optionDeleted")}
 
 
 @router.get('/locations/countries')
@@ -131,7 +132,7 @@ async def list_records(kind: Kind, current_user: AnyUser, q: str = Query('', max
     stmt, searchable, filters, sortable = query_for(kind)
     stmt = stmt.where(MODELS[kind].deleted_at.is_not(None) if trash else MODELS[kind].deleted_at.is_(None))
     if sort not in sortable or (filter_field and filter_field not in filters):
-        raise HTTPException(422, '不支持的筛选或排序字段')
+        raise HTTPException(422, system_message("errors.unsupportedFilterOrSortField"))
     if q.strip():
         stmt = stmt.where(or_(*(col.icontains(q.strip(), autoescape=True) for col in searchable)))
     if filter_field and filter_value:
@@ -147,7 +148,7 @@ async def get_record(kind: Kind, record_id: UUID, current_user: AnyUser, db: Asy
     stmt, *_ = query_for(kind)
     row = (await db.execute(stmt.where(MODELS[kind].id == record_id))).first()
     if not row:
-        raise HTTPException(404, '记录不存在')
+        raise HTTPException(404, system_message("errors.recordNotFound"))
     return serialize(row)
 
 
@@ -162,15 +163,15 @@ async def validate_data(kind, data, db):
     for category, field in categories[kind]:
         option = await db.scalar(select(CatalogOption).where(CatalogOption.category == category, CatalogOption.value == values[field]).with_for_update(read=True))
         if option is None:
-            raise HTTPException(422, f'请选择已维护的选项：{field}')
+            raise HTTPException(422, system_message("errors.selectedOptionInvalid"))
     if kind == 'customers':
         for tool in sorted({method['type'] for contact in values['contacts'] for method in contact['methods']}):
             option = await db.scalar(select(CatalogOption).where(CatalogOption.category == 'contact_method', CatalogOption.value == tool).with_for_update(read=True))
             if option is None:
-                raise HTTPException(422, '请选择已维护的联系方式工具')
+                raise HTTPException(422, system_message("errors.selectAnExistingCommunicationTool"))
         location = resolve_location(values['country_code'])
         if not location:
-            raise HTTPException(422, '请选择有效的国家 / 地区')
+            raise HTTPException(422, system_message("errors.selectAValidCountryRegion"))
         values.update(location)
         values['business'] = list(dict.fromkeys(values['business']))
     elif kind == 'projects':
@@ -179,7 +180,7 @@ async def validate_data(kind, data, db):
         if values['fae_id'] is not None:
             fae = await db.scalar(select(User).where(User.id == values['fae_id'], User.role == UserRole.engineer, User.is_active.is_(True)))
             if not fae:
-                raise HTTPException(422, 'FAE 必须选择已注册且启用的工程师账号')
+                raise HTTPException(422, system_message("errors.faeMustBeARegisteredActiveEngineerAccount"))
     return values
 
 
@@ -217,14 +218,14 @@ async def update_record(kind: Kind, record_id: UUID, current_user: AnyUser, body
     await lock_record_names(db, kind)
     revision = body.pop('revision', None)
     if type(revision) is not int or revision < 1:
-        raise HTTPException(422, '缺少有效的数据版本号')
+        raise HTTPException(422, system_message("errors.aValidDataRevisionIsRequired"))
     record = await db.scalar(select(MODELS[kind]).where(MODELS[kind].id == record_id).with_for_update())
     if not record:
-        raise HTTPException(404, '记录不存在')
+        raise HTTPException(404, system_message("errors.recordNotFound"))
     if record.revision != revision:
-        raise HTTPException(409, '其他成员已更新此记录，请关闭并重新打开后编辑')
+        raise HTTPException(409, system_message("errors.anotherMemberUpdatedThisRecordCloseAndReopenItBeforeEditing"))
     if record.deleted_at is not None:
-        raise HTTPException(409, '此记录已移至最近删除，请先恢复后再编辑')
+        raise HTTPException(409, system_message("errors.thisRecordIsInRecentlyDeletedRestoreItBeforeEditing"))
     values = await validate_data(kind, body, db)
     name_changed = ((kind == 'customers' and (record.company_name != values['company_name'] or record.country_code != values['country_code']))
                     or (kind == 'products' and (record.type != values['type'] or record.model != values['model'])))
@@ -280,9 +281,9 @@ async def lock_revision(kind, record_id, revision, db):
     record = await db.scalar(select(MODELS[kind]).where(MODELS[kind].id == record_id)
                              .with_for_update().execution_options(populate_existing=True))
     if not record:
-        raise HTTPException(404, '记录不存在')
+        raise HTTPException(404, system_message("errors.recordNotFound"))
     if record.revision != revision:
-        raise HTTPException(409, '其他成员已更新此记录，请刷新后重试')
+        raise HTTPException(409, system_message("errors.anotherMemberUpdatedThisRecordRefreshAndTryAgain"))
     return record
 
 
@@ -291,13 +292,13 @@ async def move_to_trash(kind: Kind, record_id: UUID, current_user: AnyUser,
                         revision: int = Query(ge=1), db: AsyncSession = Depends(get_db)):
     record = await lock_revision(kind, record_id, revision, db)
     if record.deleted_at is not None:
-        raise HTTPException(409, '记录已在最近删除中')
+        raise HTTPException(409, system_message("errors.thisRecordIsAlreadyInRecentlyDeleted"))
     await assert_unreferenced(kind, record.id, db)
     record.deleted_at = datetime.now(timezone.utc)
     record.deleted_by = current_user.id
     audit_change(record, current_user)
     await db.commit()
-    return {'message': '已移至最近删除，可在清空前恢复'}
+    return {'message': system_message("errors.recordDeleted")}
 
 
 @router.post('/{kind}/{record_id}/restore')
@@ -305,7 +306,7 @@ async def restore_record(kind: Kind, record_id: UUID, current_user: AnyUser,
                          revision: int = Query(ge=1), db: AsyncSession = Depends(get_db)):
     record = await lock_revision(kind, record_id, revision, db)
     if record.deleted_at is None:
-        raise HTTPException(409, '记录未被删除，请刷新列表')
+        raise HTTPException(409, system_message("errors.thisRecordIsNotDeletedRefreshTheList"))
     if kind == 'projects':
         await require_active(db, Customer, record.customer_id, '客户')
         await require_active(db, Product, record.product_id, '产品')

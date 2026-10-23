@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 // Source: https://ui.shadcn.com/r/styles/base-nova/combobox.json
 import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react";
@@ -37,10 +38,12 @@ function ComboboxTrigger({
 }
 
 function ComboboxClear({ className, ...props }: ComboboxPrimitive.Clear.Props) {
+  const t = useUiTranslations();
+
   return (
     <ComboboxPrimitive.Clear
       data-slot="combobox-clear"
-      aria-label="清除选择"
+      aria-label={t("ui.clearSelection")}
       render={<InputGroupButton variant="ghost" size="icon-xs" />}
       className={cn(className)}
       {...props}

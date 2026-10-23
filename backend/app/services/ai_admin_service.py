@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 import time
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -20,7 +21,7 @@ def public_provider(row):
 async def get_provider(db, provider_id):
     row = await db.get(AIProvider, provider_id)
     if not row:
-        raise HTTPException(404, "AI 服务不存在")
+        raise HTTPException(404, system_message("errors.aiServiceNotFound"))
     return row
 
 
@@ -36,12 +37,12 @@ async def save_provider(db, body, provider_id=None):
     routes = await locked_routes(db)
     row = await get_provider(db, provider_id) if provider_id else AIProvider()
     if not body.enabled and any(row.id in (r.provider_id, r.fallback_provider_id) for r in routes if row.id):
-        raise HTTPException(409, "该服务仍被任务使用，请先调整任务分配，再禁用")
+        raise HTTPException(409, system_message("errors.thisServiceIsAssignedToTasksReassignThemBeforeDisablingIt"))
     key = body.api_key.get_secret_value().strip() if body.api_key else ""
     if body.auth_required and not key and not row.api_key_encrypted:
-        raise HTTPException(422, "启用 API Key 认证时必须填写密钥")
+        raise HTTPException(422, system_message("errors.enterAKeyWhenEnablingApiKeyAuthentication"))
     if body.auth_required and provider_id and row.protocol != body.protocol and not key:
-        raise HTTPException(422, "更改接口类型时请重新填写 API Key")
+        raise HTTPException(422, system_message("errors.enterTheApiKeyAgainWhenChangingApiType"))
     # Renaming and concurrency changes do not invalidate a verified model.
     identity_fields = ("protocol", "base_url", "model", "auth_required", "token_parameter", "thinking_mode", "structured_output", "temperature", "max_output_tokens", "timeout_seconds")
     invalidate = not provider_id or bool(key) or any(getattr(row, f) != getattr(body, f) for f in identity_fields)
@@ -65,17 +66,17 @@ async def delete_provider(db, provider_id):
     routes = await locked_routes(db)
     row = await get_provider(db, provider_id)
     if any(provider_id in (r.provider_id, r.fallback_provider_id) for r in routes):
-        raise HTTPException(409, "该服务仍被任务使用，请先调整任务分配，再删除")
+        raise HTTPException(409, system_message("errors.thisServiceIsAssignedToTasksReassignThemBeforeDeletingIt"))
     await db.delete(row)
     await db.commit()
-    return {"message": "已删除 AI 服务"}
+    return {"message": system_message("errors.aiDeleted")}
 
 
 async def list_routes(db):
     rows = (await db.scalars(select(AIRoute))).all()
     by_task = {r.task: r for r in rows}
     if set(by_task) != set(TASKS):
-        raise HTTPException(503, "AI 路由未初始化，请使用当前版本初始化数据库")
+        raise HTTPException(503, system_message("errors.aiRoutesAreNotInitializedInitializeTheDatabaseWithTheCurrentVersion"))
     return [{"task": task, "label": label, "provider_id": by_task[task].provider_id,
              "fallback_provider_id": by_task[task].fallback_provider_id,
              "timeout_seconds": by_task[task].timeout_seconds,
@@ -85,23 +86,23 @@ async def list_routes(db):
 async def save_routes(db, body):
     rows = {r.task: r for r in await locked_routes(db)}
     if set(rows) != set(TASKS):
-        raise HTTPException(503, "AI 路由未初始化，请使用当前版本初始化数据库")
+        raise HTTPException(503, system_message("errors.aiRoutesAreNotInitializedInitializeTheDatabaseWithTheCurrentVersion"))
     default = next(r for r in body.routes if r.task == "default")
     for route in body.routes:
         primary = route.provider_id or default.provider_id
         fallback = route.fallback_provider_id or (default.fallback_provider_id if not route.provider_id else None)
         if not primary and fallback:
-            raise HTTPException(422, "请先选择主服务，再设置备用服务")
+            raise HTTPException(422, system_message("errors.selectAPrimaryServiceBeforeConfiguringAFallback"))
         if primary and primary == fallback:
-            raise HTTPException(422, "任务的实际主服务与备用服务不能相同")
+            raise HTTPException(422, system_message("errors.effectivePrimaryAndFallbackServicesMustBeDifferent"))
         for provider_id in (primary, fallback):
             if provider_id:
                 provider = await get_provider(db, provider_id)
                 if not provider.enabled:
-                    raise HTTPException(422, "只能分配已启用的 AI 服务")
+                    raise HTTPException(422, system_message("errors.onlyEnabledAiServicesCanBeAssigned"))
                 missing = missing_capabilities(provider, route.task)
                 if missing:
-                    raise HTTPException(422, f"{TASKS[route.task]} / {provider.name} 缺少能力：" + "、".join(missing))
+                    raise HTTPException(422, system_message("errors.capabilityMissing"))
                 try:
                     provider_key(provider)
                 except AIError as exc:
@@ -132,8 +133,8 @@ async def test_provider(db, provider_id, mode):
                                   plan=([replace(snapshot, enabled=True)], snapshot.timeout_seconds, min(snapshot.max_output_tokens, 256)), report=usage, history=history):
             result += chunk
         if not result.strip():
-            raise AIError("模型返回空回答")
-        ok, message = True, "测试成功"
+            raise AIError(system_message("errors.theModelReturnedAnEmptyAnswer"))
+        ok, message = True, system_message("errors.testPassed")
     except AIError as exc:
         message = str(exc)
         usage.setdefault("diagnostics", {}).update(error_kind=exc.kind, **exc.details)

@@ -1,4 +1,6 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
+import { useLocale } from "next-intl";
 
 import { Plus, Trash2 } from "lucide-react";
 import { useSession } from "next-auth/react";
@@ -36,6 +38,9 @@ export function ManagedSelect({
   "aria-invalid"?: boolean;
   "aria-describedby"?: string;
 }) {
+  const t = useUiTranslations();
+  const locale = useLocale();
+
   const { data: session } = useSession();
   const developer = session?.user.role === "developer";
   const [options, setOptions] = useState<Option[]>([]);
@@ -57,13 +62,13 @@ export function ManagedSelect({
       .then(({ data }) => setOptions(data))
       .catch((err) => {
         if (!controller.signal.aborted)
-          setError(errorMessage(err, "选项加载失败"));
+          setError(errorMessage(err, t("ui.failedToLoadOptions")));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [category]);
+  }, [category, t]);
   async function add() {
     if (!name.trim() || busy) return;
     setBusy(true);
@@ -73,7 +78,9 @@ export function ManagedSelect({
         value: name.trim(),
       });
       setOptions((current) =>
-        [...current, data].sort((a, b) => a.label.localeCompare(b.label)),
+        [...current, data].sort((a, b) =>
+          a.label.localeCompare(b.label, locale),
+        ),
       );
       onChange(data.value);
       setName("");
@@ -132,7 +139,10 @@ export function ManagedSelect({
                   type="button"
                   size="icon-xs"
                   variant="ghost"
-                  aria-label={`删除${label}选项 ${option.label}`}
+                  aria-label={t("dynamic.deleteOption", {
+                    p0: label,
+                    p1: option.label,
+                  })}
                   disabled={busy}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -158,8 +168,8 @@ export function ManagedSelect({
                 {adding ? (
                   <div className="space-y-2 p-1">
                     <Input
-                      aria-label={`新增${label}选项名称`}
-                      placeholder="输入选项名称"
+                      aria-label={t("dynamic.newOptionName", { p0: label })}
+                      placeholder={t("ui.enterAnOptionName")}
                       maxLength={100}
                       value={name}
                       disabled={busy}
@@ -183,7 +193,7 @@ export function ManagedSelect({
                         disabled={busy}
                         onClick={() => setAdding(false)}
                       >
-                        取消
+                        {t("ui.cancel")}
                       </Button>
                       <Button
                         type="button"
@@ -191,7 +201,7 @@ export function ManagedSelect({
                         disabled={busy || !name.trim()}
                         onClick={() => void add()}
                       >
-                        添加
+                        {t("ui.add")}
                       </Button>
                     </div>
                   </div>
@@ -204,7 +214,7 @@ export function ManagedSelect({
                     onClick={() => setAdding(true)}
                   >
                     <Plus />
-                    新增选项
+                    {t("ui.addOption")}
                   </Button>
                 )}
               </div>
@@ -214,12 +224,15 @@ export function ManagedSelect({
       />
       <ConfirmDialog
         open={Boolean(deleting)}
-        title={`删除${label}选项？`}
-        description={`将删除「${deleting?.label ?? ""}」。仍被记录使用的选项（包括最近删除中的记录）无法删除。`}
+        title={t("dynamic.deleteOptionmessage48", { p0: label })}
+        description={t(
+          "dynamic.deleteOptionsUsedByRecordsIncludingRecentlyDeletedRecordsCannot",
+          { p0: deleting?.label ?? "" },
+        )}
         destructive
         busy={busy}
         error={deleteError}
-        confirmLabel="删除选项"
+        confirmLabel={t("ui.deleteOption")}
         onCancel={() => setDeleting(null)}
         onConfirm={() => void remove()}
       />

@@ -1,4 +1,5 @@
 """Schemas and conservative extraction for small / reasoning models."""
+from app.i18n import message as system_message
 import json
 import re
 
@@ -20,7 +21,7 @@ def strip_thinking(raw):
     while re.match(r"<think\b", raw, re.IGNORECASE):
         block = re.match(r"<think\b[^>]*>.*?</think\s*>\s*", raw, re.DOTALL | re.IGNORECASE)
         if not block:
-            raise AIError("模型仍在思考，未生成最终答案", retryable=True, kind="reasoning_only")
+            raise AIError(system_message("errors.theModelReturnedThinkingButNoFinalAnswer"), retryable=True, kind="reasoning_only")
         raw = raw[block.end():]
     # Some chat templates omit the opening tag in generated text.
     if "</think>" in raw and not raw.startswith(("{", "[", "```")):
@@ -48,9 +49,9 @@ def parse_json(raw):
         try:
             data, end = decoder.raw_decode(raw, position)
         except ValueError:
-            raise AIError("模型未返回完整 JSON", retryable=True, kind="invalid_json") from None
+            raise AIError(system_message("errors.theModelReturnedIncompleteJson"), retryable=True, kind="invalid_json") from None
         candidates.append(data)
         position = end
     if len(candidates) == 1:
         return candidates[0]
-    raise AIError("模型未返回唯一有效 JSON", retryable=True, kind="invalid_json")
+    raise AIError(system_message("errors.theModelDidNotReturnASingleValidJsonValue"), retryable=True, kind="invalid_json")

@@ -13,7 +13,7 @@ class PresetCommand(Base):
     id:          Mapped[uuid.UUID]     = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name:        Mapped[str]           = mapped_column(String(200), nullable=False)
     command:     Mapped[str]           = mapped_column(Text, nullable=False)
-    group_name:  Mapped[str]           = mapped_column(String(100), default="通用")
+    group_name:  Mapped[str]           = mapped_column(String(100), default="General")
     device_type: Mapped[str]           = mapped_column(String(20), nullable=False)  # adb | serial
     is_public:   Mapped[bool]          = mapped_column(Boolean, default=False)
     is_danger:   Mapped[bool]          = mapped_column(Boolean, default=False)

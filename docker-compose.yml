@@ -79,6 +79,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: fae_frontend
+    # Refresh the persistent dependency volume when package.json/lockfile changes.
+    command: ["sh", "-c", "CI=true pnpm install --frozen-lockfile && exec pnpm dev"]
     environment:
       AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET in .env}
       AUTH_TRUST_HOST: "true"

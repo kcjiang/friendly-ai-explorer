@@ -1,4 +1,6 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
+import { systemMessage } from "@/i18n/system-messages";
 
 import { useEffect, useState } from "react";
 import {
@@ -60,6 +62,8 @@ const button =
   "rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50";
 
 export default function EmbeddingSettings() {
+  const t = useUiTranslations();
+
   const [active, setActive] = useState<Config | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [deleting, setDeleting] = useState<Profile | null>(null);
@@ -100,8 +104,10 @@ export default function EmbeddingSettings() {
       setActive(data);
       setNotice(
         data.reindex_required
-          ? "已切换服务。需要在知识库重建文档索引，期间使用关键词检索。"
-          : "已切换当前检索服务。",
+          ? t(
+              "ui.serviceChangedRebuildDocumentIndexesInTheKnowledgeBaseKeywordSearchRemains",
+            )
+          : t("ui.searchServiceChanged"),
       );
     } catch (e) {
       setError(errorMessage(e));
@@ -115,7 +121,7 @@ export default function EmbeddingSettings() {
     try {
       await api.delete(`${endpoint}/profiles/${profile.id}`);
       await load();
-      setNotice("向量服务已删除。");
+      setNotice(t("ui.embeddingServiceDeleted"));
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -170,7 +176,9 @@ export default function EmbeddingSettings() {
       setClearKey(false);
       setDirty(false);
       setNotice(
-        "配置已保存；新服务不会自动启用。更改当前服务的模型、地址或前缀后，请在知识库重建索引。",
+        t(
+          "ui.configurationSavedNewServicesAreNotActivatedAutomaticallyRebuildIndexesAfterChanging",
+        ),
       );
     } catch (e) {
       setError(errorMessage(e));
@@ -188,7 +196,7 @@ export default function EmbeddingSettings() {
         {},
         { timeout: 65_000 },
       );
-      const message = `${data.message}（${data.elapsed_ms} ms）`;
+      const message = `${systemMessage(data.message, t)} (${data.elapsed_ms} ms)`;
       if (data.success) setNotice(message);
       else setError(message);
     } catch (e) {
@@ -199,10 +207,11 @@ export default function EmbeddingSettings() {
   }
   return (
     <section className="border-border space-y-4 rounded-xl border p-5">
-      <h2 className="font-semibold">知识库向量服务</h2>
+      <h2 className="font-semibold">{t("ui.knowledgeEmbeddingServices")}</h2>
       <p className="text-muted-foreground text-sm">
-        独立于聊天模型，可保存多个服务并选择当前使用的服务；模型需返回 768
-        维向量。
+        {t(
+          "ui.configuredSeparatelyFromChatSaveMultipleServicesAndSelectTheActiveOne",
+        )}
       </p>
       {error && (
         <p role="alert" className="text-sm text-red-600">
@@ -215,21 +224,21 @@ export default function EmbeddingSettings() {
         </p>
       )}
       <p className="text-muted-foreground text-xs">
-        “其他提供商（兼容接口）”用于未列出的品牌或统一 API
-        网关，例如通过兼容接口提供 BGE、E5
-        的服务。请按实际接口选择协议；品牌名称不代表一定提供向量模型。
+        {t(
+          "ui.useOtherProviderForUnlistedBrandsOrCompatibleGatewaysIncludingBgeOr",
+        )}
       </p>
       {active && (
         <div className="space-y-2">
           <label className="block space-y-1 text-sm">
-            当前使用的向量服务
+            {t("ui.activeEmbeddingService")}
             <NativeSelect
               className="w-full"
               value={active.active_profile_id ?? ""}
               disabled={busy || !!config}
               onChange={(e) => void activate(e.target.value)}
             >
-              <option value="">仅关键词检索</option>
+              <option value="">{t("ui.keywordSearchOnly")}</option>
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} · {p.model}
@@ -239,28 +248,33 @@ export default function EmbeddingSettings() {
           </label>
           {active.protocol !== "disabled" && (
             <p className="text-muted-foreground text-xs">
-              当前索引就绪：{active.indexed_documents} /{" "}
-              {active.published_documents} 篇。
+              {t("ui.indexesReady")}
+              {active.indexed_documents} / {active.published_documents}{" "}
+              {t("ui.documents")}
               {active.reindex_required
-                ? "需要重建索引，未就绪的内容使用关键词检索。"
+                ? t(
+                    "ui.rebuildIndexesContentWithoutAReadyIndexUsesKeywordSearch",
+                  )
                 : ""}
             </p>
           )}
         </div>
       )}
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-medium">已保存的向量服务</h3>
+        <h3 className="text-sm font-medium">
+          {t("ui.savedEmbeddingServices")}
+        </h3>
         <Button
           variant="outline"
           disabled={busy || !!config}
           onClick={() => edit()}
         >
-          添加向量服务
+          {t("ui.addEmbeddingService")}
         </Button>
       </div>
       {!profiles.length && (
         <p className="text-muted-foreground text-sm">
-          尚未添加向量服务；当前使用关键词检索。
+          {t("ui.noEmbeddingServicesYetKeywordSearchIsActive")}
         </p>
       )}
       <div className="grid gap-3 md:grid-cols-2">
@@ -270,7 +284,7 @@ export default function EmbeddingSettings() {
               <h4 className="text-sm font-medium break-all">{p.name}</h4>
               {p.id === active?.active_profile_id && (
                 <span className="text-muted-foreground shrink-0 text-xs">
-                  当前使用
+                  {t("ui.active")}
                 </span>
               )}
             </div>
@@ -278,12 +292,13 @@ export default function EmbeddingSettings() {
               {p.model} ·{" "}
               {p.protocol === "gemini"
                 ? "Google Gemini Embedding API"
-                : "OpenAI 兼容 Embeddings"}
+                : t("ui.openaiCompatibleEmbeddings")}
               <br />
               {p.base_url}
             </p>
             <p className="text-muted-foreground text-xs">
-              密钥：{p.has_api_key ? "已加密保存" : "未配置"}
+              {t("ui.key")}
+              {p.has_api_key ? t("ui.encrypted") : t("ui.notConfigured")}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -292,7 +307,7 @@ export default function EmbeddingSettings() {
                 disabled={busy || !!config}
                 onClick={() => edit(p)}
               >
-                编辑
+                {t("ui.edit")}
               </Button>
               <Button
                 variant="outline"
@@ -300,7 +315,7 @@ export default function EmbeddingSettings() {
                 disabled={busy || !!config}
                 onClick={() => void test(p.id)}
               >
-                测试
+                {t("ui.test")}
               </Button>
               <Button
                 variant="outline"
@@ -310,7 +325,7 @@ export default function EmbeddingSettings() {
                 }
                 onClick={() => void activate(p.id)}
               >
-                使用此服务
+                {t("ui.useThisService")}
               </Button>
               <Button
                 variant="outline"
@@ -320,7 +335,7 @@ export default function EmbeddingSettings() {
                 }
                 onClick={() => setDeleting(p)}
               >
-                删除
+                {t("ui.delete")}
               </Button>
             </div>
           </div>
@@ -330,21 +345,23 @@ export default function EmbeddingSettings() {
         <form onSubmit={save} className="space-y-4 rounded-xl border p-4">
           <fieldset disabled={busy} className="space-y-4">
             <h3 className="text-sm font-medium">
-              {config.id ? "编辑向量服务" : "添加向量服务"}
+              {config.id
+                ? t("ui.editEmbeddingService")
+                : t("ui.addEmbeddingService")}
             </h3>
             <label className="block space-y-1 text-sm">
-              向量服务名称
+              {t("ui.embeddingServiceName")}
               <Input
                 required
                 maxLength={100}
                 value={config.name}
                 onChange={(e) => change({ name: e.target.value })}
-                placeholder="例如 Qwen 向量服务"
+                placeholder={t("ui.eGQwenEmbeddingService")}
               />
             </label>
             <div className="grid gap-4 md:grid-cols-2">
               <label className="block space-y-1 text-sm">
-                提供商
+                {t("ui.provider")}
                 <NativeSelect
                   className="w-full"
                   value={config.vendor}
@@ -352,7 +369,9 @@ export default function EmbeddingSettings() {
                     change({ vendor: e.target.value as Config["vendor"] })
                   }
                 >
-                  <option value="other">其他提供商（兼容接口）</option>
+                  <option value="other">
+                    {t("ui.otherProviderCompatibleApi")}
+                  </option>
                   <option value="openai">OpenAI</option>
                   <option value="gemini">Gemini</option>
                   <option value="deepseek">DeepSeek</option>
@@ -360,7 +379,7 @@ export default function EmbeddingSettings() {
                 </NativeSelect>
               </label>
               <label className="space-y-1 text-sm">
-                接口类型
+                {t("ui.apiType")}
                 <NativeSelect
                   className="w-full"
                   disabled={busy}
@@ -369,12 +388,14 @@ export default function EmbeddingSettings() {
                     change({ protocol: e.target.value as Config["protocol"] })
                   }
                 >
-                  <option value="openai">OpenAI 兼容 Embeddings</option>
+                  <option value="openai">
+                    {t("ui.openaiCompatibleEmbeddings")}
+                  </option>
                   <option value="gemini">Google Gemini Embedding API</option>
                 </NativeSelect>
               </label>
               <label className="space-y-1 text-sm">
-                模型
+                {t("ui.model")}
                 <Input
                   required={config.protocol !== "disabled"}
                   disabled={config.protocol === "disabled"}
@@ -394,7 +415,7 @@ export default function EmbeddingSettings() {
                   className={input}
                   value={config.base_url}
                   onChange={(e) => change({ base_url: e.target.value })}
-                  placeholder="http://你的向量服务器:端口/v1"
+                  placeholder={t("ui.httpYourEmbeddingServerPortV1")}
                 />
               </label>
               <label className="space-y-1 text-sm">
@@ -411,13 +432,15 @@ export default function EmbeddingSettings() {
                   }}
                   placeholder={
                     config.has_api_key
-                      ? "已配置，留空保留（更换地址或协议会清除旧密钥）"
-                      : "无认证的本地接口可留空"
+                      ? t(
+                          "ui.configuredLeaveBlankToKeepChangingUrlOrProtocolClearsTheOld",
+                        )
+                      : t("ui.leaveBlankForLocalApisWithoutAuthentication")
                   }
                 />
               </label>
               <label className="space-y-1 text-sm">
-                超时（秒）
+                {t("ui.timeoutSeconds")}
                 <Input
                   type="number"
                   required
@@ -431,27 +454,27 @@ export default function EmbeddingSettings() {
                 />
               </label>
               <label className="space-y-1 text-sm">
-                查询前缀
+                {t("ui.queryPrefix")}
                 <Input
                   className={input}
                   maxLength={300}
                   value={config.query_prefix}
                   onChange={(e) => change({ query_prefix: e.target.value })}
-                  placeholder="按模型文档填写，可留空"
+                  placeholder={t("ui.followTheModelDocumentationOptional")}
                 />
               </label>
               <label className="space-y-1 text-sm">
-                文档前缀
+                {t("ui.documentPrefix")}
                 <Input
                   className={input}
                   maxLength={300}
                   value={config.document_prefix}
                   onChange={(e) => change({ document_prefix: e.target.value })}
-                  placeholder="按模型文档填写，可留空"
+                  placeholder={t("ui.followTheModelDocumentationOptional")}
                 />
               </label>
               <label className="space-y-1 text-sm">
-                最低向量相似度
+                {t("ui.minimumVectorSimilarity")}
                 <Input
                   type="number"
                   required
@@ -476,7 +499,7 @@ export default function EmbeddingSettings() {
                       change({ send_dimensions: e.target.checked })
                     }
                   />{" "}
-                  请求 dimensions=768（接口支持时启用）
+                  {t("ui.requestDimensions768IfSupported")}
                 </label>
               )}
               <label>
@@ -488,11 +511,11 @@ export default function EmbeddingSettings() {
                     setDirty(true);
                   }}
                 />{" "}
-                清除已保存密钥
+                {t("ui.clearSavedKey")}
               </label>
             </div>
             <p className="text-muted-foreground text-xs">
-              测试使用已保存的配置，不会返回向量或密钥。
+              {t("ui.testsUseTheSavedConfigurationAndNeverReturnVectorsOrKeys")}
             </p>
             <div className="flex gap-2">
               <Button
@@ -501,7 +524,7 @@ export default function EmbeddingSettings() {
                 className={button}
                 disabled={busy}
               >
-                保存向量服务
+                {t("ui.saveEmbeddingService")}
               </Button>
               <Button
                 type="button"
@@ -510,7 +533,7 @@ export default function EmbeddingSettings() {
                 disabled={busy || dirty || !config.id}
                 onClick={() => config.id && void test(config.id)}
               >
-                测试向量服务
+                {t("ui.testEmbeddingService")}
               </Button>
               <Button
                 type="button"
@@ -523,7 +546,7 @@ export default function EmbeddingSettings() {
                   setDirty(false);
                 }}
               >
-                取消
+                {t("ui.cancel")}
               </Button>
             </div>
           </fieldset>
@@ -537,9 +560,13 @@ export default function EmbeddingSettings() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>删除向量服务</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("ui.deleteEmbeddingService")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              确认删除“{deleting?.name}”及其已保存的连接密钥？知识库文档将保留。
+              {t("ui.delete2")}
+              {deleting?.name}
+              {t("ui.andItsSavedCredentialsKnowledgeDocumentsWillBeRetained")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -548,14 +575,14 @@ export default function EmbeddingSettings() {
               disabled={busy}
               onClick={() => setDeleting(null)}
             >
-              取消
+              {t("ui.cancel")}
             </Button>
             <Button
               variant="destructive"
               disabled={busy}
               onClick={() => deleting && void remove(deleting)}
             >
-              确认删除
+              {t("ui.confirmDeletion")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

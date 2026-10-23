@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 import {
   AlignCenter,
@@ -36,6 +37,8 @@ export function MailEditor({
   initial: string;
   onChange: (html: string, text: string) => void;
 }) {
+  const t = useUiTranslations();
+
   const [link, setLink] = useState("");
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkText, setLinkText] = useState("");
@@ -56,7 +59,7 @@ export function MailEditor({
       attributes: {
         class:
           "min-h-40 p-3 outline-none [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_a]:text-primary [&_a]:underline [&_img]:max-w-full",
-        "aria-label": "邮件正文",
+        "aria-label": t("ui.messageBody"),
         role: "textbox",
         "aria-multiline": "true",
       },
@@ -66,7 +69,11 @@ export function MailEditor({
     if (editor) onChange(editor.getHTML(), editor.getText());
   }, [editor]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!editor)
-    return <p className="text-muted-foreground p-3 text-sm">正在加载编辑器…</p>;
+    return (
+      <p className="text-muted-foreground p-3 text-sm">
+        {t("ui.loadingEditor")}
+      </p>
+    );
   const href = normalizeMailLink(link);
   function openLink() {
     if (!editor) return;
@@ -106,61 +113,61 @@ export function MailEditor({
   }
   const actions = [
     {
-      label: "粗体",
+      label: t("ui.bold"),
       icon: Bold,
       active: editor.isActive("bold"),
       run: () => editor.chain().focus().toggleBold().run(),
     },
     {
-      label: "斜体",
+      label: t("ui.italic"),
       icon: Italic,
       active: editor.isActive("italic"),
       run: () => editor.chain().focus().toggleItalic().run(),
     },
     {
-      label: "下划线",
+      label: t("ui.underline"),
       icon: Underline,
       active: editor.isActive("underline"),
       run: () => editor.chain().focus().toggleUnderline().run(),
     },
     {
-      label: "项目列表",
+      label: t("ui.bulletList"),
       icon: List,
       active: editor.isActive("bulletList"),
       run: () => editor.chain().focus().toggleBulletList().run(),
     },
     {
-      label: "编号列表",
+      label: t("ui.numberedList"),
       icon: ListOrdered,
       active: editor.isActive("orderedList"),
       run: () => editor.chain().focus().toggleOrderedList().run(),
     },
     {
-      label: "左对齐",
+      label: t("ui.alignLeft"),
       icon: AlignLeft,
       active: editor.isActive({ textAlign: "left" }),
       run: () => editor.chain().focus().setTextAlign("left").run(),
     },
     {
-      label: "居中",
+      label: t("ui.alignCenter"),
       icon: AlignCenter,
       active: editor.isActive({ textAlign: "center" }),
       run: () => editor.chain().focus().setTextAlign("center").run(),
     },
     {
-      label: "右对齐",
+      label: t("ui.alignRight"),
       icon: AlignRight,
       active: editor.isActive({ textAlign: "right" }),
       run: () => editor.chain().focus().setTextAlign("right").run(),
     },
     {
-      label: "撤销",
+      label: t("ui.undo"),
       icon: Undo2,
       active: false,
       run: () => editor.chain().focus().undo().run(),
     },
     {
-      label: "重做",
+      label: t("ui.redo"),
       icon: Redo2,
       active: false,
       run: () => editor.chain().focus().redo().run(),
@@ -170,14 +177,16 @@ export function MailEditor({
     <div className="rounded-md border">
       <div className="flex flex-wrap items-center gap-1 border-b p-1">
         <NativeSelect
-          aria-label="字体"
+          aria-label={t("ui.font")}
           onChange={(e) =>
             editor.chain().focus().setFontFamily(e.target.value).run()
           }
         >
           <NativeSelectOption value="Arial">Arial</NativeSelectOption>
           <NativeSelectOption value="Georgia">Georgia</NativeSelectOption>
-          <NativeSelectOption value="monospace">等宽字体</NativeSelectOption>
+          <NativeSelectOption value="monospace">
+            {t("ui.monospace")}
+          </NativeSelectOption>
         </NativeSelect>
         {actions.map((a) => (
           <Button
@@ -194,7 +203,7 @@ export function MailEditor({
         ))}
         <Input
           type="color"
-          aria-label="文字颜色"
+          aria-label={t("ui.textColor")}
           className="h-7 w-8 p-0.5"
           defaultValue="#000000"
           onChange={(e) =>
@@ -205,7 +214,7 @@ export function MailEditor({
           type="button"
           variant="ghost"
           size="icon-sm"
-          aria-label="插入链接"
+          aria-label={t("ui.insertLink")}
           onMouseDown={(event) => event.preventDefault()}
           onClick={openLink}
         >
@@ -213,14 +222,14 @@ export function MailEditor({
         </Button>
         <label
           className="hover:bg-muted inline-flex cursor-pointer rounded-md p-1.5"
-          title="插入图片"
+          title={t("ui.insertImage")}
         >
           <ImagePlus className="size-4" />
           <input
             className="sr-only"
             type="file"
             accept="image/png,image/jpeg,image/gif,image/webp"
-            aria-label="插入图片"
+            aria-label={t("ui.insertImage")}
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (!file || file.size > 5_000_000) return;
@@ -241,16 +250,16 @@ export function MailEditor({
         <div
           className="space-y-2 border-b p-2"
           role="group"
-          aria-label="超链接设置"
+          aria-label={t("ui.linkSettings")}
         >
           <Input
-            aria-label="链接文字"
-            placeholder="显示文字（留空使用链接地址）"
+            aria-label={t("ui.linkText")}
+            placeholder={t("ui.displayTextBlankToUseUrl")}
             value={linkText}
             onChange={(e) => setLinkText(e.target.value)}
           />
           <Input
-            aria-label="链接地址"
+            aria-label={t("ui.linkUrl")}
             placeholder="https://"
             value={link}
             onChange={(e) => setLink(e.target.value)}
@@ -262,7 +271,7 @@ export function MailEditor({
             }}
           />
           <Button type="button" size="sm" disabled={!href} onClick={applyLink}>
-            插入
+            {t("ui.insert")}
           </Button>
           <Button
             type="button"
@@ -279,7 +288,7 @@ export function MailEditor({
               setLinkOpen(false);
             }}
           >
-            移除链接
+            {t("ui.removeLink")}
           </Button>
           <Button
             type="button"
@@ -287,7 +296,7 @@ export function MailEditor({
             size="sm"
             onClick={() => setLinkOpen(false)}
           >
-            取消
+            {t("ui.cancel")}
           </Button>
         </div>
       )}

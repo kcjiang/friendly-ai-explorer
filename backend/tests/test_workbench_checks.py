@@ -115,7 +115,7 @@ class CheckQueueTests(unittest.IsolatedAsyncioTestCase):
         async with AsyncSessionLocal() as db:
             for ident in self.ids:
                 pref = await db.get(WBPreference, ident)
-                pref.schedule = Schedule(enabled=True).model_dump()
+                pref.schedule = {**Schedule(enabled=True).model_dump(), "output_locale": "zh-CN"}
                 pref.next_run_at = now() - timedelta(seconds=1)
             await db.commit()
         with patch.object(checks, "working", return_value=True):
@@ -135,3 +135,4 @@ class CheckQueueTests(unittest.IsolatedAsyncioTestCase):
                 [(row.user_id, row.origin) for row in rows],
                 [(self.ids[0], "manual"), (self.ids[1], "scheduled")],
             )
+            self.assertEqual(rows[1].output_locale, "zh-CN")

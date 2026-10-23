@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 from datetime import time
 from typing import Literal
 from urllib.parse import urlsplit
@@ -32,7 +33,7 @@ class Schedule(Input):
         try:
             ZoneInfo(value)
         except (ZoneInfoNotFoundError, ValueError):
-            raise ValueError("请选择有效的 IANA 时区")
+            raise ValueError(system_message("errors.selectAValidIanaTimeZone"))
         return value
 
     @field_validator("start", "end")
@@ -40,19 +41,19 @@ class Schedule(Input):
     def clock(cls, value):
         parsed = time.fromisoformat(value)
         if len(value) != 5 or parsed.second or parsed.microsecond or parsed.tzinfo:
-            raise ValueError("时间格式必须是 HH:mm")
+            raise ValueError(system_message("errors.timeMustUseHhMmFormat"))
         return value
 
     @model_validator(mode="after")
     def valid(self):
         if self.start >= self.end:
-            raise ValueError("结束时间必须晚于开始时间")
+            raise ValueError(system_message("errors.endTimeMustBeAfterStartTime"))
         if len(set(self.weekdays)) != len(self.weekdays) or any(
             d not in range(7) for d in self.weekdays
         ):
-            raise ValueError("工作日设置无效")
+            raise ValueError(system_message("errors.invalidWeekdaySettings"))
         if not self.weekdays:
-            raise ValueError("至少设置一个工作日")
+            raise ValueError(system_message("errors.selectAtLeastOneWeekday"))
         return self
 
 
@@ -78,7 +79,7 @@ class Account(Input):
             or parts.query
             or parts.fragment
         ):
-            raise ValueError("网站须为 HTTPS 根地址")
+            raise ValueError(system_message("errors.theSiteMustBeAnHttpsRootUrl"))
         return self
 
 
@@ -96,7 +97,7 @@ class Automation(Input):
     @model_validator(mode="after")
     def valid(self):
         if sum(s.type == "ticket" for s in self.steps) > 1:
-            raise ValueError("每个自动化最多包含一个创建工单操作")
+            raise ValueError(system_message("errors.eachAutomationMustContainAtLeastOneStepAndCannotContainDuplicate"))
         return self
 
 

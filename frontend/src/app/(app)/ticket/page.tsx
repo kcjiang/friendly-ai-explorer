@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 import { Plus, RefreshCw, Search, UserRound, Users } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -34,6 +35,8 @@ import { errorMessage } from "@/lib/errors";
 import { type Ticket, type UserBrief } from "@/types/ticket";
 
 export default function TicketPage() {
+  const t = useUiTranslations();
+
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [mine, setMine] = useState(true);
   const [state, setState] = useState("open");
@@ -121,7 +124,7 @@ export default function TicketPage() {
         })
         .catch((e) => {
           if (!controller.signal.aborted)
-            setError(errorMessage(e, "工单加载失败"));
+            setError(errorMessage(e, t("ui.failedToLoadTickets")));
         })
         .finally(() => {
           if (!controller.signal.aborted) setLoading(false);
@@ -131,7 +134,7 @@ export default function TicketPage() {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [mine, query, state, sorting, reload, allTickets, assignee]);
+  }, [mine, query, state, sorting, reload, allTickets, assignee, t]);
   async function open(ticket: Ticket, edit = false) {
     if (opening) return;
     setOpening(true);
@@ -149,9 +152,9 @@ export default function TicketPage() {
   async function copy(ticket: Ticket) {
     try {
       await copyCatalogText(ticket.ticket_no);
-      toast.add({ title: "复制成功", type: "success" });
+      toast.add({ title: t("ui.copied"), type: "success" });
     } catch {
-      toast.add({ title: "复制失败，请重试", type: "error" });
+      toast.add({ title: t("ui.copyFailedTryAgain"), type: "error" });
     }
   }
   const table = useTicketTable({
@@ -185,30 +188,30 @@ export default function TicketPage() {
           <TabsList>
             <TabsTrigger value="mine">
               <UserRound />
-              分配给我
+              {t("ui.assignToMe")}
             </TabsTrigger>
             <TabsTrigger value="all">
               <Users />
-              全部工单
+              {t("ui.allTickets")}
             </TabsTrigger>
           </TabsList>
         </Tabs>
         <TicketSelect
-          label="工单开关状态"
+          label={t("ui.ticketOpenClosedStatus")}
           value={state}
           onValueChange={setState}
           className="w-24"
           options={[
-            { value: "all", label: "全部状态" },
-            { value: "open", label: "打开" },
-            { value: "closed", label: "关闭" },
+            { value: "all", label: t("ui.allStatuses") },
+            { value: "open", label: t("ui.open") },
+            { value: "closed", label: t("ui.closed") },
           ]}
         />
         {allTickets && (
           <div className="w-52">
             <CatalogCombobox
-              label="被分配人"
-              placeholder="全部被分配人"
+              label={t("ui.assignee")}
+              placeholder={t("ui.allAssignees")}
               value={assignee ? [assignee] : []}
               options={users.map((u) => ({
                 value: u.id,
@@ -223,8 +226,8 @@ export default function TicketPage() {
         <div className="min-w-40 flex-1 sm:ml-auto sm:max-w-80">
           <InputGroup>
             <InputGroupInput
-              aria-label="搜索工单"
-              placeholder="搜索工单、项目、状态…"
+              aria-label={t("ui.searchTickets")}
+              placeholder={t("ui.searchTicketsProjectsStatuses")}
               maxLength={200}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -238,7 +241,7 @@ export default function TicketPage() {
         <Button
           variant="ghost"
           size="icon"
-          aria-label="刷新工单"
+          aria-label={t("ui.refreshTickets")}
           disabled={loading || opening}
           onClick={refresh}
         >
@@ -246,13 +249,13 @@ export default function TicketPage() {
         </Button>
         <Button disabled={opening} onClick={() => setDialog({})}>
           <Plus />
-          新建工单
+          {t("ui.newTicket")}
         </Button>
       </Container>
       <Container className="py-4">
         {allTickets && usersError && (
           <p role="alert" className="text-destructive mb-3 text-sm">
-            账户加载失败，请刷新重试。
+            {t("ui.failedToLoadAccountsRefreshAndTryAgain")}
           </p>
         )}
         {error && (
@@ -261,7 +264,7 @@ export default function TicketPage() {
           </p>
         )}
         <span className="sr-only" role="status">
-          {loading ? "正在加载工单" : "工单加载完成"}
+          {loading ? t("ui.loadingTickets") : t("ui.ticketsLoaded")}
         </span>
         <TicketTable
           table={table}

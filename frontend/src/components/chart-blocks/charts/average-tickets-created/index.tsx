@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 import { useAtomValue } from "jotai";
 import { FilePlus2 } from "lucide-react";
@@ -21,6 +22,8 @@ const calMetricCardValue = (
 };
 
 export default function AverageTicketsCreated() {
+  const t = useUiTranslations();
+
   const ticketChartData = useAtomValue(ticketChartDataAtom);
   const avgCreated = calMetricCardValue(ticketChartData, "created");
   const avgResolved = calMetricCardValue(ticketChartData, "resolved");
@@ -28,18 +31,21 @@ export default function AverageTicketsCreated() {
   return (
     <section className="flex h-full flex-col gap-2">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <ChartTitle title="Average Tickets Created" icon={FilePlus2} />
+        <ChartTitle
+          title={t("ui.additionalAverageTicketsCreated")}
+          icon={FilePlus2}
+        />
         <DatePickerWithRange className="" />
       </div>
       <div className="flex flex-wrap">
         <div className="my-4 flex w-52 shrink-0 flex-col justify-center gap-6">
           <MetricCard
-            title="Avg. Tickets Created"
+            title={t("ui.additionalAvgTicketsCreated")}
             value={avgCreated}
             color="#60C2FB"
           />
           <MetricCard
-            title="Avg. Tickets Resolved"
+            title={t("ui.additionalAvgTicketsResolved")}
             value={avgResolved}
             color="#3161F8"
           />

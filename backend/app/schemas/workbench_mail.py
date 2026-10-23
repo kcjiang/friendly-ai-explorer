@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 import base64
 import re
 from typing import Literal
@@ -23,7 +24,7 @@ class Mailbox(Input):
     @classmethod
     def host(cls, value):
         if not re.fullmatch(r"[a-zA-Z0-9.-]+", value):
-            raise ValueError("请填写邮箱服务器域名，不包含协议或端口")
+            raise ValueError(system_message("errors.enterAMailboxServerHostnameUrlsProtocolsAndPortsAreNotAllowed"))
         return value.lower()
 
 
@@ -34,7 +35,7 @@ class Folder(Input):
     @classmethod
     def safe(cls, value):
         if any(ord(char) < 32 for char in value):
-            raise ValueError("文件夹名称不能包含控制字符")
+            raise ValueError(system_message("errors.folderNamesCannotContainControlCharacters"))
         return value
 
 
@@ -49,7 +50,7 @@ class Rule(Input):
     def condition(self):
         self.keywords = [word.strip()[:200] for word in self.keywords if word.strip()]
         if not self.sender and not self.keywords:
-            raise ValueError("请至少填写发件人或主题关键词")
+            raise ValueError(system_message("errors.enterAtLeastASenderOrASubjectKeyword"))
         return self
 
 
@@ -62,9 +63,9 @@ class Attachment(Input):
         try:
             raw = base64.b64decode(self.data, validate=True)
         except Exception:
-            raise ValueError("附件编码无效") from None
+            raise ValueError(system_message("errors.invalidAttachmentEncoding")) from None
         if len(raw) > 5_000_000:
-            raise ValueError("单个附件不能超过5MB")
+            raise ValueError(system_message("errors.eachAttachmentMustBeNoLargerThan5Mb"))
         return self
 
 
@@ -83,11 +84,11 @@ class Send(Input):
     @classmethod
     def header(cls, value):
         if "\r" in value or "\n" in value:
-            raise ValueError("邮件头不能包含换行")
+            raise ValueError(system_message("errors.mailHeadersCannotContainNewlines"))
         return value
 
     @model_validator(mode="after")
     def size(self):
         if len(self.html) + sum(len(a.data) for a in self.attachments) > 14_000_000:
-            raise ValueError("邮件总大小过大，请减少附件或图片")
+            raise ValueError(system_message("errors.theEmailIsTooLargeReduceAttachmentsOrImages"))
         return self

@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 import {
   Select,
@@ -31,6 +32,7 @@ export function TicketSelect({
   "aria-describedby"?: string;
   className?: string;
 }) {
+  const t = useUiTranslations();
   return (
     <Select
       value={value || null}
@@ -46,7 +48,9 @@ export function TicketSelect({
         aria-describedby={describedBy}
         className={className ?? "w-full"}
       >
-        <SelectValue placeholder={`选择${label}`} />
+        <SelectValue
+          placeholder={t("dynamic.selectmessage65", { p0: label })}
+        />
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (

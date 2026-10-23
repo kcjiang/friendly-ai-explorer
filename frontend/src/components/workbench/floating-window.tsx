@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import { Maximize2, Minimize2, X } from "lucide-react";
 import {
@@ -39,14 +40,14 @@ const handles: Record<ResizeEdge, string> = {
   sw: "-bottom-1 -left-1 size-4 cursor-nesw-resize",
 };
 const labels = {
-  n: "上",
-  s: "下",
-  e: "右",
-  w: "左",
-  ne: "右上",
-  nw: "左上",
-  se: "右下",
-  sw: "左下",
+  n: "Top",
+  s: "Bottom",
+  e: "Right",
+  w: "Left",
+  ne: "Top right",
+  nw: "Top left",
+  se: "Bottom right",
+  sw: "Bottom left",
 };
 function viewport() {
   return {
@@ -59,7 +60,7 @@ export function FloatingWindow({
   open,
   onClose,
   children,
-  title = "AI 实时输出",
+  title: suppliedTitle,
   initialSize = { width: 720, height: 420 },
   containScroll = false,
 }: {
@@ -70,6 +71,10 @@ export function FloatingWindow({
   initialSize?: { width: number; height: number };
   containScroll?: boolean;
 }) {
+  const t = useUiTranslations();
+  const title = suppliedTitle ?? t("ui.liveAiOutput");
+  const uiLabels_labels = translateLabels(labels, t);
+
   const popup = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const element = popup.current;
@@ -203,7 +208,9 @@ export function FloatingWindow({
         <Primitive.Popup
           ref={popup}
           aria-describedby={
-            title === "邮箱" ? "workbench-mail-help" : "workbench-debug-help"
+            title === t("ui.email")
+              ? "workbench-mail-help"
+              : "workbench-debug-help"
           }
           className="bg-popover text-popover-foreground fixed z-50 flex flex-col rounded-xl border shadow-xl outline-none"
           style={
@@ -271,19 +278,20 @@ export function FloatingWindow({
             </DialogTitle>
             <DialogDescription
               id={
-                title === "邮箱"
+                title === t("ui.email")
                   ? "workbench-mail-help"
                   : "workbench-debug-help"
               }
               className="sr-only"
             >
-              拖动标题栏移动窗口，拖动边框调整大小。标题上按 Alt
-              加方向键移动，边框上按方向键调整大小。页面可继续操作。
+              {t("ui.dragTheTitleBarToMoveAndEdgesToResizeUseAlt")}
             </DialogDescription>
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={maximized ? "还原窗口" : "最大化窗口"}
+              aria-label={
+                maximized ? t("ui.restoreWindow") : t("ui.maximizeWindow")
+              }
               onClick={toggleMax}
             >
               {maximized ? <Minimize2 /> : <Maximize2 />}
@@ -293,7 +301,11 @@ export function FloatingWindow({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={title === "邮箱" ? "关闭邮箱" : "关闭实时输出"}
+                  aria-label={
+                    title === t("ui.email")
+                      ? t("ui.closeMail")
+                      : t("ui.closeLiveOutput")
+                  }
                 />
               }
             >
@@ -307,7 +319,9 @@ export function FloatingWindow({
                 key={edge}
                 role="separator"
                 tabIndex={0}
-                aria-label={`从${labels[edge]}侧调整窗口大小`}
+                aria-label={t("dynamic.resizeWindowFrom", {
+                  p0: uiLabels_labels[edge],
+                })}
                 aria-valuetext={`${Math.round(rect?.width ?? 0)} × ${Math.round(rect?.height ?? 0)}`}
                 className={cn(
                   "focus-visible:bg-primary/20 absolute touch-none focus-visible:outline-none",

@@ -1,4 +1,8 @@
 "use client";
+import { getBrowserUiLocale } from "@/i18n/browser";
+
+import { useUiTranslations, translateLabels } from "@/i18n/client";
+import { systemMessage } from "@/i18n/system-messages";
 
 import { Loader2, Plus, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -115,7 +119,7 @@ const vendors = {
   gemini: "Gemini",
   deepseek: "DeepSeek",
   qwen: "Qwen",
-  other: "其他提供商（兼容接口）",
+  other: "Other provider (compatible API)",
 };
 const protocols = {
   openai: "OpenAI Chat Completions",
@@ -123,24 +127,31 @@ const protocols = {
   gemini: "Google Gemini API",
 };
 const capabilityLabels: Record<string, string> = {
-  text: "文本生成",
-  conversation: "多轮对话",
-  json: "结构化 JSON",
-  stream: "流式输出",
+  text: "Text generation",
+  conversation: "Multi-turn conversation",
+  json: "Structured JSON",
+  stream: "Streaming",
 };
 const statusLabels: Record<string, string> = {
-  verified: "已验证",
-  unsupported: "不支持",
-  unknown: "未验证",
+  verified: "Verified",
+  unsupported: "Unsupported",
+  unknown: "Unverified",
 };
 const endpoint = "/api/v1/admin/ai";
-const date = (value: string) => new Date(value).toLocaleString("zh-CN");
+const date = (value: string) =>
+  new Date(value).toLocaleString(getBrowserUiLocale());
 
 export default function AISettings({
   onInspectRequest,
 }: {
   onInspectRequest?: (id: string) => void;
 }) {
+  const t = useUiTranslations();
+  const uiLabels_fresh = translateLabels(fresh, t);
+  const uiLabels_vendors = translateLabels(vendors, t);
+  const uiLabels_capabilityLabels = translateLabels(capabilityLabels, t);
+  const uiLabels_statusLabels = translateLabels(statusLabels, t);
+
   const [providers, setProviders] = useState<Provider[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [logs, setLogs] = useState<CallLog[]>([]);
@@ -148,7 +159,7 @@ export default function AISettings({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<string | null | undefined>();
-  const [draft, setDraft] = useState<Draft>(fresh);
+  const [draft, setDraft] = useState<Draft>(uiLabels_fresh);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState("");
   const [testModes, setTestModes] = useState<Record<string, string>>({});
@@ -203,7 +214,7 @@ export default function AISettings({
             temperature: provider.temperature,
             retry_count: provider.retry_count,
           }
-        : { ...fresh },
+        : { ...uiLabels_fresh },
     );
   }
   async function saveProvider(event: React.FormEvent) {
@@ -226,8 +237,10 @@ export default function AISettings({
         return next;
       });
       setEditing(undefined);
-      setDraft({ ...fresh });
-      setNotice("服务已保存；请验证任务所需能力，再分配给任务。");
+      setDraft({ ...uiLabels_fresh });
+      setNotice(
+        t("ui.serviceSavedVerifyTheRequiredCapabilitiesBeforeAssigningTasks"),
+      );
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -235,14 +248,14 @@ export default function AISettings({
     }
   }
   async function remove(provider: Provider) {
-    if (!confirm(`删除 AI 服务“${provider.name}”？`)) return;
+    if (!confirm(t("dynamic.deleteAiService", { p0: provider.name }))) return;
     setBusy(provider.id);
     setError("");
     setNotice("");
     try {
       await api.delete(`${endpoint}/providers/${provider.id}`);
       setProviders((prev) => prev.filter((p) => p.id !== provider.id));
-      setNotice("服务已删除。");
+      setNotice(t("ui.serviceDeleted"));
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -277,7 +290,9 @@ export default function AISettings({
         );
       } else {
         setNotice(
-          "测试期间服务配置已更改，此结果仅适用于测试开始时的配置，请刷新后重新测试。",
+          t(
+            "ui.theServiceConfigurationChangedDuringTestingThisResultAppliesToTheEarlier",
+          ),
         );
       }
       const l = await api.get(`${endpoint}/logs`);
@@ -319,7 +334,7 @@ export default function AISettings({
       });
       setRoutes(response.data);
       setDirty(false);
-      setNotice("任务分配已保存，新请求立即生效。");
+      setNotice(t("ui.taskAssignmentsSavedNewRequestsUseThemImmediately"));
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -329,7 +344,7 @@ export default function AISettings({
   const enabled = providers.filter((p) => p.enabled);
   const defaultRoute = routes.find((r) => r.task === "default");
   const providerName = (id: string | null | undefined) =>
-    providers.find((p) => p.id === id)?.name ?? "未配置";
+    providers.find((p) => p.id === id)?.name ?? t("ui.notConfigured");
   if (loading)
     return (
       <div className="flex justify-center py-20">
@@ -342,7 +357,7 @@ export default function AISettings({
       <EmbeddingSettings />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-muted-foreground text-sm">
-          管理服务、测试模型，并为每项任务选择 AI。配置保存后对新请求生效。
+          {t("ui.manageServicesTestModelsAndAssignAiToTasksSavedSettingsApply")}
         </p>
         <div className="flex gap-2">
           <Button
@@ -350,12 +365,17 @@ export default function AISettings({
             className={button}
             disabled={saving || !!busy}
             onClick={() => {
-              if (!dirty || confirm("刷新会丢弃未保存的任务分配，继续？"))
+              if (
+                !dirty ||
+                confirm(
+                  t("ui.refreshingWillDiscardUnsavedTaskAssignmentsContinue"),
+                )
+              )
                 void load();
             }}
           >
             <RefreshCw size={14} className="mr-1 inline" />
-            刷新
+            {t("ui.refresh")}
           </Button>
           <Button
             className={primary}
@@ -363,7 +383,7 @@ export default function AISettings({
             onClick={() => edit()}
           >
             <Plus size={14} className="mr-1 inline" />
-            添加服务
+            {t("ui.addService")}
           </Button>
         </div>
       </div>
@@ -390,7 +410,7 @@ export default function AISettings({
           className="border-border space-y-4 rounded-xl border p-5"
         >
           <h2 className="font-semibold">
-            {editing ? "编辑 AI 服务" : "添加 AI 服务"}
+            {editing ? t("ui.editAiService") : t("ui.addAiService")}
           </h2>
           <Button
             type="button"
@@ -409,21 +429,19 @@ export default function AISettings({
               })
             }
           >
-            应用低延迟参数
+            {t("ui.applyLowLatencySettings")}
           </Button>
           <p className="text-muted-foreground text-xs">
-            “其他提供商（兼容接口）”用于未列出的品牌或统一 API
-            网关；选择服务实际支持的接口类型即可，不代表任意模型都能直接接入。OpenAI、Gemini、DeepSeek、Qwen
-            仍选择对应品牌。
+            {t("ui.useOtherProviderForUnlistedBrandsOrApiGatewaysSelectTheApi")}
           </p>
           <p className="text-muted-foreground text-xs">
-            任务由管理员手动分配。自动模式会对经典 Qwen3 关闭思考，对 TODO /
-            邮件优先请求结构化
-            JSON。其他模型保持原有思考行为；可根据实际接口手动调整。
+            {t(
+              "ui.tasksAreAssignedManuallyAutoModeDisablesThinkingForClassicQwen3And",
+            )}
           </p>
           <div className="grid gap-4 md:grid-cols-2">
             <label className="block space-y-1 text-sm">
-              提供商
+              {t("ui.provider")}
               <NativeSelect
                 className="w-full"
                 value={draft.vendor}
@@ -465,7 +483,7 @@ export default function AISettings({
                   });
                 }}
               >
-                {Object.entries(vendors).map(([id, label]) => (
+                {Object.entries(uiLabels_vendors).map(([id, label]) => (
                   <option key={id} value={id}>
                     {label}
                   </option>
@@ -474,18 +492,18 @@ export default function AISettings({
             </label>
 
             <label className="block space-y-1 text-sm">
-              服务名称
+              {t("ui.serviceName")}
               <Input
                 required
                 maxLength={100}
                 className={input}
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                placeholder="例如 Qwen 服务"
+                placeholder={t("ui.eGQwenService")}
               />
             </label>
             <label className="block space-y-1 text-sm">
-              接口类型
+              {t("ui.apiType")}
               <NativeSelect
                 className="w-full"
                 value={draft.protocol}
@@ -508,7 +526,7 @@ export default function AISettings({
               </NativeSelect>
             </label>
             <label className="block space-y-1 text-sm">
-              认证方式
+              {t("ui.authentication")}
               <NativeSelect
                 className="w-full"
                 value={draft.auth_required ? "key" : "none"}
@@ -521,12 +539,12 @@ export default function AISettings({
                 }
               >
                 <option value="key">API Key</option>
-                <option value="none">无需认证</option>
+                <option value="none">{t("ui.noAuthentication")}</option>
               </NativeSelect>
             </label>
             {draft.protocol === "openai" && (
               <label className="block space-y-1 text-sm">
-                输出长度参数
+                {t("ui.outputLengthParameter")}
                 <NativeSelect
                   className={input}
                   value={draft.token_parameter}
@@ -556,18 +574,18 @@ export default function AISettings({
                 onChange={(e) =>
                   setDraft({ ...draft, base_url: e.target.value })
                 }
-                placeholder="https://服务地址/v1"
+                placeholder={t("ui.httpsYourServiceV1")}
               />
             </label>
             <label className="block space-y-1 text-sm">
-              模型名称
+              {t("ui.modelName")}
               <Input
                 required
                 maxLength={200}
                 className={input}
                 value={draft.model}
                 onChange={(e) => setDraft({ ...draft, model: e.target.value })}
-                placeholder="填写服务实际提供的模型 ID"
+                placeholder={t("ui.enterTheModelIdProvidedByTheService")}
               />
             </label>
             <label className="block space-y-1 text-sm md:col-span-2">
@@ -584,13 +602,13 @@ export default function AISettings({
                 }
                 placeholder={
                   editing
-                    ? "留空保留原密钥；更改接口类型需重新填写"
-                    : "输入 API Key，仅由后端加密保存"
+                    ? t("ui.leaveBlankToKeepTheKeyChangingTheApiTypeRequiresA")
+                    : t("ui.enterAnApiKeyEncryptedByTheBackend")
                 }
               />
             </label>
             <label className="block space-y-1 text-sm">
-              超时（秒）
+              {t("ui.timeoutSeconds")}
               <Input
                 type="number"
                 required
@@ -607,7 +625,7 @@ export default function AISettings({
               />
             </label>
             <label className="block space-y-1 text-sm">
-              最大输出 Token
+              {t("ui.maximumOutputTokens")}
               <Input
                 type="number"
                 required
@@ -624,7 +642,7 @@ export default function AISettings({
               />
             </label>
             <label className="block space-y-1 text-sm">
-              最大并发（每后端进程）
+              {t("ui.maximumConcurrencyPerBackendProcess")}
               <Input
                 type="number"
                 required
@@ -641,7 +659,7 @@ export default function AISettings({
               />
             </label>
             <label className="block space-y-1 text-sm">
-              思考模式
+              {t("ui.thinkingMode")}
               <NativeSelect
                 className="w-full"
                 value={draft.thinking_mode}
@@ -652,13 +670,17 @@ export default function AISettings({
                   })
                 }
               >
-                <option value="auto">自动兼容</option>
-                <option value="off">关闭思考（接口需支持）</option>
-                <option value="on">开启思考（接口需支持）</option>
+                <option value="auto">{t("ui.autoCompatibility")}</option>
+                <option value="off">
+                  {t("ui.disableThinkingRequiresApiSupport")}
+                </option>
+                <option value="on">
+                  {t("ui.enableThinkingRequiresApiSupport")}
+                </option>
               </NativeSelect>
             </label>
             <label className="block space-y-1 text-sm">
-              结构化输出
+              {t("ui.structuredOutput")}
               <NativeSelect
                 className="w-full"
                 value={draft.structured_output}
@@ -670,14 +692,14 @@ export default function AISettings({
                   })
                 }
               >
-                <option value="auto">自动：Schema → JSON → 提示词</option>
-                <option value="schema">强制 JSON Schema</option>
-                <option value="object">JSON 对象模式</option>
-                <option value="off">仅提示词约束</option>
+                <option value="auto">{t("ui.autoSchemaJsonPrompt")}</option>
+                <option value="schema">{t("ui.requireJsonSchema")}</option>
+                <option value="object">{t("ui.jsonObjectMode")}</option>
+                <option value="off">{t("ui.promptConstraintsOnly")}</option>
               </NativeSelect>
             </label>
             <label className="block space-y-1 text-sm">
-              采样温度（留空使用模型默认）
+              {t("ui.temperatureBlankForModelDefault")}
               <Input
                 type="number"
                 step="0.1"
@@ -694,7 +716,7 @@ export default function AISettings({
               />
             </label>
             <label className="block space-y-1 text-sm">
-              临时故障重试次数
+              {t("ui.retriesForTransientFailures")}
               <Input
                 type="number"
                 required
@@ -715,17 +737,19 @@ export default function AISettings({
                   setDraft({ ...draft, enabled: e.target.checked })
                 }
               />
-              启用服务
+              {t("ui.enableService")}
             </label>
           </div>
           {draft.base_url.startsWith("http://") && (
             <p className="text-xs text-amber-600">
-              当前使用 HTTP，密钥与请求内容将明文传输；公网使用建议配置 HTTPS。
+              {t(
+                "ui.httpSendsKeysAndRequestsWithoutEncryptionUseHttpsForPublicNetworks",
+              )}
             </p>
           )}
           <div className="flex gap-2">
             <Button type="submit" disabled={saving} className={primary}>
-              {saving ? "保存中…" : "保存服务"}
+              {saving ? t("ui.saving2") : t("ui.saveService")}
             </Button>
             <Button
               type="button"
@@ -734,24 +758,23 @@ export default function AISettings({
               className={button}
               onClick={() => {
                 setEditing(undefined);
-                setDraft({ ...fresh });
+                setDraft({ ...uiLabels_fresh });
               }}
             >
-              取消
+              {t("ui.cancel")}
             </Button>
           </div>
         </form>
       )}
 
       <section className="space-y-3">
-        <h2 className="font-semibold">AI 服务</h2>
+        <h2 className="font-semibold">{t("ui.aiServices")}</h2>
         <p className="text-muted-foreground text-xs">
-          各项测试分别验证能力，会实际调用模型，产生少量推理开销；最近测试结果不代表实时在线状态。禁用或删除前，请先解除任务引用。
+          {t("ui.eachCapabilityTestCallsTheModelAndIncursASmallInferenceCost")}
         </p>
         {!providers.length && (
           <p className="text-muted-foreground text-sm">
-            尚未配置 AI 服务。请添加服务，填写 API Key
-            并测试连接，再完成任务分配。
+            {t("ui.noAiServicesConfiguredAddAServiceEnterAnApiKeyTest")}
           </p>
         )}
         <div className="grid gap-3 md:grid-cols-2">
@@ -763,25 +786,35 @@ export default function AISettings({
               <div className="flex justify-between gap-2">
                 <h3 className="font-medium break-all">{p.name}</h3>
                 <span className="text-muted-foreground shrink-0 text-xs">
-                  {p.enabled ? "已启用" : "已禁用"}
+                  {p.enabled ? t("ui.enabled") : t("ui.disabled")}
                 </span>
               </div>
               <p className="text-muted-foreground text-xs break-all">
-                {vendors[p.vendor]} · {protocols[p.protocol]} · {p.model}
+                {uiLabels_vendors[p.vendor]} · {protocols[p.protocol]} ·{" "}
+                {p.model}
                 <br />
                 {p.base_url}
               </p>
               <p className="text-muted-foreground text-xs">
-                密钥：{p.has_api_key ? "已加密保存" : "未配置"} · 超时{" "}
-                {p.timeout_seconds}s · 输出 {p.max_output_tokens} Token · 并发{" "}
+                {t("ui.key")}
+                {p.has_api_key ? t("ui.encrypted") : t("ui.notConfigured")}{" "}
+                {t("ui.timeout")} {p.timeout_seconds}
+                {t("ui.sOutput")}
+                {p.max_output_tokens} {t("ui.tokensConcurrency")}{" "}
                 {p.max_concurrency}
               </p>
               <p
                 className={`text-xs ${p.last_test_ok === false ? "text-red-600" : "text-muted-foreground"}`}
               >
                 {p.last_test_at
-                  ? `${date(p.last_test_at)} 最近测试${p.last_test_ok ? "成功" : "失败"}：${p.last_test_message}`
-                  : "尚未测试此配置"}
+                  ? t("dynamic.lastTest", {
+                      p0: date(p.last_test_at),
+                      p1: p.last_test_ok ? t("ui.success") : t("ui.failed2"),
+                      p2: p.last_test_message
+                        ? systemMessage(p.last_test_message, t)
+                        : "",
+                    })
+                  : t("ui.thisConfigurationHasNotBeenTested")}
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -790,7 +823,7 @@ export default function AISettings({
                   disabled={saving || !!busy}
                   onClick={() => edit(p)}
                 >
-                  编辑
+                  {t("ui.edit")}
                 </Button>
                 <Button
                   variant="outline"
@@ -798,10 +831,10 @@ export default function AISettings({
                   disabled={saving || !!busy}
                   onClick={() => void remove(p)}
                 >
-                  删除
+                  {t("ui.delete")}
                 </Button>
                 <NativeSelect
-                  aria-label={`${p.name} 测试类型`}
+                  aria-label={t("dynamic.testType", { p0: p.name })}
                   className="w-full sm:w-auto"
                   value={testModes[p.id] ?? "chat"}
                   disabled={!!busy}
@@ -812,10 +845,12 @@ export default function AISettings({
                     }))
                   }
                 >
-                  <option value="chat">普通回答</option>
-                  <option value="json">JSON 输出</option>
-                  <option value="stream">流式输出</option>
-                  <option value="conversation">多轮对话</option>
+                  <option value="chat">{t("ui.textResponse")}</option>
+                  <option value="json">{t("ui.jsonOutput")}</option>
+                  <option value="stream">{t("ui.streaming")}</option>
+                  <option value="conversation">
+                    {t("ui.multiTurnConversation")}
+                  </option>
                 </NativeSelect>
                 <Button
                   variant="outline"
@@ -826,30 +861,33 @@ export default function AISettings({
                   {busy === p.id ? (
                     <>
                       <Loader2 size={12} className="mr-1 inline animate-spin" />
-                      处理中…
+                      {t("ui.processing")}
                     </>
                   ) : (
-                    "测试连接"
+                    t("ui.testConnection")
                   )}
                 </Button>
               </div>
               <div className="flex flex-wrap gap-2 text-xs">
-                {Object.entries(capabilityLabels).map(([id, label]) => {
-                  const check = p.capability_checks?.[id];
-                  return (
-                    <span
-                      key={id}
-                      className="rounded border px-2 py-1"
-                      title={
-                        check?.tested_at
-                          ? date(check.tested_at)
-                          : "请运行对应能力测试"
-                      }
-                    >
-                      {label}：{statusLabels[check?.status ?? "unknown"]}
-                    </span>
-                  );
-                })}
+                {Object.entries(uiLabels_capabilityLabels).map(
+                  ([id, label]) => {
+                    const check = p.capability_checks?.[id];
+                    return (
+                      <span
+                        key={id}
+                        className="rounded border px-2 py-1"
+                        title={
+                          check?.tested_at
+                            ? date(check.tested_at)
+                            : t("ui.runTheCorrespondingCapabilityTest")
+                        }
+                      >
+                        {label}：
+                        {uiLabels_statusLabels[check?.status ?? "unknown"]}
+                      </span>
+                    );
+                  },
+                )}
               </div>
               {results[p.id] && (
                 <div
@@ -857,8 +895,8 @@ export default function AISettings({
                   role="status"
                 >
                   <p>
-                    {results[p.id].message} · {results[p.id].elapsed_ms} ms ·{" "}
-                    {results[p.id].model}
+                    {systemMessage(results[p.id].message, t)} ·{" "}
+                    {results[p.id].elapsed_ms} ms · {results[p.id].model}
                   </p>
                   {results[p.id].reply && (
                     <pre className="break-all whitespace-pre-wrap">
@@ -866,7 +904,9 @@ export default function AISettings({
                     </pre>
                   )}
                   <details>
-                    <summary className="cursor-pointer">测试诊断</summary>
+                    <summary className="cursor-pointer">
+                      {t("ui.testDiagnostics")}
+                    </summary>
                     <pre className="mt-2 break-all whitespace-pre-wrap">
                       {JSON.stringify(results[p.id].diagnostics, null, 2)}
                     </pre>
@@ -880,32 +920,43 @@ export default function AISettings({
 
       <section className="space-y-3">
         <h2 className="font-semibold">
-          任务分配{" "}
-          {dirty && <span className="text-xs text-amber-600">未保存</span>}
+          {t("ui.taskAssignments")}{" "}
+          {dirty && (
+            <span className="text-xs text-amber-600">{t("ui.unsaved")}</span>
+          )}
         </h2>
         <p className="text-muted-foreground text-xs">
-          选择“跟随默认”的任务同时继承默认备用服务；指定主服务的任务可单独关闭备用。超时与输出限制留空时继承默认设置，再使用实际服务的设置。
+          {t(
+            "ui.tasksFollowingTheDefaultInheritItsFallbackTasksWithAnExplicitPrimary",
+          )}
         </p>
         <div className="border-border overflow-x-auto rounded-xl border">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-muted/40">
               <tr>
-                {["任务", "主服务", "备用服务", "超时（秒）", "输出 Token"].map(
-                  (t) => (
-                    <th key={t} className="p-3 text-left font-medium">
-                      {t}
-                    </th>
-                  ),
-                )}
+                {[
+                  t("ui.task"),
+                  t("ui.primaryService"),
+                  t("ui.fallbackService"),
+                  t("ui.timeoutSeconds"),
+                  t("ui.outputTokens"),
+                ].map((t) => (
+                  <th key={t} className="p-3 text-left font-medium">
+                    {t}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {routes.map((r) => (
                 <tr key={r.task} className="border-border border-t">
                   <td className="p-3">
-                    <p className="font-medium">{r.label}</p>
+                    <p className="font-medium">{translateLabels(r.label, t)}</p>
                     <p className="text-muted-foreground mt-1 text-xs">
-                      必需：{r.requirements.map((c) => c.label).join("、")}
+                      {t("ui.required")}
+                      {r.requirements
+                        .map((c) => translateLabels(c.label, t))
+                        .join(", ")}
                     </p>
                     {[
                       r.provider_id || defaultRoute?.provider_id,
@@ -932,15 +983,17 @@ export default function AISettings({
                           >
                             {p?.name}：
                             {missing.length
-                              ? "需要验证 " +
-                                missing.map((c) => c.label).join("、")
-                              : "满足要求"}
+                              ? t("ui.verificationNeeded") +
+                                missing
+                                  .map((c) => translateLabels(c.label, t))
+                                  .join(", ")
+                              : t("ui.requirementsMet")}
                           </p>
                         );
                       })}
                     {r.task !== "default" && (
                       <p className="text-muted-foreground mt-1 text-xs">
-                        实际：
+                        {t("ui.effective")}
                         {providerName(
                           r.provider_id || defaultRoute?.provider_id,
                         )}
@@ -949,7 +1002,7 @@ export default function AISettings({
                   </td>
                   <td className="p-3">
                     <NativeSelect
-                      aria-label={`${r.label}主服务`}
+                      aria-label={t("dynamic.primaryService", { p0: r.label })}
                       className={input}
                       value={r.provider_id ?? ""}
                       onChange={(e) =>
@@ -959,7 +1012,9 @@ export default function AISettings({
                       }
                     >
                       <option value="">
-                        {r.task === "default" ? "未配置" : "跟随默认"}
+                        {r.task === "default"
+                          ? t("ui.notConfigured")
+                          : t("ui.followDefault")}
                       </option>
                       {enabled.map((p) => (
                         <option value={p.id} key={p.id}>
@@ -970,7 +1025,7 @@ export default function AISettings({
                   </td>
                   <td className="p-3">
                     <NativeSelect
-                      aria-label={`${r.label}备用服务`}
+                      aria-label={t("dynamic.fallbackService", { p0: r.label })}
                       className={input}
                       value={r.fallback_provider_id ?? ""}
                       onChange={(e) =>
@@ -981,8 +1036,8 @@ export default function AISettings({
                     >
                       <option value="">
                         {r.task !== "default" && !r.provider_id
-                          ? "跟随默认备用"
-                          : "不使用备用"}
+                          ? t("ui.followDefaultFallback")
+                          : t("ui.noFallback")}
                       </option>
                       {enabled.map((p) => (
                         <option value={p.id} key={p.id}>
@@ -993,11 +1048,11 @@ export default function AISettings({
                   </td>
                   <td className="p-3">
                     <Input
-                      aria-label={`${r.label}超时`}
+                      aria-label={t("dynamic.timeout", { p0: r.label })}
                       type="number"
                       min={5}
                       max={300}
-                      placeholder="继承"
+                      placeholder={t("ui.inherit")}
                       className={input}
                       value={r.timeout_seconds ?? ""}
                       onChange={(e) =>
@@ -1011,11 +1066,11 @@ export default function AISettings({
                   </td>
                   <td className="p-3">
                     <Input
-                      aria-label={`${r.label}输出限制`}
+                      aria-label={t("dynamic.outputLimit", { p0: r.label })}
                       type="number"
                       min={16}
                       max={65536}
-                      placeholder="继承"
+                      placeholder={t("ui.inherit")}
                       className={input}
                       value={r.max_output_tokens ?? ""}
                       onChange={(e) =>
@@ -1037,17 +1092,18 @@ export default function AISettings({
           disabled={saving || !!busy || !dirty}
           onClick={() => void saveRoutes()}
         >
-          {saving ? "保存中…" : "保存任务分配"}
+          {saving ? t("ui.saving2") : t("ui.saveTaskAssignments")}
         </Button>
         <p className="text-muted-foreground text-xs">
-          聊天与知识库向量服务分别配置。切换向量模型后需重建文档索引；切换聊天服务不影响向量索引。独立日志
-          AI 分析尚无业务入口。
+          {t(
+            "ui.chatAndKnowledgeEmbeddingsAreConfiguredSeparatelyRebuildDocumentIndexesAfterChanging",
+          )}
         </p>
       </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold">最近调用（最多 100 条）</h2>
+          <h2 className="font-semibold">{t("ui.recentCallsUpTo100")}</h2>
           <Button
             variant="outline"
             className={button}
@@ -1060,25 +1116,26 @@ export default function AISettings({
               }
             }}
           >
-            刷新记录
+            {t("ui.refreshCalls")}
           </Button>
         </div>
         <p className="text-muted-foreground text-xs">
-          只保存调用元数据；不记录密钥、提示词或业务正文。Token
-          数量以服务实际返回为准。
+          {t(
+            "ui.onlyCallMetadataIsSavedExcludingKeysPromptsAndBusinessContentToken",
+          )}
         </p>
         <div className="border-border overflow-x-auto rounded-xl border">
           <table className="w-full min-w-[780px] text-xs">
             <thead className="bg-muted/40">
               <tr>
                 {[
-                  "时间",
-                  "任务",
-                  "服务 / 模型",
-                  "结果",
-                  "耗时",
-                  "输入 / 输出 Token",
-                  "诊断",
+                  t("ui.time"),
+                  t("ui.task"),
+                  t("ui.serviceModel"),
+                  t("ui.result"),
+                  t("ui.duration"),
+                  t("ui.inputOutputTokens"),
+                  t("ui.diagnostics"),
                 ].map((t) => (
                   <th className="p-3 text-left" key={t}>
                     {t}
@@ -1094,13 +1151,13 @@ export default function AISettings({
                     {routes.find((r) => r.task === l.task)?.label ??
                       (
                         {
-                          test_chat: "普通测试",
-                          test_json: "JSON 测试",
-                          test_stream: "流式测试",
+                          test_chat: t("ui.textTest"),
+                          test_json: t("ui.jsonTest"),
+                          test_stream: t("ui.streamingTest"),
                         } as Record<string, string>
                       )[l.task] ??
                       l.task}
-                    {l.fallback && "（备用）"}
+                    {l.fallback && t("ui.fallback")}
                   </td>
                   <td className="p-3 break-all">
                     {l.provider_name}
@@ -1110,7 +1167,7 @@ export default function AISettings({
                   <td
                     className={`p-3 ${l.success ? "text-green-600" : "text-red-600"}`}
                   >
-                    {l.success ? "成功" : (l.error ?? "失败")}
+                    {l.success ? t("ui.success") : (l.error ?? t("ui.failed2"))}
                   </td>
                   <td className="p-3">{l.elapsed_ms} ms</td>
                   <td className="p-3">
@@ -1121,7 +1178,7 @@ export default function AISettings({
                       className="text-primary whitespace-nowrap hover:underline"
                       onClick={() => setSelectedLog(l)}
                     >
-                      详情
+                      {t("ui.details")}
                     </Button>
                   </td>
                 </tr>
@@ -1132,7 +1189,7 @@ export default function AISettings({
                     colSpan={7}
                     className="text-muted-foreground p-6 text-center"
                   >
-                    暂无调用记录
+                    {t("ui.noCallsYet")}
                   </td>
                 </tr>
               )}
@@ -1143,18 +1200,20 @@ export default function AISettings({
           <div className="border-border bg-muted/20 space-y-3 rounded-xl border p-4">
             <div className="flex justify-between gap-3">
               <h3 className="font-medium">
-                调用诊断 · {selectedLog.provider_name} / {selectedLog.model}
+                {t("ui.callDiagnostics")}
+                {selectedLog.provider_name} / {selectedLog.model}
               </h3>
               <Button
                 variant="outline"
                 className={button}
                 onClick={() => setSelectedLog(null)}
               >
-                关闭详情
+                {t("ui.closeDetails")}
               </Button>
             </div>
             <p className="text-xs break-all">
-              请求编号：{selectedLog.request_id ?? "历史记录暂无编号"}
+              {t("ui.requestId")}
+              {selectedLog.request_id ?? t("ui.noIdInThisHistoricalRecord")}
             </p>
             {selectedLog.request_id && onInspectRequest && (
               <Button
@@ -1162,7 +1221,7 @@ export default function AISettings({
                 className={button}
                 onClick={() => onInspectRequest(selectedLog.request_id!)}
               >
-                查看该请求的应用日志
+                {t("ui.viewApplicationLogsForThisRequest")}
               </Button>
             )}
             <pre className="max-h-96 overflow-auto text-xs break-all whitespace-pre-wrap">

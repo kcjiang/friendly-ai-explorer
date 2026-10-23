@@ -1,4 +1,6 @@
 "use client";
+import { useLocale } from "next-intl";
+import { enUS, zhCN } from "catalog-day-picker/locale";
 
 // Source: https://ui.shadcn.com/r/styles/base-nova/calendar.json
 import {
@@ -22,13 +24,15 @@ function Calendar({
   showOutsideDays = true,
   captionLayout = "label",
   buttonVariant = "ghost",
-  locale,
+  locale: suppliedLocale,
   formatters,
   components,
   ...props
 }: React.ComponentProps<typeof DayPicker> & {
   buttonVariant?: React.ComponentProps<typeof Button>["variant"];
 }) {
+  const currentLocale = useLocale();
+  const locale = suppliedLocale ?? (currentLocale === "zh-CN" ? zhCN : enUS);
   const defaultClassNames = getDefaultClassNames();
 
   return (

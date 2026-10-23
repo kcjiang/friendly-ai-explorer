@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -18,5 +19,5 @@ async def app_logs(user: DevOnly, level: Literal["DEBUG", "INFO", "WARNING", "ER
     since = since.replace(tzinfo=timezone.utc) if since and since.tzinfo is None else since
     until = until.replace(tzinfo=timezone.utc) if until and until.tzinfo is None else until
     if since and until and since > until:
-        raise HTTPException(422, "开始时间不能晚于结束时间")
+        raise HTTPException(422, system_message("errors.startTimeMustNotBeAfterEndTime"))
     return await run_in_threadpool(read_logs, level=level, q=q, request_id=request_id, since=since, until=until, page=page, page_size=page_size)

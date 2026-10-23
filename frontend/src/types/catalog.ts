@@ -47,7 +47,7 @@ export type CatalogRecord = {
 export type CatalogPage = { items: CatalogRecord[]; total: number };
 export type Option = { value: string; label: string };
 export const labels: Record<Kind, string> = {
-  customers: "客户库",
-  products: "产品库",
-  projects: "项目库",
+  customers: "Customer catalog",
+  products: "Product catalog",
+  projects: "Project catalog",
 };

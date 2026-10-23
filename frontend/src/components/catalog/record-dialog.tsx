@@ -1,4 +1,12 @@
 "use client";
+import { useLocale } from "next-intl";
+
+import {
+  useUiTranslations,
+  translateLabels,
+  type UiTranslator,
+} from "@/i18n/client";
+import { errorMessage } from "@/lib/errors";
 
 import axios from "axios";
 import {
@@ -78,16 +86,17 @@ import {
 import { ManagedSelect } from "./managed-select";
 import {
   requiredErrors,
+  fieldLabels,
   requiredMessage,
   serverFieldErrors,
 } from "./record-validation";
 import { SearchSelect } from "./search-select";
 
 const genderOptions = [
-  { value: "unspecified", label: "未指定" },
-  { value: "male", label: "男" },
-  { value: "female", label: "女" },
-  { value: "other", label: "其他" },
+  { value: "unspecified", label: "Unspecified" },
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+  { value: "other", label: "Other" },
 ];
 function GenderSelect({
   value,
@@ -103,9 +112,11 @@ function GenderSelect({
   "aria-invalid"?: boolean;
   "aria-describedby"?: string;
 }) {
+  const t = useUiTranslations();
+  const uiLabels_genderOptions = translateLabels(genderOptions, t);
   return (
     <Select
-      items={genderOptions}
+      items={uiLabels_genderOptions}
       value={value}
       onValueChange={(next) => {
         if (next) onChange(next as Contact["gender"]);
@@ -117,7 +128,7 @@ function GenderSelect({
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>
-          {genderOptions.map((item) => (
+          {uiLabels_genderOptions.map((item) => (
             <SelectItem key={item.value} value={item.value}>
               {item.label}
             </SelectItem>
@@ -127,12 +138,18 @@ function GenderSelect({
     </Select>
   );
 }
-async function copyValue(value: string, label: string) {
+async function copyValue(value: string, label: string, t: UiTranslator) {
   try {
     await copyCatalogText(value);
-    toast.add({ title: `${label}已复制到剪贴板`, type: "success" });
+    toast.add({
+      title: t("dynamic.copiedToClipboard", { p0: label }),
+      type: "success",
+    });
   } catch {
-    toast.add({ title: "复制失败，请检查浏览器剪贴板权限。", type: "error" });
+    toast.add({
+      title: t("ui.copyFailedCheckClipboardPermissions"),
+      type: "error",
+    });
   }
 }
 
@@ -147,6 +164,8 @@ function CopyField({
   id?: string;
   "aria-describedby"?: string;
 }) {
+  const t = useUiTranslations();
+
   return (
     <InputGroup>
       <InputGroupInput
@@ -155,17 +174,17 @@ function CopyField({
         aria-describedby={describedBy}
         readOnly
         value={value}
-        placeholder="未填写"
+        placeholder={t("ui.notProvided")}
         title={value}
         className="min-w-0 truncate"
       />
       <InputGroupAddon align="inline-end" className="shrink-0">
         <InputGroupButton
           size="icon-xs"
-          aria-label={`复制${label}`}
-          title={`复制${label}`}
+          aria-label={t("dynamic.copy", { p0: label })}
+          title={t("dynamic.copy", { p0: label })}
           disabled={!value}
-          onClick={() => void copyValue(value, label)}
+          onClick={() => void copyValue(value, label, t)}
         >
           <Copy />
         </InputGroupButton>
@@ -187,9 +206,14 @@ function Field({
   errorKey?: string;
   hideLabel?: boolean;
 }) {
+  const t = useUiTranslations();
+  const canonicalLabel =
+    Object.values(fieldLabels).find(
+      (value) => translateLabels(value, t) === normalizedLabel(label),
+    ) ?? normalizedLabel(label);
   const id = useId();
   const errors = useContext(FieldErrorsContext);
-  const error = errors[id] ?? errors[errorKey ?? normalizedLabel(label)];
+  const error = errors[id] ?? errors[errorKey ?? canonicalLabel];
   if (isValidElement(children)) {
     const control = children as ReactElement<{
       id?: string;
@@ -198,7 +222,7 @@ function Field({
     }>;
     return (
       <FormField
-        data-field-key={errorKey ?? normalizedLabel(label)}
+        data-field-key={errorKey ?? canonicalLabel}
         data-invalid={Boolean(error)}
       >
         <FieldLabel htmlFor={id} className={hideLabel ? "sr-only" : undefined}>
@@ -209,7 +233,11 @@ function Field({
           "aria-invalid": Boolean(error),
           "aria-describedby": error ? `${id}-error` : undefined,
         })}
-        {error && <FieldError id={`${id}-error`}>{error}</FieldError>}
+        {error && (
+          <FieldError id={`${id}-error`}>
+            {translateLabels(error, t)}
+          </FieldError>
+        )}
       </FormField>
     );
   }
@@ -237,9 +265,15 @@ function SuggestionInput({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const t = useUiTranslations();
+
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [query, setQuery] = useState("");
-  const name = { model: "型号", chipset: "芯片", system: "系统" }[field];
+  const name = {
+    model: t("ui.model"),
+    chipset: t("ui.chipset"),
+    system: t("ui.system"),
+  }[field];
   useEffect(() => {
     if (disabled) return;
     const controller = new AbortController();
@@ -311,6 +345,12 @@ export function RecordDialog({
   onSaved: () => void;
   onDelete?: (record: CatalogRecord) => void;
 }) {
+  const locale = useLocale();
+
+  const t = useUiTranslations();
+  const uiLabels_requiredMessage = translateLabels(requiredMessage, t);
+  const uiLabels_labels = translateLabels(labels, t);
+
   const [original, setOriginal] = useState(record);
   const [draft, setDraft] = useState<Partial<CatalogRecord>>(
     record ?? initialDraft ?? empty(),
@@ -334,13 +374,14 @@ export function RecordDialog({
     const missing = requiredErrors(kind, draft);
     setFieldErrors((current) => {
       const entries = Object.entries(current).filter(
-        ([key, message]) => message !== requiredMessage || key in missing,
+        ([key, message]) =>
+          message !== uiLabels_requiredMessage || key in missing,
       );
       return entries.length === Object.keys(current).length
         ? current
         : Object.fromEntries(entries);
     });
-  }, [draft, kind]);
+  }, [draft, kind, uiLabels_requiredMessage]);
   const [confirmClose, setConfirmClose] = useState(false);
   const [businessOptions, setBusinessOptions] = useState<string[]>([]);
   const [faeOptions, setFaeOptions] = useState<Option[]>([]);
@@ -352,10 +393,10 @@ export function RecordDialog({
       .then(({ data }) => setFaeOptions(data))
       .catch(() => {
         if (!controller.signal.aborted)
-          setError("FAE 选项加载失败，请重新打开窗口后重试。");
+          setError(t("ui.failedToLoadFaeOptionsReopenTheDialogAndTryAgain"));
       });
     return () => controller.abort();
-  }, [kind]);
+  }, [kind, t]);
   const [discardAction, setDiscardAction] = useState<"close" | "cancel">(
     "close",
   );
@@ -370,10 +411,12 @@ export function RecordDialog({
       .then(({ data }) => setBusinessOptions(data))
       .catch(() => {
         if (!controller.signal.aborted)
-          setError("业务历史选项加载失败，可继续手动录入。");
+          setError(
+            t("ui.failedToLoadBusinessSuggestionsManualEntryIsStillAvailable"),
+          );
       });
     return () => controller.abort();
-  }, [kind]);
+  }, [kind, t]);
   const set = (key: keyof CatalogRecord, value: string) =>
     setDraft((d) => ({ ...d, [key]: value }));
   const contacts = draft.contacts ?? [];
@@ -422,8 +465,8 @@ export function RecordDialog({
           control.closest<HTMLElement>("[data-field-key]")?.dataset.fieldKey;
         if (key && !errors[key])
           errors[key] = control.validity.valueMissing
-            ? requiredMessage
-            : "请检查此字段的填写内容。";
+            ? uiLabels_requiredMessage
+            : t("ui.checkThisField");
       });
     if (Object.keys(errors).length) {
       focusErrors.current = true;
@@ -482,10 +525,12 @@ export function RecordDialog({
         const errors = serverFieldErrors(detail);
         focusErrors.current = true;
         setFieldErrors(errors);
-        setError(Object.keys(errors).length ? "" : "请检查填写内容。");
+        setError(
+          Object.keys(errors).length ? "" : t("ui.checkTheEnteredValues"),
+        );
       } else {
         setError(
-          typeof detail === "string" ? detail : "保存失败，请检查网络后重试。",
+          errorMessage(err, t("ui.saveFailedCheckYourConnectionAndTryAgain")),
         );
       }
     } finally {
@@ -508,12 +553,16 @@ export function RecordDialog({
         <DialogContent className="flex max-h-[90dvh] flex-col md:max-w-3xl">
           <DialogHeader className="pr-6">
             <DialogTitle>
-              {original ? (editing ? "编辑记录" : "记录预览") : "新建记录"} ·{" "}
-              {labels[kind]}
+              {original
+                ? editing
+                  ? t("ui.editRecord")
+                  : t("ui.recordPreview")
+                : t("ui.newRecord")}{" "}
+              · {uiLabels_labels[kind]}
             </DialogTitle>
             <DialogDescription className="break-words">
               {original?.display_name ??
-                "填写资料后保存，团队成员即可浏览和引用。"}
+                t("ui.saveThisRecordSoTeamMembersCanViewAndReferenceIt")}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -526,7 +575,9 @@ export function RecordDialog({
               <div className="px-4 py-1">
                 {original?.deleted_at && (
                   <p className="bg-muted text-muted-foreground mb-4 rounded-lg p-3 text-sm">
-                    记录已移至最近删除，恢复后才可编辑。
+                    {t(
+                      "ui.thisRecordIsInRecentlyDeletedRestoreItBeforeEditing",
+                    )}
                   </p>
                 )}
                 <FieldErrorsContext.Provider value={fieldErrors}>
@@ -535,21 +586,21 @@ export function RecordDialog({
                       {kind === "customers" && (
                         <>
                           <FieldGroup className="grid grid-cols-1 items-start md:grid-cols-2">
-                            <Field label="公司名 *">
-                              {text("company_name", "公司名")}
+                            <Field label={t("ui.companyName")}>
+                              {text("company_name", t("ui.companyName2"))}
                             </Field>
-                            <Field label="客户级别 *">
+                            <Field label={t("ui.customerTier2")}>
                               <ManagedSelect
                                 category="customer_level"
-                                label="客户级别"
+                                label={t("ui.customerTier")}
                                 value={draft.level ?? ""}
                                 onChange={(value) => set("level", value)}
                                 disabled={!editing || saving}
                               />
                             </Field>
-                            <Field label="国家 / 地区 *">
+                            <Field label={t("ui.countryRegion")}>
                               <SearchSelect
-                                label="国家 / 地区"
+                                label={t("ui.countryRegion2")}
                                 value={draft.country_code ?? ""}
                                 selectedLabel={draft.country_name ?? ""}
                                 url="/api/v1/catalog/locations/countries"
@@ -563,9 +614,9 @@ export function RecordDialog({
                                 }
                               />
                             </Field>
-                            <Field label="业务">
+                            <Field label={t("ui.business")}>
                               <CatalogCombobox
-                                label="业务"
+                                label={t("ui.business")}
                                 multiple
                                 value={draft.business ?? []}
                                 options={Array.from(
@@ -585,7 +636,7 @@ export function RecordDialog({
                           <div className="space-y-4">
                             <div className="flex items-center justify-between">
                               <h3 className="font-medium">
-                                联系人{" "}
+                                {t("ui.contacts")}{" "}
                                 <span className="text-muted-foreground">
                                   ({contacts.length})
                                 </span>
@@ -613,13 +664,13 @@ export function RecordDialog({
                                   }
                                 >
                                   <Plus data-icon="inline-start" />
-                                  添加联系人
+                                  {t("ui.addContact")}
                                 </Button>
                               )}
                             </div>
                             {!contacts.length && (
                               <p className="text-muted-foreground rounded-lg border border-dashed p-5 text-center text-sm">
-                                暂无联系人
+                                {t("ui.noContacts")}
                               </p>
                             )}
                             {contacts.map((contact, index) => (
@@ -629,14 +680,17 @@ export function RecordDialog({
                               >
                                 <div className="flex items-center justify-between">
                                   <h4 className="text-sm font-medium">
-                                    联系人 {index + 1}
+                                    {t("ui.contacts")}
+                                    {index + 1}
                                   </h4>
                                   {editing && (
                                     <Button
                                       type="button"
                                       variant="ghost"
                                       size="sm"
-                                      aria-label={`删除联系人 ${index + 1}`}
+                                      aria-label={t("dynamic.deleteContact", {
+                                        p0: index + 1,
+                                      })}
                                       onClick={() =>
                                         setDraft((d) => ({
                                           ...d,
@@ -652,12 +706,14 @@ export function RecordDialog({
                                 </div>
                                 <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2">
                                   <Field
-                                    label="姓名 *"
+                                    label={t("ui.name2")}
                                     errorKey={`contact-name-${index}`}
                                   >
                                     <Input
                                       disabled={!editing || saving}
-                                      aria-label={`联系人 ${index + 1} 姓名`}
+                                      aria-label={t("dynamic.contactName", {
+                                        p0: index + 1,
+                                      })}
                                       required
                                       maxLength={200}
                                       autoComplete="off"
@@ -670,9 +726,11 @@ export function RecordDialog({
                                       }
                                     />
                                   </Field>
-                                  <Field label="性别">
+                                  <Field label={t("ui.gender")}>
                                     <GenderSelect
-                                      aria-label={`联系人 ${index + 1} 性别`}
+                                      aria-label={t("dynamic.contactGender", {
+                                        p0: index + 1,
+                                      })}
                                       value={contact.gender}
                                       onChange={(gender) =>
                                         updateContact(index, {
@@ -683,10 +741,12 @@ export function RecordDialog({
                                       disabled={!editing || saving}
                                     />
                                   </Field>
-                                  <Field label="职位">
+                                  <Field label={t("ui.position")}>
                                     <Input
                                       disabled={!editing || saving}
-                                      aria-label={`联系人 ${index + 1} 职位`}
+                                      aria-label={t("dynamic.contactPosition", {
+                                        p0: index + 1,
+                                      })}
                                       maxLength={200}
                                       autoComplete="off"
                                       value={contact.position}
@@ -702,7 +762,7 @@ export function RecordDialog({
                                 <div className="space-y-2">
                                   <div className="flex items-center justify-between gap-2">
                                     <span className="text-sm font-medium">
-                                      联系方式
+                                      {t("ui.contactMethods")}
                                     </span>
                                     {editing && (
                                       <Button
@@ -721,7 +781,7 @@ export function RecordDialog({
                                         }
                                       >
                                         <Plus data-icon="inline-start" />
-                                        添加联系方式
+                                        {t("ui.addContactMethod")}
                                       </Button>
                                     )}
                                   </div>
@@ -732,14 +792,16 @@ export function RecordDialog({
                                     >
                                       <div className="min-w-0">
                                         <Field
-                                          label="通讯工具 *"
+                                          label={t("ui.communicationTool")}
                                           hideLabel
                                           errorKey={`contact-tool-${index}-${mi}`}
                                         >
                                           <ManagedSelect
                                             category="contact_method"
-                                            label="通讯工具"
-                                            placeholder="通讯工具"
+                                            label={t("ui.communicationTool2")}
+                                            placeholder={t(
+                                              "ui.communicationTool2",
+                                            )}
                                             required
                                             value={method.type}
                                             disabled={!editing || saving}
@@ -758,15 +820,18 @@ export function RecordDialog({
                                         </Field>
                                       </div>
                                       <Field
-                                        label="记录内容 *"
+                                        label={t("ui.value")}
                                         errorKey={`contact-value-${index}-${mi}`}
                                         hideLabel
                                       >
                                         {editing ? (
                                           <Input
                                             disabled={!editing || saving}
-                                            aria-label={`联系人 ${index + 1} 方式 ${mi + 1} 内容`}
-                                            placeholder="请填写记录"
+                                            aria-label={t(
+                                              "dynamic.contactMethodValue",
+                                              { p0: index + 1, p1: mi + 1 },
+                                            )}
+                                            placeholder={t("ui.enterAValue")}
                                             required
                                             maxLength={2000}
                                             autoComplete="off"
@@ -789,13 +854,19 @@ export function RecordDialog({
                                         ) : (
                                           <CopyField
                                             value={method.value}
-                                            label={`联系人 ${index + 1} 方式 ${mi + 1} 内容`}
+                                            label={t(
+                                              "dynamic.contactMethodValue",
+                                              { p0: index + 1, p1: mi + 1 },
+                                            )}
                                           />
                                         )}
                                       </Field>
                                       {editing && (
                                         <Button
-                                          aria-label={`删除联系人 ${index + 1} 方式 ${mi + 1}`}
+                                          aria-label={t(
+                                            "dynamic.deleteContactMethod",
+                                            { p0: index + 1, p1: mi + 1 },
+                                          )}
                                           type="button"
                                           size="icon"
                                           variant="ghost"
@@ -814,13 +885,17 @@ export function RecordDialog({
                                     </div>
                                   ))}
                                 </div>
-                                <Field label="联系人备注">
+                                <Field label={t("ui.contactNotes")}>
                                   <Textarea
                                     disabled={!editing || saving}
-                                    aria-label={`联系人 ${index + 1} 备注`}
+                                    aria-label={t("dynamic.contactNotes", {
+                                      p0: index + 1,
+                                    })}
                                     maxLength={10000}
                                     autoComplete="off"
-                                    placeholder="沟通习惯、偏好等"
+                                    placeholder={t(
+                                      "ui.communicationHabitsPreferencesEtc",
+                                    )}
                                     value={contact.notes}
                                     onChange={(e) =>
                                       updateContact(index, {
@@ -833,10 +908,10 @@ export function RecordDialog({
                               </div>
                             ))}
                           </div>
-                          <Field label="公司备注">
+                          <Field label={t("ui.companyNotes")}>
                             <Textarea
                               disabled={!editing || saving}
-                              aria-label="公司备注"
+                              aria-label={t("ui.companyNotes")}
                               maxLength={10000}
                               autoComplete="off"
                               value={draft.notes}
@@ -848,10 +923,10 @@ export function RecordDialog({
                       {kind === "products" && (
                         <>
                           <FieldGroup className="grid grid-cols-1 items-start md:grid-cols-2">
-                            <Field label="类型 *">
+                            <Field label={t("ui.type2")}>
                               <ManagedSelect
                                 category="product_type"
-                                label="类型"
+                                label={t("ui.type")}
                                 value={draft.type ?? ""}
                                 onChange={(value) => set("type", value)}
                                 disabled={!editing || saving}
@@ -861,7 +936,7 @@ export function RecordDialog({
                               (f) => (
                                 <Field
                                   key={f}
-                                  label={`${{ model: "型号", chipset: "芯片", system: "系统" }[f]} *`}
+                                  label={`${{ model: t("ui.model"), chipset: t("ui.chipset"), system: t("ui.system") }[f]} *`}
                                 >
                                   <SuggestionInput
                                     field={f}
@@ -875,10 +950,10 @@ export function RecordDialog({
                           </FieldGroup>
                           {editing && (
                             <>
-                              <Field label="固件下载地址">
+                              <Field label={t("ui.firmwareDownloadUrl")}>
                                 <Input
                                   disabled={!editing || saving}
-                                  aria-label="固件下载地址"
+                                  aria-label={t("ui.firmwareDownloadUrl")}
                                   type="url"
                                   maxLength={2000}
                                   placeholder="https://…"
@@ -888,12 +963,12 @@ export function RecordDialog({
                                   }
                                 />
                               </Field>
-                              <Field label="项目指纹">
+                              <Field label={t("ui.projectFingerprint")}>
                                 <Textarea
                                   disabled={!editing || saving}
-                                  aria-label="项目指纹"
+                                  aria-label={t("ui.projectFingerprint")}
                                   maxLength={10000}
-                                  placeholder="输入项目指纹"
+                                  placeholder={t("ui.enterAProjectFingerprint")}
                                   value={draft.fingerprint}
                                   onChange={(e) =>
                                     set("fingerprint", e.target.value)
@@ -902,10 +977,10 @@ export function RecordDialog({
                               </Field>
                             </>
                           )}
-                          <Field label="备注">
+                          <Field label={t("ui.notes2")}>
                             <Textarea
                               disabled={!editing || saving}
-                              aria-label="产品备注"
+                              aria-label={t("ui.productNotes")}
                               autoComplete="off"
                               maxLength={10000}
                               value={draft.notes}
@@ -917,13 +992,13 @@ export function RecordDialog({
                       {kind === "projects" && (
                         <>
                           <FieldGroup className="grid grid-cols-1 items-start md:grid-cols-2">
-                            <Field label="项目编号 *">
-                              {text("number", "项目编号", true, 100)}
+                            <Field label={t("ui.projectNumber2")}>
+                              {text("number", t("ui.projectNumber"), true, 100)}
                             </Field>
-                            <Field label="项目经理（PM）*">
+                            <Field label={t("ui.projectManagerPm")}>
                               <ManagedSelect
                                 category="project_pm"
-                                label="项目经理"
+                                label={t("ui.projectManager")}
                                 value={draft.pm ?? ""}
                                 onChange={(value) => set("pm", value)}
                                 disabled={!editing || saving}
@@ -952,22 +1027,22 @@ export function RecordDialog({
                                 <Input
                                   disabled={!editing || saving}
                                   aria-label="FAE"
-                                  value={draft.fae_name || "未指定"}
+                                  value={draft.fae_name || t("ui.unspecified")}
                                   readOnly
                                 />
                               )}
                             </Field>
-                            <Field label="立项时间 *">
+                            <Field label={t("ui.startDate2")}>
                               <StartDatePicker
                                 value={draft.start_date ?? ""}
                                 onChange={(value) => set("start_date", value)}
                                 disabled={!editing || saving}
                               />
                             </Field>
-                            <Field label="项目阶段 *">
+                            <Field label={t("ui.projectStage2")}>
                               <ManagedSelect
                                 category="project_stage"
-                                label="项目阶段"
+                                label={t("ui.projectStage")}
                                 value={draft.stage ?? ""}
                                 onChange={(value) => set("stage", value)}
                                 disabled={!editing || saving}
@@ -975,9 +1050,9 @@ export function RecordDialog({
                             </Field>
                           </FieldGroup>
                           <FieldGroup className="grid grid-cols-1 items-start md:grid-cols-2">
-                            <Field label="客户 *">
+                            <Field label={t("ui.customer2")}>
                               <SearchSelect
-                                label="客户"
+                                label={t("ui.customer")}
                                 kind="catalog"
                                 value={draft.customer_id ?? ""}
                                 selectedLabel={draft.customer_name ?? ""}
@@ -992,9 +1067,9 @@ export function RecordDialog({
                                 }
                               />
                             </Field>
-                            <Field label="产品 *">
+                            <Field label={t("ui.product2")}>
                               <SearchSelect
-                                label="产品"
+                                label={t("ui.product")}
                                 kind="catalog"
                                 value={draft.product_id ?? ""}
                                 selectedLabel={draft.product_name ?? ""}
@@ -1017,7 +1092,7 @@ export function RecordDialog({
                 </FieldErrorsContext.Provider>
                 {kind === "products" && !editing && (
                   <div className="mt-5 grid gap-4">
-                    <Field label="固件下载地址">
+                    <Field label={t("ui.firmwareDownloadUrl")}>
                       {draft.repository_url &&
                       /^https?:\/\//i.test(draft.repository_url) ? (
                         <a
@@ -1031,14 +1106,14 @@ export function RecordDialog({
                         </a>
                       ) : (
                         <span className="text-muted-foreground text-sm">
-                          未填写
+                          {t("ui.notProvided")}
                         </span>
                       )}
                     </Field>
-                    <Field label="项目指纹">
+                    <Field label={t("ui.projectFingerprint")}>
                       <CopyField
                         value={draft.fingerprint ?? ""}
-                        label="项目指纹"
+                        label={t("ui.projectFingerprint")}
                       />
                     </Field>
                   </div>
@@ -1054,36 +1129,36 @@ export function RecordDialog({
                         />
                       }
                     >
-                      编辑记录
+                      {t("ui.editRecord")}
                       <ChevronDown className="transition-transform group-data-open:rotate-180" />
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <dl className="text-muted-foreground grid grid-cols-2 gap-3 p-4 pt-2 text-xs">
                         <div>
-                          <dt>创建人</dt>
+                          <dt>{t("ui.createdBy")}</dt>
                           <dd className="text-foreground mt-1">
                             {original.created_by_name}
                           </dd>
                         </div>
                         <div>
-                          <dt>创建时间</dt>
+                          <dt>{t("ui.created")}</dt>
                           <dd className="mt-1">
                             {new Date(original.created_at).toLocaleString(
-                              "zh-CN",
+                              locale,
                             )}
                           </dd>
                         </div>
                         <div>
-                          <dt>更新人</dt>
+                          <dt>{t("ui.updatedBy")}</dt>
                           <dd className="text-foreground mt-1">
                             {original.updated_by_name}
                           </dd>
                         </div>
                         <div>
-                          <dt>更新时间</dt>
+                          <dt>{t("ui.updated")}</dt>
                           <dd className="mt-1">
                             {new Date(original.updated_at).toLocaleString(
-                              "zh-CN",
+                              locale,
                             )}
                           </dd>
                         </div>
@@ -1106,7 +1181,7 @@ export function RecordDialog({
                   onClick={() => onDelete(original)}
                 >
                   <Trash2 data-icon="inline-start" />
-                  删除
+                  {t("ui.delete")}
                 </Button>
               )}
               {editing ? (
@@ -1127,7 +1202,7 @@ export function RecordDialog({
                       }
                     }}
                   >
-                    {original ? "取消编辑" : "重置"}
+                    {original ? t("ui.cancelEditing") : t("ui.reset")}
                   </Button>
                   <Button key="save" type="submit" disabled={saving}>
                     {saving && (
@@ -1136,7 +1211,7 @@ export function RecordDialog({
                         className="animate-spin"
                       />
                     )}
-                    保存
+                    {t("ui.save")}
                   </Button>
                 </>
               ) : (
@@ -1151,7 +1226,7 @@ export function RecordDialog({
                       }}
                     >
                       <Pencil data-icon="inline-start" />
-                      编辑
+                      {t("ui.edit")}
                     </Button>
                   )}
                 </>
@@ -1161,9 +1236,11 @@ export function RecordDialog({
         </DialogContent>
         <ConfirmDialog
           open={confirmClose}
-          title="放弃未保存的修改？"
-          description="修改尚未保存。放弃后，这些修改将不会保留。"
-          confirmLabel="放弃修改"
+          title={t("ui.discardUnsavedChanges")}
+          description={t(
+            "ui.yourChangesHaveNotBeenSavedDiscardingWillLoseThem",
+          )}
+          confirmLabel={t("ui.discardChanges")}
           onCancel={() => setConfirmClose(false)}
           onConfirm={() => {
             setConfirmClose(false);

@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 import { useEffect, useRef, useState } from "react";
 import api from "@/lib/api";
@@ -11,6 +12,8 @@ export function WorkbenchDebugConsole({
   open: boolean;
   onClose: () => void;
 }) {
+  const t = useUiTranslations();
+
   const [output, setOutput] = useState("");
   const [error, setError] = useState("");
   const cursor = useRef(0),
@@ -48,7 +51,8 @@ export function WorkbenchDebugConsole({
         }
         setError("");
       } catch {
-        if (!controller.signal.aborted) setError("调试输出连接中断，正在重连…");
+        if (!controller.signal.aborted)
+          setError(t("ui.debugOutputDisconnectedReconnecting"));
       } finally {
         if (!controller.signal.aborted) timer = setTimeout(poll, 1000);
       }
@@ -58,17 +62,17 @@ export function WorkbenchDebugConsole({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [open]);
+  }, [open, t]);
   return (
     <FloatingWindow open={open} onClose={onClose}>
       <pre
         ref={terminal}
-        aria-label="AI 原始输出"
+        aria-label={t("ui.rawAiOutput")}
         className="h-full overflow-auto font-mono text-xs break-all whitespace-pre-wrap"
         role="log"
         aria-live="off"
       >
-        {output || "等待 AI 输出…"}
+        {output || t("ui.waitingForAiOutput")}
         {error ? `\n${error}` : ""}
       </pre>
     </FloatingWindow>

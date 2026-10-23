@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
@@ -17,7 +18,7 @@ async def list_users(db: AsyncSession) -> list[User]:
 async def create_user(body: CreateUserRequest, db: AsyncSession) -> User:
     exists = await db.execute(select(User).where(User.email == body.email))
     if exists.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="该邮箱已被注册")
+        raise HTTPException(status_code=400, detail=system_message("errors.thisEmailAddressIsAlreadyRegistered"))
 
     user = User(
         email=body.email,
@@ -35,7 +36,7 @@ async def update_user(user_id: str, body: UpdateUserRequest, db: AsyncSession) -
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+        raise HTTPException(status_code=404, detail=system_message("errors.userNotFound"))
 
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(user, k, v)
@@ -46,24 +47,24 @@ async def update_user(user_id: str, body: UpdateUserRequest, db: AsyncSession) -
 
 async def delete_user(user_id: str, operator_id: str, db: AsyncSession) -> dict:
     if str(user_id) == str(operator_id):
-        raise HTTPException(status_code=400, detail="不能删除自己的账号")
+        raise HTTPException(status_code=400, detail=system_message("errors.youCannotDeleteYourOwnAccount"))
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+        raise HTTPException(status_code=404, detail=system_message("errors.userNotFound"))
     await db.delete(user)
     await db.commit()
-    return {"message": "删除成功"}
+    return {"message": system_message("errors.deleteSuccess")}
 
 
 async def reset_password(user_id: str, new_password: str, db: AsyncSession) -> dict:
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+        raise HTTPException(status_code=404, detail=system_message("errors.userNotFound"))
     user.password_hash = hash_password(new_password)
     await db.commit()
-    return {"message": "密码重置成功"}
+    return {"message": system_message("errors.passwordReset")}
 
 
 # ── 系统配置 ─────────────────────────────────────────────────

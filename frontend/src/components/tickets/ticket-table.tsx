@@ -1,4 +1,7 @@
 "use client";
+import { getBrowserUiLocale } from "@/i18n/browser";
+
+import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import {
   ArrowDown,
@@ -57,16 +60,16 @@ import {
 } from "@/types/ticket";
 
 const definitions = [
-  { key: "system_seq", label: "工单 / 标题", fixed: true },
-  { key: "title", label: "标题" },
-  { key: "project_summary", label: "项目" },
-  { key: "assignee", label: "分配给" },
-  { key: "priority", label: "重要性" },
-  { key: "description", label: "简要问题描述" },
-  { key: "status", label: "状态" },
-  { key: "next_plan", label: "下一步计划" },
-  { key: "updated_at", label: "更新时间" },
-  { key: "created_at", label: "创建时间" },
+  { key: "system_seq", label: "Ticket / title", fixed: true },
+  { key: "title", label: "Title" },
+  { key: "project_summary", label: "Project" },
+  { key: "assignee", label: "Assign to" },
+  { key: "priority", label: "Severity" },
+  { key: "description", label: "Issue summary" },
+  { key: "status", label: "Status" },
+  { key: "next_plan", label: "Next steps" },
+  { key: "updated_at", label: "Updated" },
+  { key: "created_at", label: "Created" },
 ] satisfies { key: keyof Ticket; label: string; fixed?: boolean }[];
 const columnHelper = createColumnHelper<CatalogTableFeatures, Ticket>();
 type TicketTableOptions = {
@@ -85,6 +88,8 @@ type TicketTableOptions = {
   onCopy: (ticket: Ticket) => void;
 };
 export function useTicketTable(options: TicketTableOptions) {
+  const t = useUiTranslations();
+
   const {
     records,
     total,
@@ -107,7 +112,7 @@ export function useTicketTable(options: TicketTableOptions) {
           enableSorting: false,
           header: ({ table }) => (
             <Checkbox
-              aria-label="选择本页全部工单"
+              aria-label={t("ui.selectAllTicketsOnThisPage")}
               disabled={disabled || !records.length}
               checked={table.getIsAllPageRowsSelected()}
               indeterminate={
@@ -121,14 +126,14 @@ export function useTicketTable(options: TicketTableOptions) {
           ),
           cell: ({ row }) => (
             <Checkbox
-              aria-label={`选择 ${row.original.ticket_no}`}
+              aria-label={t("dynamic.select", { p0: row.original.ticket_no })}
               disabled={disabled}
               checked={row.getIsSelected()}
               onCheckedChange={(checked) => row.toggleSelected(checked)}
             />
           ),
         }),
-        ...definitions.map((definition) =>
+        ...translateLabels(definitions, t).map((definition) =>
           columnHelper.accessor(definition.key, {
             id: definition.key,
             enableHiding: definition.key !== "system_seq",
@@ -191,7 +196,7 @@ export function useTicketTable(options: TicketTableOptions) {
               if (key === "assignee")
                 return (
                   <span title={ticket.assignee?.email}>
-                    {ticket.assignee?.name ?? "未分配"}
+                    {ticket.assignee?.name ?? t("ui.unassigned")}
                   </span>
                 );
               if (key === "priority")
@@ -199,7 +204,10 @@ export function useTicketTable(options: TicketTableOptions) {
                   <span
                     className={`inline-flex rounded-full px-2 py-0.5 text-xs ${TICKET_PRIORITY_CONFIG[ticket.priority].color}`}
                   >
-                    {TICKET_PRIORITY_CONFIG[ticket.priority].label}
+                    {translateLabels(
+                      TICKET_PRIORITY_CONFIG[ticket.priority].label,
+                      t,
+                    )}
                   </span>
                 );
               if (key === "status")
@@ -208,7 +216,10 @@ export function useTicketTable(options: TicketTableOptions) {
                     <span
                       className={TICKET_STATUS_CONFIG[ticket.status].textColor}
                     >
-                      {TICKET_STATUS_CONFIG[ticket.status].label}
+                      {translateLabels(
+                        TICKET_STATUS_CONFIG[ticket.status].label,
+                        t,
+                      )}
                     </span>
                     {ticket.status_note && (
                       <p
@@ -223,7 +234,7 @@ export function useTicketTable(options: TicketTableOptions) {
               if (key === "updated_at" || key === "created_at")
                 return (
                   <span className="text-muted-foreground">
-                    {new Date(ticket[key]).toLocaleString("zh-CN")}
+                    {new Date(ticket[key]).toLocaleString(getBrowserUiLocale())}
                   </span>
                 );
               return (
@@ -241,7 +252,9 @@ export function useTicketTable(options: TicketTableOptions) {
           id: "actions",
           enableHiding: false,
           enableSorting: false,
-          header: () => <span className="sr-only">工单操作</span>,
+          header: () => (
+            <span className="sr-only">{t("ui.ticketActions")}</span>
+          ),
           cell: ({ row }) => (
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -250,7 +263,9 @@ export function useTicketTable(options: TicketTableOptions) {
                     variant="ghost"
                     size="icon-xs"
                     disabled={disabled}
-                    aria-label={`操作 ${row.original.ticket_no}`}
+                    aria-label={t("dynamic.actionsFor", {
+                      p0: row.original.ticket_no,
+                    })}
                   />
                 }
               >
@@ -261,28 +276,28 @@ export function useTicketTable(options: TicketTableOptions) {
                   onClick={() => handlers.current.onOpen(row.original)}
                 >
                   <Eye />
-                  查看详情
+                  {t("ui.viewDetails")}
                 </DropdownMenuItem>
                 {row.original.can_edit && (
                   <DropdownMenuItem
                     onClick={() => handlers.current.onOpen(row.original, true)}
                   >
                     <Pencil />
-                    编辑
+                    {t("ui.edit")}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem
                   onClick={() => handlers.current.onCopy(row.original)}
                 >
                   <Copy />
-                  复制工单编号
+                  {t("ui.copyTicketNumber")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ),
         }),
       ]),
-    [disabled, records.length],
+    [disabled, records.length, t],
   );
   return useTable({
     features: catalogTableFeatures,
@@ -310,10 +325,12 @@ export function useTicketTable(options: TicketTableOptions) {
 export type TicketTableInstance = ReturnType<typeof useTicketTable>;
 
 export function TicketColumns({ table }: { table: TicketTableInstance }) {
+  const t = useUiTranslations();
+  const uiLabels_definitions = translateLabels(definitions, t);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="outline" />}>
-        Columns
+        {t("ui.additionalColumns")}
         <ChevronDown />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -327,8 +344,9 @@ export function TicketColumns({ table }: { table: TicketTableInstance }) {
               closeOnClick={false}
               onCheckedChange={(checked) => column.toggleVisibility(checked)}
             >
-              {definitions.find((definition) => definition.key === column.id)
-                ?.label ?? column.id}
+              {uiLabels_definitions.find(
+                (definition) => definition.key === column.id,
+              )?.label ?? column.id}
             </DropdownMenuCheckboxItem>
           ))}
       </DropdownMenuContent>
@@ -362,6 +380,8 @@ export function TicketTable({
   error: boolean;
   onOpen: (record: Ticket) => void;
 }) {
+  const t = useUiTranslations();
+
   return (
     <div aria-busy={loading} className="overflow-hidden rounded-md border">
       <Table
@@ -443,10 +463,10 @@ export function TicketTable({
                 className="text-muted-foreground h-24 text-center"
               >
                 {loading
-                  ? "加载中…"
+                  ? t("ui.loading2")
                   : error
-                    ? "数据暂不可用，请刷新重试。"
-                    : "暂无记录"}
+                    ? t("ui.dataUnavailableRefreshAndTryAgain")
+                    : t("ui.noRecords")}
               </TableCell>
             </TableRow>
           )}
@@ -463,6 +483,8 @@ export function TicketPagination({
   table: TicketTableInstance;
   disabled: boolean;
 }) {
+  const t = useUiTranslations();
+
   const page = table.state.pagination.pageIndex + 1;
   const count = Math.max(1, table.getPageCount());
   const pages = Array.from(
@@ -475,15 +497,16 @@ export function TicketPagination({
   return (
     <div className="text-muted-foreground mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
       <span>
-        {Object.values(table.state.rowSelection).filter(Boolean).length} of{" "}
-        {table.getRowCount()} row(s) selected.
+        {Object.values(table.state.rowSelection).filter(Boolean).length}{" "}
+        {t("ui.additionalof")} {table.getRowCount()}{" "}
+        {t("ui.additionalrowsselected")}
       </span>
-      <Pagination aria-label="分页" className="mx-0 w-auto">
+      <Pagination aria-label={t("ui.pagination")} className="mx-0 w-auto">
         <PaginationContent>
           <PaginationItem>
             <PaginationPrevious
-              text="上一页"
-              aria-label="上一页"
+              text={t("ui.previous")}
+              aria-label={t("ui.previous")}
               href={`?page=${page - 1}`}
               aria-disabled={disabled || !table.getCanPreviousPage()}
               className={
@@ -502,7 +525,7 @@ export function TicketPagination({
               {index > 0 && p - pages[index - 1] > 1 && <PaginationEllipsis />}
               <PaginationLink
                 href={`?page=${p}`}
-                aria-label={`第 ${p} 页`}
+                aria-label={t("dynamic.pagemessage68", { p0: p })}
                 isActive={page === p}
                 aria-disabled={disabled}
                 onClick={(event) => {
@@ -516,8 +539,8 @@ export function TicketPagination({
           ))}
           <PaginationItem>
             <PaginationNext
-              text="下一页"
-              aria-label="下一页"
+              text={t("ui.next")}
+              aria-label={t("ui.next")}
               href={`?page=${page + 1}`}
               aria-disabled={disabled || !table.getCanNextPage()}
               className={

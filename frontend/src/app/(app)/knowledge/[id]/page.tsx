@@ -1,4 +1,7 @@
 "use client";
+import { useLocale } from "next-intl";
+
+import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -12,28 +15,34 @@ import type GfmPlugin from "remark-gfm";
 import { errorMessage } from "@/lib/errors";
 
 export default function DocumentDetailPage() {
+  const locale = useLocale();
+
+  const t = useUiTranslations();
+  const uiLabels_INDEX_STATUS_LABEL = translateLabels(INDEX_STATUS_LABEL, t);
+
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data: session } = useSession();
 
-  const [doc,      setDoc]      = useState<Document | null>(null);
-  const [loading,  setLoading]  = useState(true);
-  const [editing,  setEditing]  = useState(false);
-  const [preview,  setPreview]  = useState(true);
-  const [saving,   setSaving]   = useState(false);
+  const [doc, setDoc] = useState<Document | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [preview, setPreview] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [indexing, setIndexing] = useState(false);
   const [error, setError] = useState("");
 
   // 编辑表单状态
-  const [title,       setTitle]       = useState("");
-  const [content,     setContent]     = useState("");
-  const [visibility,  setVisibility]  = useState<"public" | "private">("public");
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [isPublished, setIsPublished] = useState(false);
-  const [tags,        setTags]        = useState("");
+  const [tags, setTags] = useState("");
 
   useEffect(() => {
-    apiClient.get(`/api/v1/knowledge/${id}`)
-      .then(res => {
+    apiClient
+      .get(`/api/v1/knowledge/${id}`)
+      .then((res) => {
         const d: Document = res.data;
         setDoc(d);
         setTitle(d.title);
@@ -49,23 +58,37 @@ export default function DocumentDetailPage() {
   const isAuthor = doc?.author.id === session?.user?.id;
 
   async function handleReindex() {
-    setIndexing(true); setError("");
+    setIndexing(true);
+    setError("");
     try {
-      const response = await apiClient.post(`/api/v1/knowledge/${id}/reindex`, {}, { timeout: 60_000 });
-      setDoc(prev => prev ? { ...prev, ...response.data } : prev);
-    } catch (e) { setError(errorMessage(e)); }
-    finally { setIndexing(false); }
+      const response = await apiClient.post(
+        `/api/v1/knowledge/${id}/reindex`,
+        {},
+        { timeout: 60_000 },
+      );
+      setDoc((prev) => (prev ? { ...prev, ...response.data } : prev));
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setIndexing(false);
+    }
   }
 
   async function handleSave() {
-    setSaving(true); setError("");
+    setSaving(true);
+    setError("");
     try {
       const res = await apiClient.patch(`/api/v1/knowledge/${id}`, {
-        title:        title.trim(),
+        title: title.trim(),
         content,
         visibility,
         is_published: isPublished,
-        tags: tags ? tags.split(",").map(t => t.trim()).filter(Boolean) : null,
+        tags: tags
+          ? tags
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : null,
       });
       setDoc(res.data);
       setEditing(false);
@@ -80,7 +103,7 @@ export default function DocumentDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
-        加载中...
+        {t("ui.loading")}
       </div>
     );
   }
@@ -88,15 +111,19 @@ export default function DocumentDetailPage() {
   if (!doc) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-sm text-muted-foreground">
-        <p>文档不存在或无权访问</p>
-        <button onClick={() => router.push("/knowledge")} className="mt-2 text-primary text-xs">
-          返回知识库
+        <p>{t("ui.documentNotFoundOrAccessDenied")}</p>
+        <button
+          onClick={() => router.push("/knowledge")}
+          className="mt-2 text-primary text-xs"
+        >
+          {t("ui.backToKnowledgeBase")}
         </button>
       </div>
     );
   }
 
-  const inputCls = "w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm \
+  const inputCls =
+    "w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm \
 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
 
   return (
@@ -107,38 +134,55 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
           onClick={() => router.push("/knowledge")}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
-          <ArrowLeft size={15} /> 返回知识库
+          <ArrowLeft size={15} /> {t("ui.backToKnowledgeBase")}
         </button>
 
         <div className="flex items-center gap-2">
-          {isAuthor && !editing && doc.is_published && doc.index_status !== "empty" && <button onClick={handleReindex} disabled={indexing} className="text-sm px-3 py-1.5 border border-border rounded-lg disabled:opacity-50">{indexing ? "重建中…" : "重建索引"}</button>}
+          {isAuthor &&
+            !editing &&
+            doc.is_published &&
+            doc.index_status !== "empty" && (
+              <button
+                onClick={handleReindex}
+                disabled={indexing}
+                className="text-sm px-3 py-1.5 border border-border rounded-lg disabled:opacity-50"
+              >
+                {indexing ? t("ui.rebuilding") : t("ui.rebuildIndex")}
+              </button>
+            )}
           {editing && (
             <button
-              onClick={() => setPreview(p => !p)}
+              onClick={() => setPreview((p) => !p)}
               className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-border
                          rounded-lg hover:bg-muted/50 transition-colors"
             >
               {preview ? <EyeOff size={14} /> : <Eye size={14} />}
-              {preview ? "编辑" : "预览"}
+              {preview ? t("ui.edit") : t("ui.preview")}
             </button>
           )}
           {isAuthor && !editing && (
             <button
-              onClick={() => { setEditing(true); setPreview(false); }}
+              onClick={() => {
+                setEditing(true);
+                setPreview(false);
+              }}
               className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-border
                          rounded-lg hover:bg-muted/50 transition-colors"
             >
-              <Edit2 size={14} /> 编辑
+              <Edit2 size={14} /> {t("ui.edit")}
             </button>
           )}
           {editing && (
             <>
               <button
-                onClick={() => { setEditing(false); setPreview(true); }}
+                onClick={() => {
+                  setEditing(false);
+                  setPreview(true);
+                }}
                 className="text-sm px-3 py-1.5 border border-border rounded-lg
                            hover:bg-muted/50 transition-colors"
               >
-                取消
+                {t("ui.cancel")}
               </button>
               <button
                 onClick={handleSave}
@@ -147,16 +191,31 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
                            text-primary-foreground rounded-lg hover:bg-primary/90
                            disabled:opacity-50 transition-colors"
               >
-                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                保存
+                {saving ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Save size={13} />
+                )}
+                {t("ui.save")}
               </button>
             </>
           )}
         </div>
       </div>
 
-      {error && <p role="alert" className="mx-6 mt-3 text-sm text-red-600">{error}</p>}
-      {!editing && <p className="px-8 py-3 text-xs text-muted-foreground">{INDEX_STATUS_LABEL[doc.index_status ?? "pending"]} · 当前向量块 {doc.indexed_vectors ?? 0}/{doc.indexed_chunks ?? 0}。私有文档仅作者可用于 AI 问答。</p>}
+      {error && (
+        <p role="alert" className="mx-6 mt-3 text-sm text-red-600">
+          {error}
+        </p>
+      )}
+      {!editing && (
+        <p className="px-8 py-3 text-xs text-muted-foreground">
+          {uiLabels_INDEX_STATUS_LABEL[doc.index_status ?? "pending"]}{" "}
+          {t("ui.currentChunks")}
+          {doc.indexed_vectors ?? 0}/{doc.indexed_chunks ?? 0}
+          {t("ui.privateDocumentsAreAvailableToTheirAuthorsForAiChatOnly")}
+        </p>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* 主内容区 */}
@@ -165,21 +224,21 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
             <>
               <input
                 value={title}
-                onChange={e => setTitle(e.target.value)}
+                onChange={(e) => setTitle(e.target.value)}
                 className="w-full text-2xl font-bold bg-transparent border-none outline-none
                            placeholder:text-muted-foreground/50 mb-4"
-                placeholder="文档标题"
+                placeholder={t("ui.documentTitle2")}
               />
               {preview ? (
                 <MarkdownPreview content={content} />
               ) : (
                 <textarea
                   value={content}
-                  onChange={e => setContent(e.target.value)}
+                  onChange={(e) => setContent(e.target.value)}
                   className="w-full min-h-[500px] bg-transparent border-none outline-none
                              text-sm leading-relaxed resize-none font-mono
                              placeholder:text-muted-foreground/40"
-                  placeholder="文档内容（支持 Markdown）..."
+                  placeholder={t("ui.documentContentMarkdownSupported")}
                 />
               )}
             </>
@@ -187,24 +246,30 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
             <>
               <h1 className="text-2xl font-bold mb-2">{doc.title}</h1>
               <p className="text-xs text-muted-foreground mb-6">
-                {doc.author.name} · {new Date(doc.updated_at).toLocaleString("zh-CN")} · 👁 {doc.view_count}
+                {doc.author.name} ·{" "}
+                {new Date(doc.updated_at).toLocaleString(locale)} · 👁{" "}
+                {doc.view_count}
               </p>
               {doc.content ? (
                 <MarkdownPreview content={doc.content} />
               ) : doc.file_url ? (
-                <div className="flex items-center justify-center h-40 border border-dashed
-                                border-border rounded-xl text-sm text-muted-foreground">
+                <div
+                  className="flex items-center justify-center h-40 border border-dashed
+                                border-border rounded-xl text-sm text-muted-foreground"
+                >
                   <a
                     href={`${process.env.NEXT_PUBLIC_API_URL}${doc.file_url}`}
                     target="_blank"
                     rel="noreferrer"
                     className="text-primary underline"
                   >
-                    {doc.file_original_name ?? "查看文件"}
+                    {doc.file_original_name ?? t("ui.viewFile")}
                   </a>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">暂无内容</p>
+                <p className="text-sm text-muted-foreground">
+                  {t("ui.noContentYet")}
+                </p>
               )}
             </>
           )}
@@ -213,25 +278,36 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
         {/* 右侧设置（仅编辑模式） */}
         {editing && (
           <div className="w-64 border-l border-border p-5 flex-shrink-0 space-y-5 overflow-y-auto">
-            <h3 className="text-sm font-semibold">文档设置</h3>
+            <h3 className="text-sm font-semibold">
+              {t("ui.documentSettings")}
+            </h3>
 
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-2">发布状态</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-2">
+                {t("ui.publicationStatus")}
+              </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={isPublished}
-                  onChange={e => setIsPublished(e.target.checked)}
+                  onChange={(e) => setIsPublished(e.target.checked)}
                   className="accent-primary"
                 />
-                <span className="text-sm">{isPublished ? "已发布" : "草稿"}</span>
+                <span className="text-sm">
+                  {isPublished ? t("ui.published") : t("ui.draft")}
+                </span>
               </label>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-2">可见性</label>
-              {(["public", "private"] as const).map(v => (
-                <label key={v} className="flex items-center gap-2 cursor-pointer mb-1.5">
+              <label className="block text-xs font-medium text-muted-foreground mb-2">
+                {t("ui.visibility")}
+              </label>
+              {(["public", "private"] as const).map((v) => (
+                <label
+                  key={v}
+                  className="flex items-center gap-2 cursor-pointer mb-1.5"
+                >
                   <input
                     type="radio"
                     name="visibility"
@@ -240,17 +316,21 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
                     onChange={() => setVisibility(v)}
                     className="accent-primary"
                   />
-                  <span className="text-sm">{v === "public" ? "🌐 公开" : "🔒 私有"}</span>
+                  <span className="text-sm">
+                    {v === "public" ? t("ui.public") : t("ui.private")}
+                  </span>
                 </label>
               ))}
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-2">标签</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-2">
+                {t("ui.tags")}
+              </label>
               <input
                 value={tags}
-                onChange={e => setTags(e.target.value)}
-                placeholder="逗号分隔"
+                onChange={(e) => setTags(e.target.value)}
+                placeholder={t("ui.commaSeparated")}
                 className={inputCls}
               />
             </div>
@@ -263,16 +343,22 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
 
 // ── Markdown 预览 ─────────────────────────────────────────────
 function MarkdownPreview({ content }: { content: string }) {
-  const [ReactMarkdown, setRM]  = useState<typeof MarkdownRenderer | null>(null);
-  const [remarkGfm,     setGfm] = useState<typeof GfmPlugin | null>(null);
+  const t = useUiTranslations();
+
+  const [ReactMarkdown, setRM] = useState<typeof MarkdownRenderer | null>(null);
+  const [remarkGfm, setGfm] = useState<typeof GfmPlugin | null>(null);
 
   useState(() => {
-    import("react-markdown").then(m => setRM(() => m.default));
-    import("remark-gfm").then(m => setGfm(() => m.default));
+    import("react-markdown").then((m) => setRM(() => m.default));
+    import("remark-gfm").then((m) => setGfm(() => m.default));
   });
 
   if (!ReactMarkdown || !remarkGfm) {
-    return <div className="text-sm text-muted-foreground">加载预览中...</div>;
+    return (
+      <div className="text-sm text-muted-foreground">
+        {t("ui.loadingPreview")}
+      </div>
+    );
   }
 
   return (

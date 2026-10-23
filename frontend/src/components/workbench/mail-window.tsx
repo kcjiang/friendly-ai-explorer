@@ -1,4 +1,8 @@
 "use client";
+import { getBrowserUiLocale } from "@/i18n/browser";
+
+import { systemMessage } from "@/i18n/system-messages";
+import { useUiTranslations } from "@/i18n/client";
 
 import {
   ChevronLeft,
@@ -96,7 +100,7 @@ function addresses(value: string) {
     .filter(Boolean);
 }
 function date(value: string) {
-  return new Date(value).toLocaleString();
+  return new Date(value).toLocaleString(getBrowserUiLocale());
 }
 function SetupDialog({
   open,
@@ -111,6 +115,8 @@ function SetupDialog({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const t = useUiTranslations();
+
   return (
     <Dialog
       open={open}
@@ -121,7 +127,9 @@ function SetupDialog({
       <DialogContent className="flex max-h-[90dvh] flex-col sm:max-w-2xl">
         <DialogHeader className="shrink-0">
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>邮箱设置与工作台配置独立保存。</DialogDescription>
+          <DialogDescription>
+            {t("ui.mailboxSettingsAreSavedSeparatelyFromWorkbenchSettings")}
+          </DialogDescription>
         </DialogHeader>
         <div className="min-h-0 overflow-y-auto overscroll-contain px-1">
           {children}
@@ -145,6 +153,8 @@ export function MailWindow({
   onChanged: () => void;
   onUnreadChange?: (count: number) => void;
 }) {
+  const t = useUiTranslations();
+
   const [data, setData] = useState<MailOverview>({
     mailboxes: [],
     folders: [],
@@ -252,7 +262,7 @@ export function MailWindow({
       clearTimeout(timer);
     };
   }, [open, list, data]);
-  async function act(action: () => Promise<unknown>, message = "已保存") {
+  async function act(action: () => Promise<unknown>, message = t("ui.saved")) {
     setBusy(true);
     setError("");
     setNotice("");
@@ -305,13 +315,15 @@ export function MailWindow({
     }
     if (mailId && opened.current !== mailId) {
       if (draft) {
-        setNotice("请先发送或放弃当前草稿，再打开关联邮件。");
+        setNotice(
+          t("ui.sendOrDiscardTheCurrentDraftBeforeOpeningALinkedMessage"),
+        );
         return;
       }
       opened.current = mailId;
       void readMail(mailId);
     }
-  }, [open, mailId, readMail, draft]);
+  }, [open, mailId, readMail, draft, t]);
   function compose(mode: "new" | "reply" | "forward") {
     readVersion.current++;
     setLoadingMail(false);
@@ -385,7 +397,7 @@ export function MailWindow({
       <FloatingWindow
         open={open}
         onClose={onClose}
-        title="邮箱"
+        title={t("ui.email")}
         containScroll
         initialSize={{ width: 1120, height: 740 }}
       >
@@ -397,7 +409,7 @@ export function MailWindow({
               onClick={() => compose("new")}
             >
               <Plus />
-              写邮件
+              {t("ui.compose")}
             </Button>
             <Button
               variant="outline"
@@ -406,7 +418,7 @@ export function MailWindow({
               onClick={() =>
                 void act(
                   () => api.post(`${endpoint}/${boxId}/sync`),
-                  "已开始收取，完成后自动显示",
+                  t("ui.collectionStartedMessagesWillAppearWhenComplete"),
                 )
               }
             >
@@ -415,7 +427,7 @@ export function MailWindow({
                   selectedBox?.status === "syncing" ? "animate-spin" : ""
                 }
               />
-              收取全部
+              {t("ui.collectAll")}
             </Button>
             <Button
               variant="ghost"
@@ -424,7 +436,7 @@ export function MailWindow({
               onClick={() => setFolderOpen(true)}
             >
               <FolderPlus />
-              文件夹
+              {t("ui.folders")}
             </Button>
             <Button
               variant="ghost"
@@ -437,12 +449,12 @@ export function MailWindow({
               }}
             >
               <SlidersHorizontal />
-              分类规则
+              {t("ui.classificationRules")}
             </Button>
             <Input
               className="ml-auto w-48 min-w-36 flex-1 @[700px]/mail:max-w-80"
-              aria-label="搜索邮件主题"
-              placeholder="搜索邮件主题"
+              aria-label={t("ui.searchEmailSubjects")}
+              placeholder={t("ui.searchEmailSubjects")}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -465,13 +477,13 @@ export function MailWindow({
           )}
           {selectedBox?.error && (
             <p role="alert" className="text-destructive shrink-0 text-sm">
-              {selectedBox.error}
+              {systemMessage(selectedBox.error, t)}
               <Button
                 size="sm"
                 variant="link"
                 onClick={() => editBox(selectedBox)}
               >
-                修改邮箱设置
+                {t("ui.editMailboxSettings")}
               </Button>
             </p>
           )}
@@ -480,7 +492,7 @@ export function MailWindow({
               <aside className="flex min-h-0 flex-col gap-2 overflow-auto overscroll-contain border-b pb-2 @[700px]/mail:border-r @[700px]/mail:border-b-0 @[700px]/mail:pr-2">
                 <div className="flex gap-1">
                   <NativeSelect
-                    aria-label="当前邮箱"
+                    aria-label={t("ui.currentMailbox")}
                     disabled={!!draft || busy}
                     className="min-w-0 flex-1"
                     value={boxId}
@@ -490,7 +502,7 @@ export function MailWindow({
                     }}
                   >
                     <NativeSelectOption value="" disabled>
-                      选择邮箱
+                      {t("ui.selectMailbox")}
                     </NativeSelectOption>
                     {data.mailboxes.map((b) => (
                       <NativeSelectOption key={b.id} value={b.id}>
@@ -501,7 +513,7 @@ export function MailWindow({
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    aria-label="添加邮箱"
+                    aria-label={t("ui.addMailbox")}
                     onClick={() => editBox()}
                   >
                     <Plus />
@@ -510,7 +522,7 @@ export function MailWindow({
                     variant="ghost"
                     size="icon-sm"
                     className="@[700px]/mail:hidden"
-                    aria-label="设置当前邮箱"
+                    aria-label={t("ui.setCurrentMailbox")}
                     disabled={!selectedBox}
                     onClick={() => editBox(selectedBox)}
                   >
@@ -525,10 +537,10 @@ export function MailWindow({
                   onClick={() => editBox(selectedBox)}
                 >
                   <Settings2 />
-                  邮箱设置
+                  {t("ui.mailboxSettings")}
                 </Button>
                 <NativeSelect
-                  aria-label="邮件文件夹"
+                  aria-label={t("ui.mailFolder")}
                   className="@[700px]/mail:hidden"
                   value={folderId}
                   onChange={(e) => {
@@ -537,7 +549,7 @@ export function MailWindow({
                   }}
                 >
                   <NativeSelectOption value="" disabled>
-                    选择文件夹
+                    {t("ui.selectFolder")}
                   </NativeSelectOption>
                   {folders.map((f) => (
                     <NativeSelectOption key={f.id} value={f.id}>
@@ -580,7 +592,7 @@ export function MailWindow({
                 {!data.mailboxes.length && (
                   <Button variant="outline" onClick={() => editBox()}>
                     <Mail />
-                    登录邮箱
+                    {t("ui.signInToMailbox")}
                   </Button>
                 )}
               </aside>
@@ -591,7 +603,8 @@ export function MailWindow({
                 <>
                   <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-1">
                     <p className="text-muted-foreground text-sm">
-                      发件人：{selectedBox?.address}
+                      {t("ui.from")}
+                      {selectedBox?.address}
                     </p>
                     <Field
                       orientation="horizontal"
@@ -601,7 +614,7 @@ export function MailWindow({
                         className="w-14 shrink-0 grow-0"
                         htmlFor="mail-compose-to"
                       >
-                        收件人
+                        {t("ui.to2")}
                       </FieldLabel>
                       <Input
                         className="min-w-0 flex-1"
@@ -610,7 +623,7 @@ export function MailWindow({
                         onChange={(e) =>
                           setDraft({ ...draft, to: e.target.value })
                         }
-                        placeholder="多个地址使用逗号分隔"
+                        placeholder={t("ui.separateAddressesWithCommas")}
                       />
                     </Field>
                     <Collapsible
@@ -627,15 +640,13 @@ export function MailWindow({
                           />
                         }
                       >
-                        {extraRecipients
-                          ? "收起抄送 / 密送"
-                          : "添加抄送 / 密送"}
+                        {extraRecipients ? t("ui.hideCcBcc") : t("ui.addCcBcc")}
                       </CollapsibleTrigger>
                       <CollapsibleContent className="space-y-2 pt-2">
                         {(
                           [
-                            ["cc", "抄送"],
-                            ["bcc", "密送"],
+                            ["cc", t("ui.cc2")],
+                            ["bcc", t("ui.bcc")],
                           ] as const
                         ).map(([key, label]) => (
                           <Field
@@ -656,7 +667,7 @@ export function MailWindow({
                               onChange={(e) =>
                                 setDraft({ ...draft, [key]: e.target.value })
                               }
-                              placeholder="多个地址使用逗号分隔"
+                              placeholder={t("ui.separateAddressesWithCommas")}
                             />
                           </Field>
                         ))}
@@ -670,7 +681,7 @@ export function MailWindow({
                         className="w-14 shrink-0 grow-0"
                         htmlFor="mail-compose-subject"
                       >
-                        主题
+                        {t("ui.subject")}
                       </FieldLabel>
                       <Input
                         className="min-w-0 flex-1"
@@ -691,7 +702,7 @@ export function MailWindow({
                       }
                     />
                     <label className="block text-sm">
-                      添加附件（每个最多 5MB）
+                      {t("ui.addAttachmentsUpTo5MbEach")}
                       <Input
                         type="file"
                         multiple
@@ -700,7 +711,9 @@ export function MailWindow({
                           e.target.value = "";
                           for (const file of files) {
                             if (file.size > 5_000_000) {
-                              setError("单个附件不能超过5MB");
+                              setError(
+                                t("ui.eachAttachmentMustBeNoLargerThan5Mb"),
+                              );
                               continue;
                             }
                             const content = await new Promise<string>(
@@ -762,46 +775,46 @@ export function MailWindow({
                             { timeout: 120000 },
                           );
                           setDraft(null);
-                          return response.data.warning || "邮件已发送";
-                        }, "发送完成，请查看已发送文件夹")
+                          return response.data.warning || t("ui.emailSent");
+                        }, t("ui.sendingCompleteCheckTheSentFolder"))
                       }
                     >
                       <Send />
-                      发送
+                      {t("ui.send")}
                     </Button>
                     <Button
                       variant="outline"
                       disabled={busy}
                       onClick={() => setDiscard(true)}
                     >
-                      放弃草稿
+                      {t("ui.discardDraft")}
                     </Button>
                   </div>
                 </>
               ) : loadingMail ? (
                 <p className="text-muted-foreground p-4 text-sm">
-                  正在读取邮件并同步已读…
+                  {t("ui.loadingEmailAndSynchronizingReadStatus")}
                 </p>
               ) : mail ? (
                 <>
                   <div className="flex shrink-0 flex-wrap gap-2 border-b pb-2">
                     <Button variant="ghost" size="sm" onClick={clearReader}>
                       <ChevronLeft />
-                      返回
+                      {t("ui.back")}
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => compose("reply")}
                     >
-                      回复
+                      {t("ui.reply")}
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => compose("forward")}
                     >
-                      转发
+                      {t("ui.forward")}
                     </Button>
                   </div>
                   <MailReader
@@ -832,10 +845,12 @@ export function MailWindow({
                             {!item.is_read && (
                               <span className="bg-primary mr-2 inline-block size-1.5 rounded-full" />
                             )}
-                            {item.subject || "（无主题）"}
+                            {item.subject || t("ui.noSubject")}
                           </span>
                           {item.rule_id && (
-                            <Badge variant="secondary">已分类</Badge>
+                            <Badge variant="secondary">
+                              {t("ui.classified")}
+                            </Badge>
                           )}
                         </div>
                         <p className="text-muted-foreground mt-1 truncate text-xs">
@@ -849,14 +864,15 @@ export function MailWindow({
                     {!items.length && (
                       <p className="text-muted-foreground p-6 text-center text-sm">
                         {selectedBox?.status === "syncing"
-                          ? "正在同步最近30天的邮件…"
-                          : "此文件夹最近30天没有邮件"}
+                          ? t("ui.synchronizingMailFromTheLast30Days")
+                          : t("ui.noMailInThisFolderFromTheLast30Days")}
                       </p>
                     )}
                   </div>
                   <div className="text-muted-foreground flex shrink-0 items-center gap-2 border-t pt-2 text-xs">
                     <span className="mr-auto">
-                      {total} 封 · 第 {page} 页
+                      {total} {t("ui.messagesPage")}
+                      {page} {t("ui.page")}
                     </span>
                     <Button
                       size="sm"
@@ -864,7 +880,7 @@ export function MailWindow({
                       disabled={page <= 1}
                       onClick={() => setPage((p) => p - 1)}
                     >
-                      上一页
+                      {t("ui.previous")}
                     </Button>
                     <Button
                       size="sm"
@@ -872,7 +888,7 @@ export function MailWindow({
                       disabled={page * 30 >= total}
                       onClick={() => setPage((p) => p + 1)}
                     >
-                      下一页
+                      {t("ui.next")}
                     </Button>
                   </div>
                 </>
@@ -884,7 +900,7 @@ export function MailWindow({
       <SetupDialog
         open={open && setup}
         onClose={() => setSetup(false)}
-        title={editId ? "邮箱设置" : "登录邮箱"}
+        title={editId ? t("ui.mailboxSettings") : t("ui.signInToMailbox")}
         footer={
           <Button
             disabled={busy}
@@ -894,10 +910,10 @@ export function MailWindow({
                 if (editId) await api.put(`${endpoint}/${editId}`, payload);
                 else await api.post(endpoint, payload);
                 setSetup(false);
-              }, "邮箱已保存，开始同步最近30天邮件")
+              }, t("ui.mailboxSavedSynchronizingMailFromTheLast30Days"))
             }
           >
-            保存并连接
+            {t("ui.saveAndConnect")}
           </Button>
         }
       >
@@ -908,15 +924,15 @@ export function MailWindow({
             </p>
           )}
           <p className="text-muted-foreground text-sm">
-            使用 IMAP 收取、SMTP 发送。若服务商要求，请填写应用专用密码。
+            {t("ui.receiveWithImapAndSendWithSmtpUseAnAppPasswordIf")}
           </p>
           {(
             [
-              ["address", "邮箱地址"],
-              ["username", "登录账号"],
-              ["password", "密码 / 应用专用密码"],
-              ["imap_host", "IMAP 服务器"],
-              ["smtp_host", "SMTP 服务器"],
+              ["address", t("ui.emailAddress")],
+              ["username", t("ui.loginAccount")],
+              ["password", t("ui.passwordAppPassword")],
+              ["imap_host", t("ui.imapServer")],
+              ["smtp_host", t("ui.smtpServer")],
             ] as const
           ).map(([key, label]) => (
             <Field key={key}>
@@ -927,7 +943,9 @@ export function MailWindow({
                 type={key === "password" ? "password" : "text"}
                 value={box[key]}
                 placeholder={
-                  key === "password" && editId ? "留空保留原密码" : ""
+                  key === "password" && editId
+                    ? t("ui.leaveBlankToKeepCurrentPassword")
+                    : ""
                 }
                 onChange={(e) => setBox({ ...box, [key]: e.target.value })}
               />
@@ -937,7 +955,7 @@ export function MailWindow({
             <div className="grid grid-cols-2 gap-3" key={protocol}>
               <Field>
                 <FieldLabel htmlFor={`mail-${protocol}-port`}>
-                  {protocol.toUpperCase()} 端口
+                  {protocol.toUpperCase()} {t("ui.port")}
                 </FieldLabel>
                 <Input
                   id={`mail-${protocol}-port`}
@@ -955,7 +973,7 @@ export function MailWindow({
               </Field>
               <Field>
                 <FieldLabel htmlFor={`mail-${protocol}-security`}>
-                  加密方式
+                  {t("ui.encryption")}
                 </FieldLabel>
                 <NativeSelect
                   id={`mail-${protocol}-security`}
@@ -977,7 +995,7 @@ export function MailWindow({
       <SetupDialog
         open={open && folderOpen}
         onClose={() => setFolderOpen(false)}
-        title="新建邮箱文件夹"
+        title={t("ui.newMailFolder")}
         footer={
           <Button
             disabled={busy || !folderName.trim()}
@@ -988,15 +1006,17 @@ export function MailWindow({
                 });
                 setFolderOpen(false);
                 setFolderName("");
-              }, "已创建文件夹，正在同步")
+              }, t("ui.folderCreatedSynchronizing"))
             }
           >
-            创建文件夹
+            {t("ui.createFolder")}
           </Button>
         }
       >
         <Field>
-          <FieldLabel htmlFor="mail-folder-name">文件夹名称</FieldLabel>
+          <FieldLabel htmlFor="mail-folder-name">
+            {t("ui.folderName")}
+          </FieldLabel>
           <Input
             id="mail-folder-name"
             value={folderName}
@@ -1008,14 +1028,14 @@ export function MailWindow({
             </p>
           )}
           <p className="text-muted-foreground text-sm">
-            将在原邮箱创建，其他客户端也可见。
+            {t("ui.createdInYourMailboxAndVisibleInOtherClients")}
           </p>
         </Field>
       </SetupDialog>
       <SetupDialog
         open={open && rulesOpen}
         onClose={() => setRulesOpen(false)}
-        title="邮件分类规则"
+        title={t("ui.mailClassificationRules")}
         footer={
           <Button
             disabled={
@@ -1031,10 +1051,10 @@ export function MailWindow({
                 else await api.post(`${endpoint}/${boxId}/rules`, rule);
                 setRule(blankRule);
                 setRuleId("");
-              }, "规则已保存，下次收取时将移动匹配的原邮件")
+              }, t("ui.rulesSavedMatchingMessagesWillMoveOnTheNextCollection"))
             }
           >
-            {ruleId ? "保存规则" : "添加规则"}
+            {ruleId ? t("ui.saveRules") : t("ui.addRule")}
           </Button>
         }
       >
@@ -1045,7 +1065,9 @@ export function MailWindow({
             </p>
           )}
           <p className="text-muted-foreground text-sm">
-            发件人和主题条件同时满足才匹配；多个主题关键词满足其一即可。匹配后移动原邮件，不改变已读状态。
+            {t(
+              "ui.senderAndSubjectConditionsMustBothMatchAnySubjectKeywordMayMatch",
+            )}
           </p>
           {data.rules
             .filter((r) => r.mailbox_id === boxId)
@@ -1068,7 +1090,7 @@ export function MailWindow({
                     });
                   }}
                 >
-                  {r.name} · {r.enabled ? "启用" : "停用"}
+                  {r.name} · {r.enabled ? t("ui.enable") : t("ui.deactivate")}
                 </Button>
                 <Button
                   variant="ghost"
@@ -1086,12 +1108,12 @@ export function MailWindow({
                     )
                   }
                 >
-                  {r.enabled ? "停用" : "启用"}
+                  {r.enabled ? t("ui.deactivate") : t("ui.enable")}
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={`删除规则 ${r.name}`}
+                  aria-label={t("dynamic.deleteRule", { p0: r.name })}
                   onClick={() => setDeleteRule(r)}
                 >
                   <Trash2 />
@@ -1099,7 +1121,7 @@ export function MailWindow({
               </div>
             ))}
           <Field>
-            <FieldLabel htmlFor="mail-rule-name">规则名称</FieldLabel>
+            <FieldLabel htmlFor="mail-rule-name">{t("ui.ruleName")}</FieldLabel>
             <Input
               id="mail-rule-name"
               value={rule.name}
@@ -1108,7 +1130,7 @@ export function MailWindow({
           </Field>
           <Field>
             <FieldLabel htmlFor="mail-rule-sender">
-              发件人邮箱或 @域名
+              {t("ui.senderEmailOrDomain")}
             </FieldLabel>
             <Input
               id="mail-rule-sender"
@@ -1119,7 +1141,7 @@ export function MailWindow({
           </Field>
           <Field>
             <FieldLabel htmlFor="mail-rule-keywords">
-              主题关键词（逗号分隔）
+              {t("ui.subjectKeywordsCommaSeparated")}
             </FieldLabel>
             <Input
               id="mail-rule-keywords"
@@ -1132,7 +1154,7 @@ export function MailWindow({
           </Field>
           <CatalogCombobox
             id="mail-rule-folder"
-            label="移动到文件夹"
+            label={t("ui.moveToFolder")}
             value={rule.folder_id ? [rule.folder_id] : []}
             options={folders.map((f) => ({ value: f.id, label: f.path }))}
             onChange={(values) =>
@@ -1147,17 +1169,19 @@ export function MailWindow({
                 setRule(blankRule);
               }}
             >
-              取消编辑，新增规则
+              {t("ui.cancelEditingAndAddARule")}
             </Button>
           )}
         </div>
       </SetupDialog>
       <ConfirmDialog
         open={!!deleteRule}
-        title="删除分类规则？"
-        description="已移动的邮件保留在当前文件夹中。"
+        title={t("ui.deleteClassificationRule")}
+        description={t(
+          "ui.previouslyMovedMessagesWillRemainInTheirCurrentFolder",
+        )}
         busy={busy}
-        confirmLabel="删除规则"
+        confirmLabel={t("ui.deleteRule")}
         onCancel={() => setDeleteRule(null)}
         onConfirm={() => {
           if (deleteRule)
@@ -1171,10 +1195,10 @@ export function MailWindow({
       />
       <ConfirmDialog
         open={discard}
-        title="放弃未发送的草稿？"
-        description="草稿内容将被清除。"
+        title={t("ui.discardUnsentDraft")}
+        description={t("ui.theDraftWillBeCleared")}
         busy={busy}
-        confirmLabel="放弃草稿"
+        confirmLabel={t("ui.discardDraft")}
         onCancel={() => setDiscard(false)}
         onConfirm={() => {
           setDraft(null);

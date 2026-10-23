@@ -4,6 +4,7 @@ from app.ai.router import chat, parse_json
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User, UserRole
 import logging
+from app.i18n import output_locale
 
 TODO_PROMPT = """你是一位 FAE 团队的 AI 助理，请根据工程师当前的工单情况，生成今日的工作 TODO 清单。
 
@@ -46,7 +47,7 @@ async def generate_todos(user: User, db: AsyncSession) -> list[dict]:
     tickets = result.scalars().all()
 
     if not tickets:
-        return [{"task": "今日暂无活跃工单，可整理知识库或学习新技术", "priority": "trivial"}]
+        return [{"task": "今日暂无活跃工单，可整理知识库或学习新技术" if output_locale.get() == "zh-CN" else "No active tickets today. Review the knowledge base or learn something new.", "priority": "trivial"}]
 
     ticket_lines = "\n".join(
         f"- [{t.priority.value.upper()}] {t.ticket_no}: {t.title[:100]}（状态：{t.status.value}）"
@@ -66,4 +67,5 @@ async def generate_todos(user: User, db: AsyncSession) -> list[dict]:
         return todos if isinstance(todos, list) else []
     except Exception:
         logging.getLogger(__name__).warning("TODO 生成失败，返回简化清单", exc_info=True, extra={"details": {"task": "todo", "active_ticket_count": len(tickets)}})
-        return [{"task": f"共 {len(tickets)} 个活跃工单待处理", "priority": "major"}]
+        task = f"共 {len(tickets)} 个活跃工单待处理" if output_locale.get() == "zh-CN" else f"Review {len(tickets)} active ticket{'s' if len(tickets) != 1 else ''}"
+        return [{"task": task, "priority": "major"}]

@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 import {
   type ComponentProps,
@@ -83,6 +84,8 @@ export function WorkbenchDragCards({
   onSubmit: (messageId: string, automationId: string) => void;
   onDraggingChange: (active: boolean) => void;
 }) {
+  const t = useUiTranslations();
+
   const frames = useRef(new Map<string, Frame>());
   const [preview, setPreview] = useState<Frame | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -107,15 +110,16 @@ export function WorkbenchDragCards({
         collisionDetection={collisions}
         accessibility={{
           screenReaderInstructions: {
-            draggable:
-              "按空格拿起卡片，方向键移动，再按空格放下，Esc 取消。消息卡片按 Enter 查看详情。",
+            draggable: t("ui.pressSpaceToPickUpACardArrowKeysToMoveSpace"),
           },
           announcements: {
-            onDragStart: () => "已拿起卡片，使用方向键移动。",
+            onDragStart: () => t("ui.cardPickedUpUseArrowKeysToMove"),
             onDragOver: ({ over }) =>
-              over ? "卡片已让位，可在此处放下。" : "已移出可放置区域。",
-            onDragEnd: ({ over }) => (over ? "卡片已放下。" : "已取消移动。"),
-            onDragCancel: () => "已取消移动，卡片恢复原位。",
+              over ? t("ui.dropTargetAvailable") : t("ui.outsideTheDropArea"),
+            onDragEnd: ({ over }) =>
+              over ? t("ui.cardDropped") : t("ui.moveCancelled"),
+            onDragCancel: () =>
+              t("ui.moveCancelledCardRestoredToItsOriginalPosition"),
           },
         }}
         onDragStart={({ active }) => {

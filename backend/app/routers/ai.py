@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 from fastapi import APIRouter, Depends
 import json
 import logging
@@ -30,9 +31,9 @@ class ChatRequest(BaseModel):
     @model_validator(mode="after")
     def bounded_history(self):
         if sum(len(turn.content) for turn in self.history) > 16000:
-            raise ValueError("对话历史过长，请开始新对话")
+            raise ValueError(system_message("errors.conversationHistoryIsTooLongStartANewConversation"))
         if any(turn.role != ("user" if index % 2 == 0 else "assistant") for index, turn in enumerate(self.history)) or len(self.history) % 2:
-            raise ValueError("历史必须是完整的用户与助手对话轮次")
+            raise ValueError(system_message("errors.historyMustContainCompleteUserAndAssistantTurns"))
         return self
 
 
@@ -55,7 +56,7 @@ async def chat(
             yield "data: " + json.dumps({"error": str(e)}, ensure_ascii=False) + "\n\n"
         except Exception:
             logging.getLogger(__name__).warning("AI chat failed before completion")
-            yield 'data: {"error":"AI 请求失败，请稍后重试或联系管理员"}\n\n'
+            yield "data: " + json.dumps({"error": system_message("errors.aiRequestFailed")}) + "\n\n"
         finally:
             yield "data: [DONE]\n\n"
 

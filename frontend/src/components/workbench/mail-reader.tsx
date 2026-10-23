@@ -1,4 +1,7 @@
 "use client";
+import { useLocale } from "next-intl";
+
+import { useUiTranslations } from "@/i18n/client";
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/base/button";
@@ -11,6 +14,10 @@ export function MailReader({
   mail: MailItem;
   onDownload: (index: number, name: string) => void;
 }) {
+  const locale = useLocale();
+
+  const t = useUiTranslations();
+
   const [imagesFor, setImagesFor] = useState("");
   const showImages = imagesFor === mail.id;
   const html = useMemo(() => {
@@ -27,30 +34,41 @@ export function MailReader({
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden py-2">
       <header className="max-h-[35%] shrink-0 overflow-y-auto overscroll-contain">
         <h3 className="font-medium break-words">
-          {mail.subject || "（无主题）"}
+          {mail.subject || t("ui.noSubject")}
         </h3>
         <div className="text-muted-foreground mt-2 space-y-1 text-xs break-all">
-          <p>发件人：{mail.sender}</p>
-          <p>收件人：{mail.recipients}</p>
-          {mail.cc && <p>抄送：{mail.cc}</p>}
-          <p>{new Date(mail.received_at).toLocaleString()}</p>
+          <p>
+            {t("ui.from")}
+            {mail.sender}
+          </p>
+          <p>
+            {t("ui.to")}
+            {mail.recipients}
+          </p>
+          {mail.cc && (
+            <p>
+              {t("ui.cc")}
+              {mail.cc}
+            </p>
+          )}
+          <p>{new Date(mail.received_at).toLocaleString(locale)}</p>
         </div>
       </header>
       {mail.has_remote_images && !showImages && (
         <div className="text-muted-foreground flex shrink-0 items-center gap-2 text-xs">
-          <span>此邮件包含外部图片</span>
+          <span>{t("ui.thisMessageContainsExternalImages")}</span>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setImagesFor(mail.id)}
           >
-            显示外部图片
+            {t("ui.showExternalImages")}
           </Button>
         </div>
       )}
       <iframe
         key={mail.id + String(showImages)}
-        title="邮件原文"
+        title={t("ui.originalEmail")}
         sandbox="allow-popups allow-popups-to-escape-sandbox"
         referrerPolicy="no-referrer"
         className="min-h-0 w-full flex-1 overscroll-none border-0 bg-white"

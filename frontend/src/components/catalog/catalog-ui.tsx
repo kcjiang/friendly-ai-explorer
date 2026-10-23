@@ -1,6 +1,8 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
-import { zhCN } from "catalog-day-picker/locale";
+import { zhCN, enUS } from "catalog-day-picker/locale";
+import { useLocale } from "next-intl";
 import { format, isValid, parseISO } from "date-fns";
 import { CalendarDays, Trash2 } from "lucide-react";
 import { type ReactElement, type ReactNode, useRef, useState } from "react";
@@ -90,11 +92,13 @@ export function Identification({
   children: ReactElement;
   name: string;
 }) {
+  const t = useUiTranslations();
+
   return (
     <HoverCard>
       <HoverCardTrigger render={children} />
       <HoverCardContent align="start">
-        <p className="font-medium">识别名称</p>
+        <p className="font-medium">{t("ui.identificationName")}</p>
         <p className="text-muted-foreground mt-1 break-words">{name}</p>
       </HoverCardContent>
     </HoverCard>
@@ -122,6 +126,8 @@ export function ConfirmDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const t = useUiTranslations();
+
   const cancelRef = useRef<HTMLButtonElement>(null);
   return (
     <AlertDialog
@@ -152,14 +158,14 @@ export function ConfirmDialog({
         )}
         <AlertDialogFooter>
           <AlertDialogCancel ref={cancelRef} disabled={busy}>
-            {destructive ? "取消" : "继续编辑"}
+            {destructive ? t("ui.cancel") : t("ui.continueEditing")}
           </AlertDialogCancel>
           <AlertDialogAction
             variant={destructive ? "destructive" : "default"}
             disabled={busy}
             onClick={onConfirm}
           >
-            {busy ? "处理中…" : confirmLabel}
+            {busy ? t("ui.processing") : confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -219,6 +225,8 @@ export function CatalogCombobox({
   onOpenChange?: (open: boolean) => void;
   onOpenChangeComplete?: (open: boolean) => void;
 }) {
+  const t = useUiTranslations();
+
   const [query, setQuery] = useState("");
   const anchor = useRef<HTMLDivElement>(null);
   // The collection must never receive duplicate or empty identities.
@@ -236,22 +244,22 @@ export function CatalogCombobox({
     (multiple || creatable) &&
     query.trim() &&
     !base.some((o) => o.value === query.trim())
-      ? { value: query.trim(), label: `添加「${query.trim()}」` }
+      ? { value: query.trim(), label: t("dynamic.add", { p0: query.trim() }) }
       : null;
   const choices = [...base, ...(create ? [create] : [])];
   const content = (
     <>
       {loading && (
         <p role="status" className="text-muted-foreground px-2 py-1 text-xs">
-          加载中…
+          {t("ui.loading2")}
         </p>
       )}
       {error && (
         <p role="alert" className="text-destructive px-2 py-1 text-xs">
-          选项加载失败，请重新打开重试。
+          {t("ui.failedToLoadOptionsReopenAndTryAgain")}
         </p>
       )}
-      <ComboboxEmpty>没有匹配选项</ComboboxEmpty>
+      <ComboboxEmpty>{t("ui.noMatchingOptions")}</ComboboxEmpty>
       <ComboboxList>
         {(item: Choice) =>
           optionAction ? (
@@ -329,7 +337,7 @@ export function CatalogCombobox({
               aria-invalid={invalid}
               aria-describedby={describedBy}
               aria-label={label}
-              placeholder={value.length ? "" : "选择或输入姓名"}
+              placeholder={value.length ? "" : t("ui.selectOrEnterAName")}
               maxLength={100}
               onKeyDown={(event) => {
                 if (
@@ -373,13 +381,17 @@ export function CatalogCombobox({
             aria-label={label}
             aria-required={required}
           >
-            <ComboboxValue placeholder={placeholder ?? `选择${label}`} />
+            <ComboboxValue
+              placeholder={
+                placeholder ?? t("dynamic.selectmessage42", { p0: label })
+              }
+            />
           </ComboboxTrigger>
           <ComboboxContent>
             {searchable && (
               <ComboboxInput
-                aria-label={`搜索${label}`}
-                placeholder={`搜索${label}…`}
+                aria-label={t("dynamic.searchmessage43", { p0: label })}
+                placeholder={t("dynamic.searchmessage44", { p0: label })}
                 showTrigger={false}
               />
             )}
@@ -394,7 +406,9 @@ export function CatalogCombobox({
             aria-describedby={describedBy}
             aria-label={label}
             showClear={clearable}
-            placeholder={placeholder ?? `选择${label}`}
+            placeholder={
+              placeholder ?? t("dynamic.selectmessage42", { p0: label })
+            }
             className="w-full"
             disabled={disabled}
             onKeyDown={(event) => {
@@ -431,6 +445,9 @@ export function StartDatePicker({
   onChange: (value: string) => void;
   disabled: boolean;
 }) {
+  const locale = useLocale();
+  const t = useUiTranslations();
+
   const [open, setOpen] = useState(false);
   const parsed = value ? parseISO(value) : undefined;
   const date = parsed && isValid(parsed) ? parsed : undefined;
@@ -439,7 +456,7 @@ export function StartDatePicker({
       <InputGroupInput
         id={id}
         aria-describedby={describedBy}
-        aria-label="立项时间"
+        aria-label={t("ui.startDate")}
         placeholder="YYYY-MM-DD"
         required
         disabled={disabled}
@@ -464,7 +481,7 @@ export function StartDatePicker({
                 disabled={disabled}
               />
             }
-            aria-label="打开立项日历"
+            aria-label={t("ui.openProjectStartCalendar")}
           >
             <CalendarDays />
           </PopoverTrigger>
@@ -476,7 +493,7 @@ export function StartDatePicker({
           >
             <Calendar
               mode="single"
-              locale={zhCN}
+              locale={locale === "zh-CN" ? zhCN : enUS}
               selected={date}
               defaultMonth={date}
               autoFocus

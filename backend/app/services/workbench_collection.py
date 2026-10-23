@@ -1,4 +1,5 @@
 """Collect only issues referenced by recent mail in the configured folder."""
+from app.i18n import message as system_message
 
 import asyncio
 import re
@@ -134,7 +135,7 @@ async def collect(db, account):
     if account.deleted_at:
         return
     if not account.mail_folder_id or not account.project_id:
-        raise HTTPException(422, "请配置所属项目和链接邮件文件夹")
+        raise HTTPException(422, system_message("errors.firstLinkAMailFolderToAPlatformInThisProject"))
     validate_source_url(account.base_url)
     await owned_folder(db, account.mail_folder_id, account.user_id)
     mails = (
@@ -183,8 +184,7 @@ async def collect(db, account):
     if errors:
         raise HTTPException(
             502,
-            f"{len(errors)} 项信息收取失败，已保留其他成功更新；请重试："
-            + ", ".join(errors[:5]),
+            system_message("errors.collectionFailed"),
         )
 
 
@@ -336,7 +336,7 @@ async def collect_user(db, user_id, schedule=None):
                     "failed",
                     str(exc.detail)[:1000]
                     if isinstance(exc, HTTPException)
-                    else "邮箱同步失败，请检查配置后重试",
+                    else system_message("errors.checkFailed"),
                 )
                 await db.commit()
     accounts = list(
@@ -378,7 +378,7 @@ async def collect_user(db, user_id, schedule=None):
                 account.error = (
                     str(exc.detail)[:1000]
                     if isinstance(exc, HTTPException)
-                    else "收取失败或超时，请检查平台授权与网络"
+                    else system_message("errors.collectionFailed")
                 )
                 account.last_run_at = now()
                 await db.commit()

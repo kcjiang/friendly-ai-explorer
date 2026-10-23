@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLocale } from "next-intl";
 import api from "@/lib/api";
 import { type CatalogPage, type Option } from "@/types/catalog";
 import { CatalogCombobox } from "./catalog-ui";
@@ -28,6 +29,7 @@ export function SearchSelect({
   disabled?: boolean;
   onChange: (option: Option) => void;
 }) {
+  const locale = useLocale();
   const [query, setQuery] = useState("");
   const [attempt, setAttempt] = useState(0);
   const remoteQuery = kind === "catalog" ? query : "";
@@ -69,10 +71,21 @@ export function SearchSelect({
       clearTimeout(timer);
     };
   }, [remoteQuery, url, kind, disabled, attempt]);
-  const choices =
+  const rawChoices =
     value && !options.some((o) => o.value === value)
       ? [{ value, label: selectedLabel }, ...options]
       : options;
+  const choices = url.endsWith("/locations/countries")
+    ? rawChoices
+        .map((option) => ({
+          ...option,
+          label:
+            new Intl.DisplayNames([locale], { type: "region" }).of(
+              option.value,
+            ) ?? option.label,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, locale))
+    : rawChoices;
   return (
     <CatalogCombobox
       id={id}

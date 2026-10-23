@@ -1,10 +1,11 @@
+from app.i18n import message as system_message
 from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
-TASKS = {"default": "默认服务", "todo": "今日 AI TODO", "ticket_analysis": "工单分析", "rag_chat": "AI 对话（知识库优先）"}
+TASKS = {"default": "Default service", "todo": "Today's AI TODOs", "ticket_analysis": "Ticket analysis", "rag_chat": "AI chat (knowledge first)"}
 
 
 class ProviderInput(BaseModel):
@@ -31,12 +32,12 @@ class ProviderInput(BaseModel):
     def valid_url(cls, value):
         parsed = urlsplit(value)
         if parsed.scheme not in ("https", "http") or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
-            raise ValueError("请输入无用户名、密码、查询参数的 HTTP(S) API Base URL")
+            raise ValueError(system_message("errors.enterAnHttpSApiBaseUrlWithoutCredentialsQueryParametersOr"))
         # Validate the port without attempting a network connection.
         try:
             parsed.port
         except ValueError:
-            raise ValueError("API 地址端口无效")
+            raise ValueError(system_message("errors.invalidApiUrlPort"))
         return value.rstrip("/")
 
 
@@ -51,7 +52,7 @@ class RouteInput(BaseModel):
     @model_validator(mode="after")
     def valid_pair(self):
         if self.provider_id and self.provider_id == self.fallback_provider_id:
-            raise ValueError("主服务与备用服务不能相同")
+            raise ValueError(system_message("errors.primaryAndFallbackServicesMustBeDifferent"))
         return self
 
 
@@ -61,7 +62,7 @@ class RoutesInput(BaseModel):
     @model_validator(mode="after")
     def all_tasks(self):
         if {r.task for r in self.routes} != set(TASKS):
-            raise ValueError("必须包含默认服务和全部任务，且不能重复")
+            raise ValueError(system_message("errors.primaryAndFallbackServicesMustDifferIncludingInheritedDefaults"))
         return self
 
 

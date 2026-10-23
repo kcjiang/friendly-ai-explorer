@@ -4,6 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from app.ai.provider_client import AIError
+from app.i18n import LanguageMiddleware, message_details
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from fastapi.exceptions import RequestValidationError
 
 from app.config import settings
 from app.logging_config import configure_logging, log_event, request_id_context
@@ -27,7 +30,24 @@ app = FastAPI(
 
 @app.exception_handler(AIError)
 async def ai_error_handler(request, exc):
-    return JSONResponse(status_code=502, content={"detail": str(exc), "request_id": request_id_context.get()})
+    return JSONResponse(status_code=502, content={"error": message_details(str(exc)) or {"code": "errors.aiUnavailable", "params": {}}, "request_id": request_id_context.get()})
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(request, exc):
+    error = message_details(exc.detail)
+    if error is None:
+        error = {"code": f"errors.http{exc.status_code}", "params": {}}
+    content = {"error": error, "request_id": request_id_context.get()}
+    if isinstance(exc.detail, list):
+        content["detail"] = [{"loc": item.get("loc", []), "type": item.get("type", "invalid"), "error": {"code": "errors.invalidField", "params": {}}} for item in exc.detail if isinstance(item, dict)]
+    return JSONResponse(status_code=exc.status_code, headers=exc.headers, content=content)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request, exc):
+    issues = [{"loc": list(item["loc"]), "type": item["type"], "error": message_details(item["msg"]) or {"code": "errors.invalidField", "params": {}}} for item in exc.errors()]
+    return JSONResponse(status_code=422, content={"error": {"code": "errors.invalidField", "params": {}}, "detail": issues, "request_id": request_id_context.get()})
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,6 +60,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(LanguageMiddleware)
 
 os.makedirs(settings.upload_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")

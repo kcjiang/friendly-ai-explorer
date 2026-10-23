@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 import uuid
 import asyncio
 import logging
@@ -105,10 +106,10 @@ async def get_document(doc_id: str, db: AsyncSession, user: User) -> Document:
     )
     doc = result.scalar_one_or_none()
     if not doc:
-        raise HTTPException(status_code=404, detail="文档不存在")
+        raise HTTPException(status_code=404, detail=system_message("errors.documentNotFound"))
     # 私有文档只有作者可以访问
     if doc.visibility == DocVisibility.private and doc.author_id != user.id:
-        raise HTTPException(status_code=403, detail="无权访问此文档")
+        raise HTTPException(status_code=403, detail=system_message("errors.accessToThisDocumentIsDenied"))
     # 增加浏览量
     doc.view_count += 1
     await db.commit()
@@ -145,9 +146,9 @@ async def update_document(
     result = await db.execute(select(Document).where(Document.id == doc_id))
     doc = result.scalar_one_or_none()
     if not doc:
-        raise HTTPException(status_code=404, detail="文档不存在")
+        raise HTTPException(status_code=404, detail=system_message("errors.documentNotFound"))
     if doc.author_id != user.id:
-        raise HTTPException(status_code=403, detail="只有作者可以修改文档")
+        raise HTTPException(status_code=403, detail=system_message("errors.onlyTheAuthorCanEditThisDocument"))
 
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(doc, k, v)
@@ -173,7 +174,7 @@ async def delete_document(doc_id: str, db: AsyncSession, user: User) -> dict:
     result = await db.execute(select(Document).where(Document.id == doc_id))
     doc = result.scalar_one_or_none()
     if not doc:
-        raise HTTPException(status_code=404, detail="文档不存在")
+        raise HTTPException(status_code=404, detail=system_message("errors.documentNotFound"))
 
     # 删除关联文件
     if doc.file_url:
@@ -183,7 +184,7 @@ async def delete_document(doc_id: str, db: AsyncSession, user: User) -> dict:
 
     await db.delete(doc)
     await db.commit()
-    return {"message": "删除成功"}
+    return {"message": system_message("errors.deleteSuccess")}
 
 
 async def upload_document(
@@ -193,7 +194,7 @@ async def upload_document(
     allowed = {".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg", ".webp"}
     ext = Path(file.filename or "").suffix.lower()
     if ext not in allowed:
-        raise HTTPException(status_code=400, detail=f"不支持的文件格式：{ext}")
+        raise HTTPException(status_code=400, detail=system_message("errors.unsupportedFile"))
 
     # 保存文件
     save_dir = Path(settings.upload_dir)
@@ -203,7 +204,7 @@ async def upload_document(
 
     file_bytes = await file.read()
     if len(file_bytes) > settings.max_file_size_mb * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="文件大小超出限制")
+        raise HTTPException(status_code=413, detail=system_message("errors.fileExceedsTheSizeLimit"))
 
     async with aiofiles.open(save_path, "wb") as f:
         await f.write(file_bytes)
@@ -247,11 +248,11 @@ async def upload_document(
 async def reindex_document(doc_id: str, db: AsyncSession, user: User):
     doc = await db.get(Document, doc_id)
     if not doc:
-        raise HTTPException(404, "文档不存在")
+        raise HTTPException(404, system_message("errors.documentNotFound"))
     if doc.author_id != user.id:
-        raise HTTPException(403, "只有作者可以重建文档索引")
+        raise HTTPException(403, system_message("errors.onlyTheAuthorCanRebuildThisDocumentIndex"))
     if not doc.is_published:
-        raise HTTPException(409, "请先发布文档，再重建索引")
+        raise HTTPException(409, system_message("errors.publishTheDocumentBeforeRebuildingItsIndex"))
     await _vectorize_document(doc, doc.content or "", db)
     await _index_states([doc], db)
     return {"document_id": str(doc.id), "index_status": doc.index_status, "indexed_chunks": doc.indexed_chunks,

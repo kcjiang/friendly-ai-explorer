@@ -153,7 +153,7 @@ class AIAdminTests(unittest.IsolatedAsyncioTestCase):
             r["fallback_provider_id"] = None
         response = await self.client.put(BASE + "/routes", json={"routes": routes})
         self.assertEqual(response.status_code, 422)
-        self.assertIn("未验证", response.text)
+        self.assertEqual(response.json()["error"]["code"], "errors.capabilityMissing")
         async def fake_stream(*args, **kwargs):
             yield "FAE742" if args[0] == "test_conversation" else '{"ok":true}' if args[0] == "test_json" else "OK"
         with patch("app.services.ai_admin_service.stream", fake_stream):
@@ -198,7 +198,7 @@ class AIAdminTests(unittest.IsolatedAsyncioTestCase):
         @asynccontextmanager
         async def session(): yield self.db
         with patch.object(runtime, 'AsyncSessionLocal', session):
-            with self.assertRaisesRegex(runtime.AIError, '管理后台'):
+            with self.assertRaisesRegex(runtime.AIError, 'errors.noAiServiceConfigured'):
                 await runtime.resolve('todo')
 
     async def test_embedding_unconfigured_by_default_and_gemini_can_be_added_manually(self):

@@ -67,27 +67,27 @@ export const TICKET_STATUS_CONFIG: Record<
   { label: string; textColor: string }
 > = {
   open: {
-    label: "新工单",
+    label: "New",
     textColor: "text-blue-600 dark:text-blue-400",
   },
   reproducing: {
-    label: "待复现",
+    label: "Reproducing",
     textColor: "text-violet-600 dark:text-violet-400",
   },
   in_progress: {
-    label: "修复中",
+    label: "In progress",
     textColor: "text-amber-600 dark:text-amber-400",
   },
   verifying: {
-    label: "验证修复",
+    label: "Verifying",
     textColor: "text-cyan-600 dark:text-cyan-400",
   },
   pending: {
-    label: "挂起",
+    label: "On hold",
     textColor: "text-slate-600 dark:text-slate-400",
   },
   resolved: {
-    label: "已解决",
+    label: "Resolved",
     textColor: "text-green-600 dark:text-green-400",
   },
 };
@@ -112,9 +112,9 @@ export const TICKET_PRIORITY_CONFIG: Record<
 export const TICKET_SOURCES = [
   "WhatsApp",
   "Email",
-  "微信",
+  "WeChat",
   "MSTeams",
   "Slack",
   "TAPD",
-  "其他",
+  "Other",
 ];

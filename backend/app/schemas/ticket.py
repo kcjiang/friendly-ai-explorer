@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 import uuid
 from datetime import datetime
 from typing import Annotated
@@ -80,7 +81,7 @@ class InputBase(BaseModel):
             except ValueError:
                 valid = False
             if not valid:
-                raise ValueError('链接必须使用有效的 http:// 或 https:// 地址')
+                raise ValueError(system_message("errors.linksMustUseAValidHttpOrHttpsUrl"))
         return value
 
 class CreateTicketRequest(InputBase):
@@ -122,7 +123,7 @@ class UpdateTicketRequest(InputBase):
     @classmethod
     def no_explicit_null(cls, value):
         if value is None:
-            raise ValueError('字段不可设置为空值；可选文本请使用空字符串')
+            raise ValueError(system_message("errors.fieldsCannotBeNullUseAnEmptyStringForOptionalFields"))
         return value
 
 class AddCommentRequest(InputBase):

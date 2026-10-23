@@ -1,6 +1,9 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 import { format, parseISO } from "date-fns";
+import { enUS, zhCN } from "date-fns/locale";
+import { useLocale } from "next-intl";
 import { useAtom } from "jotai";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +20,9 @@ import { cn } from "@/lib/utils";
 export function DatePickerWithRange({
   className,
 }: React.HTMLAttributes<HTMLDivElement>) {
+  const t = useUiTranslations();
+  const dateLocale = useLocale() === "zh-CN" ? zhCN : enUS;
+
   const [dateRange, setDateRange] = useAtom(dateRangeAtom);
 
   const firstAvailableDate = averageTicketsCreated.reduce(
@@ -51,14 +57,14 @@ export function DatePickerWithRange({
             {dateRange?.from ? (
               dateRange.to ? (
                 <>
-                  {format(dateRange.from, "LLL dd, y")} -{" "}
-                  {format(dateRange.to, "LLL dd, y")}
+                  {format(dateRange.from, "PP", { locale: dateLocale })} -{" "}
+                  {format(dateRange.to, "PP", { locale: dateLocale })}
                 </>
               ) : (
-                format(dateRange.from, "LLL dd, y")
+                format(dateRange.from, "PP", { locale: dateLocale })
               )
             ) : (
-              <span>Pick a date</span>
+              <span>{t("ui.additionalPickadate")}</span>
             )}
           </Button>
         </PopoverTrigger>

@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -7,12 +8,15 @@ import { navigations, type Role } from "@/config/site";
 import { cn } from "@/lib/utils";
 
 export default function Navigation() {
+  const t = useUiTranslations();
+  const uiLabels_navigations = translateLabels(navigations, t);
+
   const pathname = usePathname();
   const { data: session } = useSession();
   const role = session?.user?.role ?? "guest";
 
   // 过滤可见导航链接
-  const visibleItems = navigations.filter((nav) => {
+  const visibleItems = uiLabels_navigations.filter((nav) => {
     if (!nav.accessible || nav.accessible.length === 0) {
       return true; // 全员可访问
     }

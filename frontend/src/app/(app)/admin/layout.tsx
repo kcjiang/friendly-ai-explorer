@@ -1,9 +1,18 @@
+"use client";
+
+import { useUiTranslations } from "@/i18n/client";
 import { TopNav } from "@/components/nav";
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const t = useUiTranslations();
+
   return (
     <>
-      <TopNav title="管理后台" />
+      <TopNav title={t("ui.administration")} />
       <main>{children}</main>
     </>
   );

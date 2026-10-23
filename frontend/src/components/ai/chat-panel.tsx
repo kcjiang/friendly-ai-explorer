@@ -1,9 +1,12 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 import { Bot, ChevronDown, Loader2, Send, Trash2 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
+import { useLocale } from "next-intl";
+import { systemMessage } from "@/i18n/system-messages";
 import { useEffect, useRef, useState } from "react";
 
 interface Message {
@@ -14,18 +17,44 @@ interface Message {
 }
 
 export default function AiChatPanel() {
+  const locale = useLocale();
+  const t = useUiTranslations();
+
   const { data: session } = useSession();
   const pathname = usePathname();
   const pathSection = pathname.split("/")[1] || "dashboard";
-  const section = pathSection === "ticket" ? "tickets" : ["adb", "serial"].includes(pathSection) ? "debug" : pathSection;
-  const page = ["dashboard", "tickets", "knowledge", "email", "debug", "catalog", "admin"].includes(section) ? section : "other";
-  const pageNames: Record<string, string> = { dashboard: "工作台", tickets: "工单", knowledge: "知识库", email: "邮件", debug: "调试", catalog: "资料库", admin: "管理后台", other: "当前页面" };
+  const section =
+    pathSection === "ticket"
+      ? "tickets"
+      : ["adb", "serial"].includes(pathSection)
+        ? "debug"
+        : pathSection;
+  const page = [
+    "dashboard",
+    "tickets",
+    "knowledge",
+    "email",
+    "debug",
+    "catalog",
+    "admin",
+  ].includes(section)
+    ? section
+    : "other";
+  const pageNames: Record<string, string> = {
+    dashboard: t("ui.workbench"),
+    tickets: t("ui.tickets"),
+    knowledge: t("ui.knowledgeBase"),
+    email: t("ui.mail"),
+    debug: t("ui.debugging"),
+    catalog: t("ui.catalog"),
+    admin: t("ui.administration"),
+    other: t("ui.currentPage"),
+  };
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content:
-        "你好！我是 FAE AI 助手，可以进行通用对话、查询知识库、分析技术问题。我会优先参考知识库，也可以结合你当前所在的页面提供操作建议。",
+      content: t("ui.helloIAmYourFaeAiAssistantICanChatSearchThe"),
     },
   ]);
   const [input, setInput] = useState("");
@@ -49,12 +78,27 @@ export default function AiChatPanel() {
     const history: { role: "user" | "assistant"; content: string }[] = [];
     let budget = 16000;
     for (let i = messages.length - 2; i >= 1 && history.length < 10; i -= 2) {
-      const user = messages[i], assistant = messages[i + 1];
-      if (user.role !== "user" || assistant.role !== "assistant" || assistant.failed || assistant.loading || !assistant.content) continue;
-      const pair = [{ role: "user" as const, content: user.content.slice(0, 4000) }, { role: "assistant" as const, content: assistant.content.slice(0, 4000) }];
+      const user = messages[i],
+        assistant = messages[i + 1];
+      if (
+        user.role !== "user" ||
+        assistant.role !== "assistant" ||
+        assistant.failed ||
+        assistant.loading ||
+        !assistant.content
+      )
+        continue;
+      const pair = [
+        { role: "user" as const, content: user.content.slice(0, 4000) },
+        {
+          role: "assistant" as const,
+          content: assistant.content.slice(0, 4000),
+        },
+      ];
       const size = pair[0].content.length + pair[1].content.length;
       if (size > budget) break;
-      history.unshift(...pair); budget -= size;
+      history.unshift(...pair);
+      budget -= size;
     }
 
     setInput("");
@@ -75,13 +119,14 @@ export default function AiChatPanel() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "X-FAE-Locale": locale,
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ message: text, history, page }),
         },
       );
 
-      if (!res.ok || !res.body) throw new Error("请求失败");
+      if (!res.ok || !res.body) throw new Error(t("ui.requestFailed"));
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -99,12 +144,23 @@ export default function AiChatPanel() {
         while (boundary !== -1) {
           const event = buffer.slice(0, boundary);
           buffer = buffer.slice(boundary + 2);
-          const data = event.split("\n").filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n");
-          if (data === "[DONE]") { finished = true; break; }
+          const data = event
+            .split("\n")
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice(5).trimStart())
+            .join("\n");
+          if (data === "[DONE]") {
+            finished = true;
+            break;
+          }
           if (data) {
             const chunk: { text?: string; error?: string } = JSON.parse(data);
-            if (chunk.error) { failed = true; accumulated += `\n\n[错误] ${chunk.error}`; }
-            else accumulated += chunk.text ?? "";
+            if (chunk.error) {
+              failed = true;
+              accumulated += t("dynamic.error", {
+                p0: systemMessage(chunk.error, t),
+              });
+            } else accumulated += chunk.text ?? "";
           }
           boundary = buffer.indexOf("\n\n");
         }
@@ -112,19 +168,27 @@ export default function AiChatPanel() {
         // 实时更新最后一条 assistant 消息
         setMessages((prev) => {
           const next = [...prev];
-          next[next.length - 1] = { role: "assistant", content: accumulated, failed };
+          next[next.length - 1] = {
+            role: "assistant",
+            content: accumulated,
+            failed,
+          };
           return next;
         });
-        if (finished) { await reader.cancel(); break; }
+        if (finished) {
+          await reader.cancel();
+          break;
+        }
       }
       reader.releaseLock();
-      if (!finished || !accumulated.trim()) throw new Error("回答中断");
+      if (!finished || !accumulated.trim())
+        throw new Error(t("ui.responseInterrupted"));
     } catch {
       setMessages((prev) => {
         const next = [...prev];
         next[next.length - 1] = {
           role: "assistant",
-          content: "抱歉，请求出现错误，请稍后重试。",
+          content: t("ui.theRequestFailedTryAgainLater"),
           failed: true,
         };
         return next;
@@ -142,8 +206,8 @@ export default function AiChatPanel() {
         className={`fixed bottom-6 right-6 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-300 via-indigo-400 to-violet-500 p-0.5 shadow-lg shadow-indigo-500/20 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-indigo-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transform-none ${
           open ? "pointer-events-none scale-90 opacity-0" : ""
         }`}
-        title="AI 助手"
-        aria-label="打开 AI 助手"
+        title={t("ui.aiAssistant")}
+        aria-label={t("ui.openAiAssistant")}
         aria-expanded={open}
         aria-controls="fae-ai-chat-panel"
         tabIndex={open ? -1 : 0}
@@ -174,13 +238,22 @@ export default function AiChatPanel() {
           <div className="flex items-center gap-2">
             <Bot size={18} className="text-white" />
             <span className="text-sm font-semibold text-white">
-              FAE AI 助手
+              {t("ui.faeAiAssistant")}
             </span>
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
           </div>
-          <button type="button" title="开始新对话" aria-label="开始新对话" disabled={thinking} className="ml-auto mr-3 text-white/70 disabled:opacity-40" onClick={() => setMessages(prev => prev.slice(0, 1))}><Trash2 size={16} /></button>
           <button
-            aria-label="收起 AI 助手"
+            type="button"
+            title={t("ui.newConversation")}
+            aria-label={t("ui.newConversation")}
+            disabled={thinking}
+            className="ml-auto mr-3 text-white/70 disabled:opacity-40"
+            onClick={() => setMessages((prev) => prev.slice(0, 1))}
+          >
+            <Trash2 size={16} />
+          </button>
+          <button
+            aria-label={t("ui.collapseAiAssistant")}
             onClick={() => setOpen(false)}
             className="text-white/70 transition-colors hover:text-white"
           >
@@ -188,7 +261,10 @@ export default function AiChatPanel() {
           </button>
         </div>
 
-        <p className="border-b border-border px-4 py-2 text-xs text-muted-foreground">{pageNames[page]} · 知识库优先，无相关资料时通用回答</p>
+        <p className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
+          {pageNames[page]}{" "}
+          {t("ui.knowledgeFirstGeneralAnswersWhenNoRelevantSourcesExist")}
+        </p>
 
         {/* 消息列表 */}
         <div
@@ -222,10 +298,16 @@ export default function AiChatPanel() {
                 {msg.loading ? (
                   <span className="flex items-center gap-1.5 text-muted-foreground">
                     <Loader2 size={13} className="animate-spin" />
-                    思考中...
+                    {t("ui.thinking")}
                   </span>
                 ) : (
-                  <MarkdownText content={msg.content} />
+                  <MarkdownText
+                    content={
+                      i === 0
+                        ? t("ui.helloIAmYourFaeAiAssistantICanChatSearchThe")
+                        : msg.content
+                    }
+                  />
                 )}
               </div>
             </div>
@@ -246,12 +328,12 @@ export default function AiChatPanel() {
                 sendMessage();
               }
             }}
-            placeholder="输入问题... (Enter 发送)"
+            placeholder={t("ui.enterAQuestionEnterToSend")}
             disabled={thinking}
             className="flex-1 rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
           />
           <button
-            aria-label="发送消息"
+            aria-label={t("ui.sendMessage")}
             onClick={sendMessage}
             disabled={thinking || !input.trim()}
             className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 transition-opacity hover:opacity-90 disabled:opacity-40"

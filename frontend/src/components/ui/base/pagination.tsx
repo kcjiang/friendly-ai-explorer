@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 // Source: https://ui.shadcn.com/r/styles/base-nova/pagination.json
 import {
@@ -11,11 +12,13 @@ import { Button } from "@/components/ui/base/button";
 import { cn } from "@/lib/utils";
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
+  const t = useUiTranslations();
+
   return (
     <nav
       role="navigation"
-      aria-label="pagination"
-      data-slot="pagination"
+      aria-label={t("ui.additionalpagination")}
+      data-slot={t("ui.additionalpagination")}
       className={cn("mx-auto flex w-full justify-center", className)}
       {...props}
     />
@@ -73,9 +76,11 @@ function PaginationPrevious({
   text = "Previous",
   ...props
 }: React.ComponentProps<typeof PaginationLink> & { text?: string }) {
+  const t = useUiTranslations();
+
   return (
     <PaginationLink
-      aria-label="Go to previous page"
+      aria-label={t("ui.additionalGotopreviouspage")}
       size="default"
       className={cn("pl-1.5!", className)}
       {...props}
@@ -91,9 +96,11 @@ function PaginationNext({
   text = "Next",
   ...props
 }: React.ComponentProps<typeof PaginationLink> & { text?: string }) {
+  const t = useUiTranslations();
+
   return (
     <PaginationLink
-      aria-label="Go to next page"
+      aria-label={t("ui.additionalGotonextpage")}
       size="default"
       className={cn("pr-1.5!", className)}
       {...props}
@@ -108,6 +115,8 @@ function PaginationEllipsis({
   className,
   ...props
 }: React.ComponentProps<"span">) {
+  const t = useUiTranslations();
+
   return (
     <span
       aria-hidden
@@ -119,7 +128,7 @@ function PaginationEllipsis({
       {...props}
     >
       <MoreHorizontalIcon />
-      <span className="sr-only">More pages</span>
+      <span className="sr-only">{t("ui.additionalMorepages")}</span>
     </span>
   );
 }

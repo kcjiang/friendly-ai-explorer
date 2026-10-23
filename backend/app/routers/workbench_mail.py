@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 import asyncio
 import email
 import logging
@@ -110,7 +111,7 @@ async def overview(user: AnyUser, db: AsyncSession = Depends(get_db)):
 @router.post("", status_code=201)
 async def add(body: Mailbox, user: AnyUser, db: AsyncSession = Depends(get_db)):
     if not body.password or not body.password.get_secret_value():
-        raise HTTPException(422, "请填写邮箱密码或应用专用密码")
+        raise HTTPException(422, system_message("errors.enterAMailboxPasswordOrAppPassword"))
     box = WBMailbox(
         user_id=user.id,
         **body.model_dump(exclude={"password"}),
@@ -160,7 +161,7 @@ async def create_folder(
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(502, "创建文件夹失败，请检查名称和邮箱权限") from None
+        raise HTTPException(502, system_message("errors.failedToCreateFolderCheckItsNameAndMailboxPermissions")) from None
     box.status = "syncing"
     await db.commit()
     launch(box.id, user.id)
@@ -177,7 +178,7 @@ async def add_rule(
     )
     folder = await service.owned_folder(db, body.folder_id, user.id)
     if folder.mailbox_id != box.id:
-        raise HTTPException(422, "规则目标文件夹必须属于当前邮箱")
+        raise HTTPException(422, system_message("errors.theTargetFolderMustBelongToTheCurrentMailbox"))
     last = await db.scalar(
         select(func.max(WBMailRule.position)).where(WBMailRule.mailbox_id == ident)
     )
@@ -203,9 +204,9 @@ async def edit_rule(
     row = await db.get(WBMailRule, rule_id)
     folder = await service.owned_folder(db, body.folder_id, user.id)
     if not row or row.mailbox_id != ident:
-        raise HTTPException(404, "规则不存在")
+        raise HTTPException(404, system_message("errors.ruleNotFound"))
     if folder.mailbox_id != ident:
-        raise HTTPException(422, "目标文件夹不属于当前邮箱")
+        raise HTTPException(422, system_message("errors.theTargetFolderDoesNotBelongToTheCurrentMailbox"))
     for key, value in body.model_dump().items():
         setattr(row, key, value)
     await db.commit()
@@ -286,7 +287,7 @@ async def attachment(
         or index >= len(parts)
         or parts[index].get_content_disposition() != "attachment"
     ):
-        raise HTTPException(404, "附件不存在")
+        raise HTTPException(404, system_message("errors.attachmentNotFound"))
     return Response(
         parts[index].get_payload(decode=True),
         media_type="application/octet-stream",
@@ -311,10 +312,10 @@ async def send(
     previous = await db.get(WBMailDelivery, body.id)
     if previous:
         if previous.mailbox_id != box.id:
-            raise HTTPException(409, "请求标识冲突")
+            raise HTTPException(409, system_message("errors.requestIdentifierConflict"))
         if previous.status == "sent":
             return previous.result
-        raise HTTPException(409, "发送结果尚不确定，请先在邮箱确认，避免重复发送")
+        raise HTTPException(409, system_message("errors.deliveryStatusIsUncertainCheckYourMailboxBeforeSendingAgainToAvoid"))
     delivery = WBMailDelivery(
         id=body.id,
         mailbox_id=box.id,
@@ -346,7 +347,7 @@ async def send(
     except Exception:
         delivery.status, delivery.result = (
             "unknown",
-            {"warning": "发送结果不确定，请在邮箱确认后再决定是否重发"},
+            {"warning": system_message("errors.deliveryUncertain")},
         )
         await db.commit()
         raise HTTPException(502, delivery.result["warning"]) from None

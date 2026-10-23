@@ -1,4 +1,8 @@
 "use client";
+import { useLocale } from "next-intl";
+
+import { useUiTranslations, translateLabels } from "@/i18n/client";
+import { systemMessage } from "@/i18n/system-messages";
 
 import { isAxiosError } from "axios";
 import {
@@ -69,10 +73,12 @@ import {
 import { TicketSelect } from "./ticket-select";
 
 function Markdown({ children }: { children: string }) {
+  const t = useUiTranslations();
+
   return (
     <div className="[&_a]:text-primary [&_pre]:bg-muted space-y-3 text-sm leading-7 break-words [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:pl-4 [&_h1]:text-xl [&_h2]:text-lg [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:p-3 [&_table]:w-full [&_td]:border [&_td]:p-2 [&_th]:border [&_th]:p-2 [&_ul]:list-disc [&_ul]:pl-6">
       <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
-        {children || "暂无内容"}
+        {children || t("ui.noContentYet")}
       </ReactMarkdown>
     </div>
   );
@@ -108,6 +114,14 @@ export default function TicketModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const locale = useLocale();
+
+  const t = useUiTranslations();
+  const uiLabels_TICKET_STATUS_CONFIG = translateLabels(
+    TICKET_STATUS_CONFIG,
+    t,
+  );
+
   const { data: session } = useSession();
   const [record, setRecord] = useState(ticket);
   const [form, setForm] = useState(() => draftOf(ticket, session?.user.id));
@@ -175,10 +189,10 @@ export default function TicketModal({
       .then(({ data }) => setUsers(data))
       .catch(() => {
         if (!controller.signal.aborted)
-          setError("账户列表加载失败，请关闭后重试。");
+          setError(t("ui.failedToLoadAccountsCloseAndTryAgain"));
       });
     return () => controller.abort();
-  }, []);
+  }, [t]);
   async function refreshRecord() {
     if (!record) return;
     const { data } = await api.get(`/api/v1/tickets/${record.id}`);
@@ -192,16 +206,16 @@ export default function TicketModal({
     setError("");
     const errors: Record<string, string> = {};
     for (const key of ["title", "project_id", "assignee_id", "source"] as const)
-      if (!form[key].trim()) errors[key] = "请填写此字段。";
+      if (!form[key].trim()) errors[key] = t("ui.thisFieldIsRequired");
     if (form.tapd_created && !form.tapd_url.trim())
-      errors.tapd_url = "请填写此字段。";
+      errors.tapd_url = t("ui.thisFieldIsRequired");
     for (const key of ["source_url", "tapd_url"] as const) {
       if (!form[key].trim()) continue;
       try {
         const url = new URL(form[key].trim());
         if (!["http:", "https:"].includes(url.protocol)) throw new Error();
       } catch {
-        errors[key] = "请填写有效的 http:// 或 https:// 地址。";
+        errors[key] = t("ui.enterAValidHttpOrHttpsUrl");
       }
     }
     setFieldErrors(errors);
@@ -223,7 +237,7 @@ export default function TicketModal({
       setEditing(false);
       setPreview(false);
       setFieldErrors({});
-      toast.add({ title: "工单已保存", type: "success" });
+      toast.add({ title: t("ui.ticketSaved"), type: "success" });
       onSuccess();
     } catch (e) {
       const detail = isAxiosError(e) ? e.response?.data?.detail : undefined;
@@ -234,17 +248,16 @@ export default function TicketModal({
           if (typeof key === "string" && key in form)
             errors[key] =
               item.type === "string_too_short" || item.type === "missing"
-                ? "请填写此字段。"
-                : String(item.msg ?? "请检查此字段。").replace(
-                    /^Value error, /,
-                    "",
-                  );
+                ? t("ui.thisFieldIsRequired")
+                : item.error
+                  ? systemMessage(item.error, t)
+                  : t("ui.checkThisField");
         }
         if (Object.keys(errors).length) {
           setFieldErrors(errors);
           focusInvalid.current = true;
-        } else setError("请检查填写内容。");
-      } else setError(errorMessage(e, "保存失败，请重试。"));
+        } else setError(t("ui.checkTheEnteredValues"));
+      } else setError(errorMessage(e, t("ui.saveFailedTryAgain")));
     } finally {
       setBusy(false);
     }
@@ -374,12 +387,16 @@ export default function TicketModal({
       <DialogContent className="flex max-h-[90dvh] flex-col md:max-w-4xl">
         <DialogHeader className="pr-8">
           <DialogTitle>
-            {record ? (editing ? "编辑工单" : "工单详情") : "新建工单"}
+            {record
+              ? editing
+                ? t("ui.editTicket")
+                : t("ui.ticketDetails")
+              : t("ui.newTicket")}
             {record && ` · ${record.ticket_no}`}
           </DialogTitle>
           <DialogDescription className="break-words">
             {record?.display_name ??
-              "选择项目后自动引用客户与产品，保存时分配工单编号。"}
+              t("ui.selectAProjectToLinkItsCustomerAndProductATicketNumber")}
           </DialogDescription>
         </DialogHeader>
         <Tabs
@@ -391,15 +408,16 @@ export default function TicketModal({
             <TabsList className="w-fit shrink-0">
               <TabsTrigger value="details" disabled={busy}>
                 <FileText />
-                详情
+                {t("ui.details")}
               </TabsTrigger>
               <TabsTrigger value="comments" disabled={editing || busy}>
                 <MessageSquare />
-                评论 ({record.comments?.length ?? 0})
+                {t("ui.comments")}
+                {record.comments?.length ?? 0})
               </TabsTrigger>
               <TabsTrigger value="ai" disabled={editing || busy}>
                 <Sparkles />
-                AI 分析
+                {t("ui.aiAnalysis")}
               </TabsTrigger>
             </TabsList>
           )}
@@ -415,17 +433,19 @@ export default function TicketModal({
                 >
                   {record && !record.can_edit && (
                     <p className="bg-muted text-muted-foreground rounded-lg p-3 text-sm">
-                      当前为只读模式。仅开发者、领导、最后更新人或被分配人可以修改。
+                      {t(
+                        "ui.readOnlyOnlyDevelopersLeadersTheLastEditorOrTheAssigneeCan",
+                      )}
                     </p>
                   )}
 
-                  {text("title", "标题", true)}
+                  {text("title", t("ui.title"), true)}
                   <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2">
                     {field(
                       "project_id",
-                      "所属项目",
+                      t("ui.project"),
                       <SearchSelect
-                        label="所属项目"
+                        label={t("ui.project")}
                         value={form.project_id}
                         selectedLabel={projectName}
                         kind="catalog"
@@ -440,9 +460,9 @@ export default function TicketModal({
                     )}
                     {field(
                       "assignee_id",
-                      "分配给",
+                      t("ui.assignTo"),
                       <CatalogCombobox
-                        label="分配给"
+                        label={t("ui.assignTo")}
                         value={form.assignee_id ? [form.assignee_id] : []}
                         options={[
                           ...users
@@ -451,7 +471,7 @@ export default function TicketModal({
                             )
                             .map((u) => ({
                               value: u.id,
-                              label: `${u.name} (${u.email})${!u.is_active ? " · 已停用" : ""}`,
+                              label: `${u.name} (${u.email})${!u.is_active ? t("ui.inactive") : ""}`,
                             })),
                           ...(record?.assignee &&
                           !users.some((u) => u.id === record.assignee?.id)
@@ -468,7 +488,8 @@ export default function TicketModal({
                             ? [
                                 {
                                   value: session.user.id,
-                                  label: session.user.name ?? "当前账户",
+                                  label:
+                                    session.user.name ?? t("ui.currentAccount"),
                                 },
                               ]
                             : []),
@@ -484,9 +505,9 @@ export default function TicketModal({
                     )}
                     {field(
                       "source",
-                      "缺陷来源",
+                      t("ui.issueSource"),
                       <CatalogCombobox
-                        label="缺陷来源"
+                        label={t("ui.issueSource")}
                         value={form.source ? [form.source] : []}
                         options={TICKET_SOURCES.map((value) => ({
                           value,
@@ -501,9 +522,9 @@ export default function TicketModal({
                       />,
                       true,
                     )}
-                    {text("source_number", "来源侧编号", false, 200)}
+                    {text("source_number", t("ui.sourceReference"), false, 200)}
                   </div>
-                  {text("source_url", "来源链接", false, 2000)}
+                  {text("source_url", t("ui.sourceUrl"), false, 2000)}
                   {!editing && form.source_url && (
                     <Button
                       variant="link"
@@ -517,13 +538,13 @@ export default function TicketModal({
                       }
                     >
                       <ExternalLink />
-                      打开来源链接
+                      {t("ui.openSourceUrl")}
                     </Button>
                   )}
                   <FormField>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <FieldLabel htmlFor="ticket-description">
-                        简要问题描述 · Markdown
+                        {t("ui.issueSummaryMarkdown")}
                       </FieldLabel>
                       {editing && (
                         <Button
@@ -533,7 +554,9 @@ export default function TicketModal({
                           disabled={busy}
                           onClick={() => setPreview(!preview)}
                         >
-                          {preview ? "继续编写" : "预览 Markdown"}
+                          {preview
+                            ? t("ui.continueWriting")
+                            : t("ui.previewMarkdown")}
                         </Button>
                       )}
                     </div>
@@ -544,28 +567,30 @@ export default function TicketModal({
                     ) : (
                       <Textarea
                         id="ticket-description"
-                        aria-label="简要问题描述"
+                        aria-label={t("ui.issueSummary")}
                         rows={6}
                         maxLength={100000}
                         disabled={busy}
-                        placeholder="支持标题、列表、代码块和链接等 Markdown 语法"
+                        placeholder={t(
+                          "ui.supportsMarkdownHeadingsListsCodeBlocksAndLinks",
+                        )}
                         value={form.description}
                         onChange={(e) => set("description", e.target.value)}
                       />
                     )}
                   </FormField>
-                  {area("raw_report", "原始客户提报信息（供 AI 读取）")}
+                  {area("raw_report", t("ui.originalCustomerReportForAi"))}
                   <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2">
                     {field(
                       "tapd_created",
-                      "已创建内部 TAPD 工单",
+                      t("ui.internalTapdTicketCreated"),
                       <TicketSelect
-                        label="已创建内部 TAPD 工单"
+                        label={t("ui.internalTapdTicketCreated")}
                         value={form.tapd_created ? "yes" : "no"}
                         disabled={disabled}
                         options={[
-                          { value: "no", label: "否" },
-                          { value: "yes", label: "是" },
+                          { value: "no", label: t("ui.no") },
+                          { value: "yes", label: t("ui.yes") },
                         ]}
                         onValueChange={(value) => {
                           set("tapd_created", value === "yes");
@@ -573,9 +598,17 @@ export default function TicketModal({
                         }}
                       />,
                     )}
-                    {text("tapd_url", "TAPD 链接", form.tapd_created, 2000)}
-                    {select("priority", "重要性", TICKET_PRIORITY_CONFIG)}
-                    {select("status", "当前状态", TICKET_STATUS_CONFIG)}
+                    {text("tapd_url", t("ui.tapdUrl"), form.tapd_created, 2000)}
+                    {select(
+                      "priority",
+                      t("ui.severity"),
+                      TICKET_PRIORITY_CONFIG,
+                    )}
+                    {select(
+                      "status",
+                      t("ui.currentStatus"),
+                      uiLabels_TICKET_STATUS_CONFIG,
+                    )}
                   </div>
                   {!editing && form.tapd_created && form.tapd_url && (
                     <Button
@@ -590,12 +623,12 @@ export default function TicketModal({
                       }
                     >
                       <ExternalLink />
-                      打开 TAPD 工单
+                      {t("ui.openTapdTicket")}
                     </Button>
                   )}
-                  {text("status_note", "状态简要描述")}
-                  {area("next_plan", "下一步计划")}
-                  {area("notes", "备注")}
+                  {text("status_note", t("ui.statusSummary"))}
+                  {area("next_plan", t("ui.nextSteps"))}
+                  {area("notes", t("ui.notes2"))}
                   {record && (
                     <Collapsible className="rounded-lg border p-3">
                       <CollapsibleTrigger
@@ -607,24 +640,24 @@ export default function TicketModal({
                           />
                         }
                       >
-                        编辑记录
+                        {t("ui.editRecord")}
                         <ChevronDown />
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <dl className="grid grid-cols-2 gap-4 p-3 text-sm">
                           {[
-                            ["创建人", record.creator.name],
+                            [t("ui.createdBy"), record.creator.name],
                             [
-                              "创建时间",
+                              t("ui.created"),
                               new Date(record.created_at).toLocaleString(
-                                "zh-CN",
+                                locale,
                               ),
                             ],
-                            ["更新人", record.updater.name],
+                            [t("ui.updatedBy"), record.updater.name],
                             [
-                              "更新时间",
+                              t("ui.updated"),
                               new Date(record.updated_at).toLocaleString(
-                                "zh-CN",
+                                locale,
                               ),
                             ],
                           ].map(([label, value]) => (
@@ -642,14 +675,14 @@ export default function TicketModal({
               <TabsContent value="comments" className="space-y-4">
                 {!record?.comments?.length && (
                   <p className="text-muted-foreground py-8 text-center text-sm">
-                    暂无评论
+                    {t("ui.noComments")}
                   </p>
                 )}
                 {record?.comments?.map((c) => (
                   <div className="rounded-lg border p-4" key={c.id}>
                     <p className="text-muted-foreground mb-2 text-xs">
                       {c.author.name} ·{" "}
-                      {new Date(c.created_at).toLocaleString("zh-CN")}
+                      {new Date(c.created_at).toLocaleString(locale)}
                     </p>
                     <p className="text-sm break-words whitespace-pre-wrap">
                       {c.content}
@@ -658,7 +691,9 @@ export default function TicketModal({
                 ))}
                 {record?.can_edit && (
                   <FormField>
-                    <FieldLabel htmlFor="ticket-comment">添加评论</FieldLabel>
+                    <FieldLabel htmlFor="ticket-comment">
+                      {t("ui.addComment")}
+                    </FieldLabel>
                     <Textarea
                       id="ticket-comment"
                       value={comment}
@@ -672,14 +707,16 @@ export default function TicketModal({
                       disabled={busy || !comment.trim()}
                       onClick={() => void action("comment")}
                     >
-                      发布评论
+                      {t("ui.postComment")}
                     </Button>
                   </FormField>
                 )}
               </TabsContent>
               <TabsContent value="ai" className="space-y-4">
                 <p className="text-muted-foreground text-sm">
-                  结合问题描述、原始提报和知识库生成分析。
+                  {t(
+                    "ui.generateAnalysisFromTheIssueSummaryOriginalReportAndKnowledgeBase",
+                  )}
                 </p>
                 {record?.can_edit && (
                   <Button
@@ -689,7 +726,7 @@ export default function TicketModal({
                     onClick={() => void action("ai")}
                   >
                     {busy ? <Loader2 className="animate-spin" /> : <Sparkles />}
-                    {busy ? "分析中…" : "开始分析"}
+                    {busy ? t("ui.analyzing") : t("ui.analyze")}
                   </Button>
                 )}
                 <Markdown>{record?.ai_analysis ?? ""}</Markdown>
@@ -721,7 +758,7 @@ export default function TicketModal({
                   } else resetDraft();
                 }}
               >
-                取消编辑
+                {t("ui.cancelEditing")}
               </Button>
               <Button
                 key="save"
@@ -730,7 +767,7 @@ export default function TicketModal({
                 disabled={busy}
               >
                 {busy && <Loader2 className="animate-spin" />}
-                {record ? "保存更改" : "创建工单"}
+                {record ? t("ui.saveChanges") : t("ui.createTicket")}
               </Button>
             </>
           ) : (
@@ -744,7 +781,7 @@ export default function TicketModal({
                   onClick={() => setConfirmDelete(true)}
                 >
                   <Trash2 />
-                  删除
+                  {t("ui.delete")}
                 </Button>
                 {tab === "details" && (
                   <Button
@@ -758,7 +795,7 @@ export default function TicketModal({
                     }}
                   >
                     <Pencil />
-                    编辑
+                    {t("ui.edit")}
                   </Button>
                 )}
               </>
@@ -768,9 +805,9 @@ export default function TicketModal({
       </DialogContent>
       <ConfirmDialog
         open={confirmClose}
-        title="放弃未保存的修改？"
-        description="尚有未保存的内容，放弃后将无法恢复。"
-        confirmLabel="放弃修改"
+        title={t("ui.discardUnsavedChanges")}
+        description={t("ui.unsavedContentWillBeLostIfDiscarded")}
+        confirmLabel={t("ui.discardChanges")}
         onCancel={() => setConfirmClose(false)}
         onConfirm={() => {
           setConfirmClose(false);
@@ -780,12 +817,15 @@ export default function TicketModal({
       />
       <ConfirmDialog
         open={confirmDelete}
-        title="永久删除工单？"
-        description={`确定永久删除 ${record?.ticket_no ?? ""}？编号不会回收，删除后无法恢复。`}
+        title={t("ui.permanentlyDeleteTicket")}
+        description={t(
+          "dynamic.permanentlyDeleteItsNumberWillNotBeReusedThisCannot",
+          { p0: record?.ticket_no ?? "" },
+        )}
         destructive
         busy={busy}
         error={error}
-        confirmLabel="确认删除"
+        confirmLabel={t("ui.confirmDeletion")}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={() => void remove()}
       />

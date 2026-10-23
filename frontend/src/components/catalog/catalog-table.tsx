@@ -1,4 +1,7 @@
 "use client";
+import { getBrowserUiLocale } from "@/i18n/browser";
+
+import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import {
   ArrowDown,
@@ -60,26 +63,26 @@ export const catalogColumns: Record<
   { key: keyof CatalogRecord; label: string; fixed?: boolean }[]
 > = {
   customers: [
-    { key: "company_name", label: "客户公司名", fixed: true },
-    { key: "country_name", label: "国家" },
-    { key: "level", label: "客户级别" },
-    { key: "business", label: "业务" },
-    { key: "updated_at", label: "更新时间" },
+    { key: "company_name", label: "Customer company", fixed: true },
+    { key: "country_name", label: "Country" },
+    { key: "level", label: "Customer tier" },
+    { key: "business", label: "Business" },
+    { key: "updated_at", label: "Updated" },
   ],
   products: [
-    { key: "model", label: "产品型号", fixed: true },
-    { key: "type", label: "类型" },
-    { key: "chipset", label: "芯片" },
-    { key: "system", label: "系统" },
-    { key: "updated_at", label: "更新时间" },
+    { key: "model", label: "Product model", fixed: true },
+    { key: "type", label: "Type" },
+    { key: "chipset", label: "Chipset" },
+    { key: "system", label: "System" },
+    { key: "updated_at", label: "Updated" },
   ],
   projects: [
-    { key: "number", label: "项目编号", fixed: true },
-    { key: "pm", label: "项目经理" },
+    { key: "number", label: "Project number", fixed: true },
+    { key: "pm", label: "Project manager" },
     { key: "fae_name", label: "FAE" },
-    { key: "start_date", label: "立项时间" },
-    { key: "stage", label: "项目阶段" },
-    { key: "updated_at", label: "更新时间" },
+    { key: "start_date", label: "Start date" },
+    { key: "stage", label: "Project stage" },
+    { key: "updated_at", label: "Updated" },
   ],
 };
 const columnHelper = createColumnHelper<CatalogTableFeatures, CatalogRecord>();
@@ -107,6 +110,8 @@ type CatalogTableOptions = {
 };
 
 export function useCatalogTable(options: CatalogTableOptions) {
+  const t = useUiTranslations();
+
   const {
     kind,
     records,
@@ -138,7 +143,7 @@ export function useCatalogTable(options: CatalogTableOptions) {
           id: "select",
           header: ({ table }) => (
             <Checkbox
-              aria-label="选择本页全部记录"
+              aria-label={t("ui.selectAllRecordsOnThisPage")}
               disabled={disabled || !records.length}
               checked={table.getIsAllPageRowsSelected()}
               indeterminate={
@@ -152,7 +157,9 @@ export function useCatalogTable(options: CatalogTableOptions) {
           ),
           cell: ({ row }) => (
             <Checkbox
-              aria-label={`选择 ${row.original.display_name}`}
+              aria-label={t("dynamic.select", {
+                p0: row.original.display_name,
+              })}
               disabled={disabled}
               checked={row.getIsSelected()}
               onCheckedChange={(checked) => row.toggleSelected(checked)}
@@ -161,7 +168,7 @@ export function useCatalogTable(options: CatalogTableOptions) {
           enableSorting: false,
           enableHiding: false,
         }),
-        ...catalogColumns[kind].map((definition) =>
+        ...translateLabels(catalogColumns, t)[kind].map((definition) =>
           columnHelper.accessor(definition.key, {
             id: definition.key,
             enableHiding: !definition.fixed,
@@ -185,6 +192,13 @@ export function useCatalogTable(options: CatalogTableOptions) {
             cell: ({ row }) => {
               const record = row.original;
               const value = record[definition.key];
+              if (definition.key === "country_name" && record.country_code) {
+                return (
+                  new Intl.DisplayNames([getBrowserUiLocale()], {
+                    type: "region",
+                  }).of(record.country_code) ?? String(value ?? "—")
+                );
+              }
               if (definition.fixed)
                 return (
                   <Identification name={record.display_name}>
@@ -204,7 +218,9 @@ export function useCatalogTable(options: CatalogTableOptions) {
               if (definition.key === "updated_at")
                 return (
                   <span className="text-muted-foreground">
-                    {new Date(record.updated_at).toLocaleString("zh-CN")}
+                    {new Date(record.updated_at).toLocaleString(
+                      getBrowserUiLocale(),
+                    )}
                   </span>
                 );
               return Array.isArray(value)
@@ -217,7 +233,9 @@ export function useCatalogTable(options: CatalogTableOptions) {
           id: "actions",
           enableHiding: false,
           enableSorting: false,
-          header: () => <span className="sr-only">记录操作</span>,
+          header: () => (
+            <span className="sr-only">{t("ui.recordActions")}</span>
+          ),
           cell: ({ row }) => (
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -226,7 +244,9 @@ export function useCatalogTable(options: CatalogTableOptions) {
                     variant="ghost"
                     size="icon-xs"
                     disabled={disabled}
-                    aria-label={`操作 ${row.original.display_name}`}
+                    aria-label={t("dynamic.actionsFor", {
+                      p0: row.original.display_name,
+                    })}
                   />
                 }
               >
@@ -238,7 +258,7 @@ export function useCatalogTable(options: CatalogTableOptions) {
                     onClick={() => handlers.current.onRestore(row.original)}
                   >
                     <RotateCcw />
-                    恢复
+                    {t("ui.restore")}
                   </DropdownMenuItem>
                 ) : (
                   <>
@@ -246,13 +266,13 @@ export function useCatalogTable(options: CatalogTableOptions) {
                       onClick={() => handlers.current.onEdit(row.original)}
                     >
                       <Pencil />
-                      编辑
+                      {t("ui.edit")}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => handlers.current.onCopy(row.original)}
                     >
                       <Copy />
-                      复制
+                      {t("ui.copy")}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -260,7 +280,7 @@ export function useCatalogTable(options: CatalogTableOptions) {
                       onClick={() => handlers.current.onDelete(row.original)}
                     >
                       <Trash2 />
-                      删除
+                      {t("ui.delete")}
                     </DropdownMenuItem>
                   </>
                 )}
@@ -269,7 +289,7 @@ export function useCatalogTable(options: CatalogTableOptions) {
           ),
         }),
       ]),
-    [kind, records.length, disabled, trash],
+    [kind, records.length, disabled, trash, t],
   );
   return useTable({
     features: catalogTableFeatures,
@@ -303,10 +323,12 @@ export function useCatalogTable(options: CatalogTableOptions) {
 export type CatalogTableInstance = ReturnType<typeof useCatalogTable>;
 
 export function ColumnPicker({ table }: { table: CatalogTableInstance }) {
+  const t = useUiTranslations();
+  const uiLabels_catalogColumns = translateLabels(catalogColumns, t);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="outline" />}>
-        Columns
+        {t("ui.additionalColumns")}
         <ChevronDown />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -320,7 +342,7 @@ export function ColumnPicker({ table }: { table: CatalogTableInstance }) {
               closeOnClick={false}
               onCheckedChange={(checked) => column.toggleVisibility(checked)}
             >
-              {Object.values(catalogColumns)
+              {Object.values(uiLabels_catalogColumns)
                 .flat()
                 .find((definition) => definition.key === column.id)?.label ??
                 column.id}
@@ -342,6 +364,8 @@ export function CatalogTable({
   error: boolean;
   onOpen: (record: CatalogRecord) => void;
 }) {
+  const t = useUiTranslations();
+
   return (
     <div aria-busy={loading} className="overflow-hidden rounded-md border">
       <Table>
@@ -405,10 +429,10 @@ export function CatalogTable({
                 className="text-muted-foreground h-24 text-center"
               >
                 {loading
-                  ? "加载中…"
+                  ? t("ui.loading2")
                   : error
-                    ? "数据暂不可用，请刷新重试。"
-                    : "暂无记录"}
+                    ? t("ui.dataUnavailableRefreshAndTryAgain")
+                    : t("ui.noRecords")}
               </TableCell>
             </TableRow>
           )}
@@ -425,6 +449,8 @@ export function CatalogPagination({
   table: CatalogTableInstance;
   disabled: boolean;
 }) {
+  const t = useUiTranslations();
+
   const page = table.state.pagination.pageIndex + 1;
   const count = Math.max(1, table.getPageCount());
   const pages = Array.from(
@@ -437,15 +463,16 @@ export function CatalogPagination({
   return (
     <div className="text-muted-foreground mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
       <span>
-        {Object.values(table.state.rowSelection).filter(Boolean).length} of{" "}
-        {table.getRowCount()} row(s) selected.
+        {Object.values(table.state.rowSelection).filter(Boolean).length}{" "}
+        {t("ui.additionalof")} {table.getRowCount()}{" "}
+        {t("ui.additionalrowsselected")}
       </span>
-      <Pagination aria-label="分页" className="mx-0 w-auto">
+      <Pagination aria-label={t("ui.pagination")} className="mx-0 w-auto">
         <PaginationContent>
           <PaginationItem>
             <PaginationPrevious
-              text="上一页"
-              aria-label="上一页"
+              text={t("ui.previous")}
+              aria-label={t("ui.previous")}
               href={`?page=${page - 1}`}
               aria-disabled={disabled || !table.getCanPreviousPage()}
               className={
@@ -464,7 +491,7 @@ export function CatalogPagination({
               {index > 0 && p - pages[index - 1] > 1 && <PaginationEllipsis />}
               <PaginationLink
                 href={`?page=${p}`}
-                aria-label={`第 ${p} 页`}
+                aria-label={t("dynamic.page", { p0: p })}
                 isActive={page === p}
                 aria-disabled={disabled}
                 onClick={(event) => {
@@ -478,8 +505,8 @@ export function CatalogPagination({
           ))}
           <PaginationItem>
             <PaginationNext
-              text="下一页"
-              aria-label="下一页"
+              text={t("ui.next")}
+              aria-label={t("ui.next")}
               href={`?page=${page + 1}`}
               aria-disabled={disabled || !table.getCanNextPage()}
               className={

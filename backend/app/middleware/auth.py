@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -34,7 +35,7 @@ async def get_current_user(
     """FastAPI 依赖：从 Bearer Token 中提取当前用户"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="无效的认证凭据",
+        detail=system_message("errors.invalidAuthenticationCredentials"),
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -55,7 +56,7 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户不存在或已被禁用",
+            detail=system_message("errors.userNotFoundOrDisabled"),
         )
     return user
 

@@ -1,9 +1,7 @@
 "use client";
+import { useUiTranslations, translateLabels } from "@/i18n/client";
 
-import {
-  type IPieChartSpec,
-  VChart,
-} from "@visactor/react-vchart";
+import { type IPieChartSpec, VChart } from "@visactor/react-vchart";
 import type { Datum } from "@visactor/vchart/esm/typings";
 import { ticketByChannels } from "@/data/ticket-by-channels";
 import { addThousandsSeparator } from "@/lib/utils";
@@ -91,5 +89,7 @@ const spec: IPieChartSpec = {
 };
 
 export default function Chart() {
-  return <VChart spec={spec} />;
+  const t = useUiTranslations();
+  const uiLabels_spec = translateLabels(spec, t);
+  return <VChart spec={uiLabels_spec} />;
 }

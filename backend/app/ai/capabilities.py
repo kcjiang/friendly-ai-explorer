@@ -1,5 +1,5 @@
 """Business requirements are independent of provider brands and wire protocols."""
-LABELS = {"text": "文本生成", "conversation": "多轮对话", "json": "结构化 JSON", "stream": "流式输出"}
+LABELS = {"text": "Text generation", "conversation": "Multi-turn conversation", "json": "Structured JSON", "stream": "Streaming"}
 REQUIRED = {
     "default": ("text",),
     "todo": ("text", "json"),
@@ -14,5 +14,5 @@ def requirements(task):
 
 def missing_capabilities(provider, task):
     checks = provider.capability_checks or {}
-    return [LABELS[key] + ("（不支持）" if checks.get(key, {}).get("status") == "unsupported" else "（未验证）")
+    return [LABELS[key] + (" (unsupported)" if checks.get(key, {}).get("status") == "unsupported" else " (unverified)")
             for key in REQUIRED.get(task, ()) if checks.get(key, {}).get("status") != "verified"]

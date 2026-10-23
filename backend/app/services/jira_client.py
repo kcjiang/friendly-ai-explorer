@@ -1,4 +1,5 @@
 """Jira REST transport for workbench issue and comment collection."""
+from app.i18n import message as system_message
 
 from urllib.parse import quote
 
@@ -14,7 +15,7 @@ def platform_password(account):
     try:
         return decrypt_credential(account.password_encrypted, "platform")
     except InvalidToken:
-        raise HTTPException(422, "账户密码无法解密，请重新保存密码") from None
+        raise HTTPException(422, system_message("errors.cannotDecryptAccountCredentialsSaveThePasswordAgain")) from None
 
 
 class JiraClient:
@@ -39,11 +40,11 @@ class JiraClient:
             response = await self.client.get("rest/api/2/" + path, params=params)
         except httpx.HTTPError:
             raise HTTPException(
-                502, "Jira 连接失败，请检查网络、站点地址与 HTTPS 证书"
+                502, system_message("errors.jiraRequestFailedCheckTheNetworkSiteUrlAndHttpsCertificate")
             ) from None
         if response.status_code in (401, 403):
             raise HTTPException(
-                422, "Jira 认证失败或无权限；请检查密码、账户锁定和 API 访问权限"
+                422, system_message("errors.jiraAuthenticationFailedOrAccessDeniedCheckThePasswordAccountStatusAnd")
             )
         if response.status_code != 200:
             raise HTTPException(
@@ -56,7 +57,7 @@ class JiraClient:
             return data
         except ValueError:
             raise HTTPException(
-                502, "Jira 未返回 API 数据，可能需要管理员启用 REST API 认证"
+                502, system_message("errors.jiraDidNotReturnApiDataAnAdministratorMayNeedToEnable")
             ) from None
 
     async def comments(self, key):
@@ -79,4 +80,4 @@ class JiraClient:
             if start >= data.get("total", start):
                 return result
             if not batch or start >= 10000:
-                raise HTTPException(422, "评论过多或分页中断，无法生成完整草稿")
+                raise HTTPException(422, system_message("errors.commentPaginationWasInterruptedACompleteDataCopyCannotBeCreated"))

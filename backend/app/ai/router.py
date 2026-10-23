@@ -1,4 +1,5 @@
 """Resolve a fresh immutable routing snapshot for each request."""
+from app.i18n import message as system_message
 import asyncio
 import hashlib
 import json
@@ -15,6 +16,7 @@ from app.ai.structured import parse_json, schema_for
 from app.database import AsyncSessionLocal
 from app.logging_config import log_event, request_id_context, safe_data
 from app.models.ai_config import AICallLog, AIProvider, AIRoute
+from app.i18n import language_instruction, output_locale
 
 logger = logging.getLogger(__name__)
 
@@ -51,21 +53,21 @@ async def resolve(task):
         default = routes.get("default")
         route = routes.get(task)
         if not default or not route:
-            raise AIError("AI 路由未初始化，请使用当前版本初始化数据库")
+            raise AIError(system_message("errors.aiRoutesAreNotInitializedInitializeTheDatabaseWithTheCurrentVersion"))
         primary = route.provider_id or default.provider_id
         # Explicit task routes own their fallback. Following default also follows its fallback.
         fallback = route.fallback_provider_id or (default.fallback_provider_id if not route.provider_id else None)
         ids = list(dict.fromkeys(i for i in (primary, fallback) if i))
         rows = {p.id: p for p in (await db.scalars(select(AIProvider).where(AIProvider.id.in_(ids)))).all()}
         if primary not in rows:
-            raise AIError("未配置 AI 服务，请管理员在管理后台添加服务并完成任务分配")
+            raise AIError(system_message("errors.noAiServiceConfiguredAskAnAdministratorToAddAndAssignA"))
         providers = [Provider.snapshot(rows[i]) for i in ids if i in rows]
         return providers, route.timeout_seconds or default.timeout_seconds, route.max_output_tokens or default.max_output_tokens
 
 
 def validate_result(task, raw):
     if not raw.strip():
-        raise AIError("模型返回空回答", retryable=True, kind="invalid_output")
+        raise AIError(system_message("errors.theModelReturnedAnEmptyAnswer"), retryable=True, kind="invalid_output")
     if task == "todo":
         data = parse_json(raw)
         if isinstance(data, dict):
@@ -77,14 +79,14 @@ def validate_result(task, raw):
             not isinstance(item, dict) or not isinstance(item.get("task"), str) or not item["task"].strip()
             or item.get("priority") not in ("critical", "major", "trivial") for item in data
         ):
-            raise AIError("TODO 输出结构无效", retryable=True, kind="invalid_output")
+            raise AIError(system_message("errors.invalidTodoOutputStructure"), retryable=True, kind="invalid_output")
         return json.dumps(data, ensure_ascii=False)
     if task == "test_conversation" and raw.strip() != "FAE742":
-        raise AIError("多轮对话测试未正确读取历史消息", kind="invalid_output")
+        raise AIError(system_message("errors.theConversationTestDidNotReadTheMessageHistoryCorrectly"), kind="invalid_output")
     if task == "test_json":
         data = parse_json(raw)
         if not isinstance(data, dict) or set(data) != {"ok"} or data["ok"] is not True:
-            raise AIError("JSON 测试未返回预期结构", retryable=True, kind="invalid_output")
+            raise AIError(system_message("errors.theJsonTestDidNotReturnTheExpectedStructure"), retryable=True, kind="invalid_output")
         return json.dumps(data)
     return raw
 
@@ -108,7 +110,9 @@ async def record_call(provider, task, success, fallback, started, usage, error=N
         logger.warning("AI 调用记录写入失败，应用日志中仍保留本次记录", exc_info=True)
 
 
-async def stream(task, prompt, *, streaming=True, plan=None, report=None, history=None):
+async def stream(task, prompt, *, streaming=True, plan=None, report=None, history=None, locale=None):
+    if not task.startswith("test_"):
+        prompt += language_instruction(locale)
     providers, timeout, max_tokens = plan or await resolve(task)
     for index, provider in enumerate(providers):
         deadline = time.monotonic() + (timeout or provider.timeout_seconds)
@@ -120,22 +124,22 @@ async def stream(task, prompt, *, streaming=True, plan=None, report=None, histor
             attempt += 1
             try:
                 if not provider.enabled:
-                    raise AIError("分配的 AI 服务已禁用", retryable=True, kind="disabled")
+                    raise AIError(system_message("errors.theAiServiceIsDisabled"), retryable=True, kind="disabled")
                 if not task.startswith("test_"):
                     from app.ai.capabilities import missing_capabilities
                     missing = missing_capabilities(provider, task)
                     if missing:
-                        raise AIError("模型能力不满足任务要求：" + "、".join(missing), retryable=True, kind="capability")
+                        raise AIError(system_message("errors.capabilityMissing"), retryable=True, kind="capability")
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise AIError("AI 请求总预算已用尽", retryable=True, kind="timeout")
+                    raise AIError(system_message("errors.aiOutputExceedsTheConfiguredLimit"), retryable=True, kind="timeout")
                 if streaming:
                     async for chunk in generate(provider, current_prompt, stream=True, timeout=remaining, max_tokens=limit, usage=usage, task=task, history=history):
                         if chunk:
                             emitted = True
                             yield chunk
                     if not emitted:
-                        raise AIError("模型返回空回答", retryable=True, kind="invalid_output")
+                        raise AIError(system_message("errors.theModelReturnedAnEmptyAnswer"), retryable=True, kind="invalid_output")
                 else:
                     raw = "".join([chunk async for chunk in generate(provider, current_prompt, timeout=remaining, max_tokens=limit, usage=usage, task=task, history=history)])
                     result = validate_result(task, raw)
@@ -186,7 +190,7 @@ async def chat(task, prompt):
     if task == "todo":
         # Hash all routing options and the prompt; changes in tickets, date, credentials or
         # routing bypass the cache immediately. No plaintext prompts retained.
-        cache_key = hashlib.sha256((repr(plan) + prompt).encode()).hexdigest()
+        cache_key = hashlib.sha256((repr(plan) + prompt + output_locale.get()).encode()).hexdigest()
         cached = _todo_cache.get(cache_key)
         if cached and cached[0] > time.monotonic():
             _todo_cache.move_to_end(cache_key)

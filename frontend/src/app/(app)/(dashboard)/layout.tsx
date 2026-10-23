@@ -1,3 +1,6 @@
+"use client";
+
+import { useUiTranslations } from "@/i18n/client";
 import { TopNav } from "@/components/nav";
 
 export default function DashboardLayout({
@@ -5,9 +8,10 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const t = useUiTranslations();
   return (
     <>
-      <TopNav title="Dashboard" />
+      <TopNav title={t("ui.extraDashboard")} />
       <main>{children}</main>
     </>
   );

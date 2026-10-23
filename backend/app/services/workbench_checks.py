@@ -1,4 +1,5 @@
 """Durable FIFO for manual and scheduled checks, with cross-worker exclusion."""
+from app.i18n import message as system_message
 
 import logging
 from datetime import timedelta
@@ -13,6 +14,7 @@ from app.models.workbench import WBCheck, WBPreference, now
 from app.services.workbench_collection import run_collection
 from app.services.workbench_limits import COLLECTION_PAUSE_SECONDS
 from app.services.workbench_schedule import next_slot, working
+from app.i18n import output_locale, normalize_locale
 
 ACTIVE = ("queued", "running")
 logger = logging.getLogger(__name__)
@@ -41,7 +43,7 @@ async def enqueue_manual(db, user_id):
     )
     accepted = check is None
     if accepted:
-        check = WBCheck(user_id=user_id, origin="manual")
+        check = WBCheck(user_id=user_id, origin="manual", output_locale=output_locale.get())
         db.add(check)
         await db.flush()
     return {"accepted": accepted, "check": public_check(check)}
@@ -82,7 +84,7 @@ async def enqueue_due_checks():
                 )
             )
             if not pending:
-                db.add(WBCheck(user_id=pref.user_id, origin="scheduled"))
+                db.add(WBCheck(user_id=pref.user_id, origin="scheduled", output_locale=normalize_locale(pref.schedule.get("output_locale"))))
         await db.commit()
 
 
@@ -131,7 +133,11 @@ async def process_check():
                 await db.commit()
                 check_id = check.id
                 try:
-                    executed = await run_collection(check.user_id, schedule)
+                    token = output_locale.set(normalize_locale(check.output_locale))
+                    try:
+                        executed = await run_collection(check.user_id, schedule)
+                    finally:
+                        output_locale.reset(token)
                     if not executed:
                         check.status, check.started_at = "queued", None
                     else:
@@ -144,7 +150,7 @@ async def process_check():
                     check.error = (
                         str(exc.detail)[:1000]
                         if isinstance(exc, HTTPException)
-                        else "检查更新失败，请检查邮箱与平台配置后重试"
+                        else system_message("errors.checkFailed")
                     )
                     logger.warning("工作台收取检查失败", exc_info=False)
                 await db.commit()

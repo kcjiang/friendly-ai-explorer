@@ -1,3 +1,6 @@
+"use client";
+
+import { useUiTranslations } from "@/i18n/client";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { chartTitle } from "@/components/primitives";
 import { cn } from "@/lib/utils";
@@ -13,6 +16,8 @@ export default function MetricCard({
   change: number;
   className?: string;
 }) {
+  const t = useUiTranslations();
+
   return (
     <section className={cn("flex flex-col", className)}>
       <h2 className={cn(chartTitle({ color: "mute", size: "sm" }), "mb-1")}>
@@ -22,7 +27,9 @@ export default function MetricCard({
         <span className="text-xl font-medium">{value}</span>
         <ChangeIndicator change={change} />
       </div>
-      <div className="text-xs text-muted-foreground">Compare to last month</div>
+      <div className="text-xs text-muted-foreground">
+        {t("ui.additionalComparetolastmonth")}
+      </div>
     </section>
   );
 }

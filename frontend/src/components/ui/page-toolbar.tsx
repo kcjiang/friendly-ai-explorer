@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 import { ArrowUpDown } from "lucide-react";
 import { type ReactNode } from "react";
@@ -42,6 +43,8 @@ export function SortMenu({
   onChange: (value: string) => void;
   onDirectionChange: (value: string) => void;
 }) {
+  const t = useUiTranslations();
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -49,18 +52,21 @@ export function SortMenu({
           type="button"
           variant="outline"
           size="icon"
-          aria-label="排序选项"
-          title={`排序：${options[value]} · ${direction === "desc" ? "降序" : "升序"}`}
+          aria-label={t("ui.sortOptions")}
+          title={t("dynamic.sort", {
+            p0: options[value],
+            p1: direction === "desc" ? t("ui.descending") : t("ui.ascending"),
+          })}
         >
           <ArrowUpDown />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 space-y-3">
-        <p className="text-sm font-medium">排序</p>
+        <p className="text-sm font-medium">{t("ui.sort")}</p>
         <label className="block space-y-1 text-xs text-muted-foreground">
-          <span>排序字段</span>
+          <span>{t("ui.sortField")}</span>
           <NativeSelect
-            aria-label="排序字段"
+            aria-label={t("ui.sortField")}
             value={value}
             onChange={(e) => onChange(e.target.value)}
           >
@@ -72,14 +78,14 @@ export function SortMenu({
           </NativeSelect>
         </label>
         <label className="block space-y-1 text-xs text-muted-foreground">
-          <span>排序方向</span>
+          <span>{t("ui.sortDirection")}</span>
           <NativeSelect
-            aria-label="排序方向"
+            aria-label={t("ui.sortDirection")}
             value={direction}
             onChange={(e) => onDirectionChange(e.target.value)}
           >
-            <option value="desc">降序</option>
-            <option value="asc">升序</option>
+            <option value="desc">{t("ui.descending")}</option>
+            <option value="asc">{t("ui.ascending")}</option>
           </NativeSelect>
         </label>
       </PopoverContent>

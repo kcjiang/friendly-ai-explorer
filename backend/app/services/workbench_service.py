@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 import asyncio
 import logging
 import time
@@ -55,7 +56,7 @@ async def owned(db, model, ident, user_id, lock=False):
         query = query.where(model.deleted_at.is_(None))
     row = await db.scalar(query.with_for_update() if lock else query)
     if row is None:
-        raise HTTPException(404, "记录不存在或不属于当前用户")
+        raise HTTPException(404, system_message("errors.recordNotFoundOrNotOwnedByTheCurrentUser"))
     return row
 
 
@@ -71,21 +72,21 @@ async def initialize(db, user_id):
             [
                 WBAutomation(
                     user_id=user_id,
-                    name="创建工单",
+                    name="Create ticket",
                     kind="ticket",
                     position=0,
                     steps=[
                         {"type": "read"},
                         {
                             "type": "ai",
-                            "instruction": "整理问题表现、复现条件与待确认信息，不编造事实。",
+                            "instruction": "Summarize symptoms, reproduction conditions and information to confirm. Do not invent facts.",
                         },
                         {"type": "ticket", "project_id": None},
                         {"type": "result"},
                     ],
                 ),
                 WBAutomation(
-                    user_id=user_id, name="导入 TAPD", kind="tapd", position=1, steps=[]
+                    user_id=user_id, name="Import TAPD", kind="tapd", position=1, steps=[]
                 ),
             ]
         )
@@ -174,11 +175,11 @@ async def execute_step(db, job, user):
         )
         chunks, pending, last_flush, length = [], "", time.monotonic(), 0
         try:
-            async for chunk in stream("default", prompt):
+            async for chunk in stream("default", prompt, locale=snapshot.get("output_locale", "en")):
                 length += len(chunk)
                 if length > MAX_AI_RESPONSE_CHARS:
                     raise HTTPException(
-                        502, "AI 输出超过安全长度，请缩小整理范围后重试"
+                        502, system_message("errors.aiOutputIsTooLongReduceTheProcessingScopeAndTryAgain")
                     )
                 chunks.append(chunk)
                 pending += chunk
@@ -193,7 +194,7 @@ async def execute_step(db, job, user):
         snapshot["priority"] = step.get("priority", "major")
     elif kind == "ticket":
         if not step.get("project_id"):
-            raise HTTPException(422, "此任务未绑定所属项目，请检查托管信息的项目设置")
+            raise HTTPException(422, system_message("errors.thisTaskHasNoProjectCheckTheMonitoredPlatformProjectSettings"))
         if not job.ticket_id:
             ticket = await create_ticket(
                 CreateTicketRequest(
@@ -213,7 +214,7 @@ async def execute_step(db, job, user):
             )
             job.ticket_id = ticket.id
     elif kind not in ("read", "result"):
-        raise HTTPException(422, "不支持的自动化步骤")
+        raise HTTPException(422, system_message("errors.unsupportedAutomationStep"))
     job.snapshot = snapshot
     job.logs = [
         *job.logs[-(MAX_JOB_LOG_ENTRIES - 1) :],
@@ -221,11 +222,11 @@ async def execute_step(db, job, user):
             "at": now().isoformat(),
             "step": job.step_index + 1,
             "message": {
-                "read": "已读取消息与人工补充",
-                "ai": "AI 整理完成",
-                "map": "字段映射完成",
-                "ticket": "已写入 Ticket",
-                "result": "已记录执行结果",
+                "read": system_message("errors.readComplete"),
+                "ai": system_message("errors.aiComplete"),
+                "map": system_message("errors.mapComplete"),
+                "ticket": system_message("errors.ticketComplete"),
+                "result": system_message("errors.resultComplete"),
             }[kind],
         },
     ]
@@ -296,7 +297,7 @@ async def automation_once():
                 try:
                     user = await db.get(User, job.user_id)
                     if not user or not user.is_active:
-                        raise HTTPException(403, "用户已停用")
+                        raise HTTPException(403, system_message("errors.userDisabled"))
                     while job.step_index < len(job.steps):
                         await emit(
                             job.user_id,
@@ -318,7 +319,7 @@ async def automation_once():
                         if isinstance(exc, HTTPException)
                         else str(exc)[:2000]
                         if isinstance(exc, AIError)
-                        else "执行失败或超时，请检查 AI 服务与项目设置后重试"
+                        else system_message("errors.jobFailed")
                     )
                     await finish(db, job)
                     await db.commit()

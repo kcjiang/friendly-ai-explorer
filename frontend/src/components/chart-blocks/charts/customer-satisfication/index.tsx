@@ -1,3 +1,6 @@
+"use client";
+
+import { useUiTranslations } from "@/i18n/client";
 import { SmilePlus, ThumbsDown, ThumbsUp } from "lucide-react";
 import {
   customerSatisfication,
@@ -28,9 +31,14 @@ const customerSatisficationOptions = [
 ];
 
 export default function CustomerSatisfication() {
+  const t = useUiTranslations();
+
   return (
     <section className="flex h-full flex-col gap-2">
-      <ChartTitle title="Customer Satisfication" icon={SmilePlus} />
+      <ChartTitle
+        title={t("ui.additionalCustomerSatisfication")}
+        icon={SmilePlus}
+      />
       <div className="my-4 flex h-full items-center justify-between">
         <div className="mx-auto grid w-full grid-cols-2 gap-6">
           <TotalCustomers />
@@ -50,10 +58,16 @@ export default function CustomerSatisfication() {
 }
 
 function TotalCustomers() {
+  const t = useUiTranslations();
+
   return (
     <div className="flex flex-col items-start justify-center">
-      <div className="text-xs text-muted-foreground">Responses Received</div>
-      <div className="text-2xl font-medium">{totalCustomers} Customers</div>
+      <div className="text-xs text-muted-foreground">
+        {t("ui.additionalResponsesReceived")}
+      </div>
+      <div className="text-2xl font-medium">
+        {totalCustomers} {t("ui.additionalCustomers")}
+      </div>
     </div>
   );
 }

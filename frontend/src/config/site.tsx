@@ -33,7 +33,7 @@ export const navigations: Navigation[] = [
   },
   {
     icon: PanelsTopLeft,
-    name: "工作台",
+    name: "Workbench",
     href: "/workbench",
   },
   {
@@ -43,7 +43,7 @@ export const navigations: Navigation[] = [
   },
   {
     icon: Database,
-    name: "数据维护",
+    name: "Data management",
     href: "/catalog",
   },
   {

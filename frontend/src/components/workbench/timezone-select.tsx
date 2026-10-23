@@ -1,26 +1,27 @@
 "use client";
+import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import { useMemo } from "react";
 import { CatalogCombobox } from "@/components/catalog/catalog-ui";
 
 const cities: Record<string, string> = {
-  UTC: "协调世界时",
-  "Asia/Shanghai": "上海",
-  "Asia/Hong_Kong": "香港",
-  "Asia/Jerusalem": "耶路撒冷 / 以色列",
-  "Asia/Tokyo": "东京",
-  "Asia/Seoul": "首尔",
-  "Asia/Singapore": "新加坡",
-  "Asia/Dubai": "迪拜",
-  "Asia/Kolkata": "印度",
-  "Asia/Calcutta": "印度",
-  "Europe/London": "伦敦",
-  "Europe/Paris": "巴黎",
-  "Europe/Berlin": "柏林",
-  "America/New_York": "纽约",
-  "America/Los_Angeles": "洛杉矶",
-  "Australia/Sydney": "悉尼",
-  "Pacific/Auckland": "奥克兰",
+  UTC: "Coordinated Universal Time",
+  "Asia/Shanghai": "Shanghai",
+  "Asia/Hong_Kong": "Hong Kong",
+  "Asia/Jerusalem": "Jerusalem / Israel",
+  "Asia/Tokyo": "Tokyo",
+  "Asia/Seoul": "Seoul",
+  "Asia/Singapore": "Singapore",
+  "Asia/Dubai": "Dubai",
+  "Asia/Kolkata": "India",
+  "Asia/Calcutta": "India",
+  "Europe/London": "London",
+  "Europe/Paris": "Paris",
+  "Europe/Berlin": "Berlin",
+  "America/New_York": "New York",
+  "America/Los_Angeles": "Los Angeles",
+  "Australia/Sydney": "Sydney",
+  "Pacific/Auckland": "Auckland",
 };
 
 export function TimezoneSelect({
@@ -36,11 +37,14 @@ export function TimezoneSelect({
   invalid?: boolean;
   describedBy?: string;
 }) {
+  const t = useUiTranslations();
+
   const options = useMemo(() => {
+    const uiLabels_cities = translateLabels(cities, t);
     const supported =
       (
         Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] }
-      ).supportedValuesOf?.("timeZone") ?? Object.keys(cities);
+      ).supportedValuesOf?.("timeZone") ?? Object.keys(uiLabels_cities);
     return [
       ...new Set([
         "UTC",
@@ -66,14 +70,14 @@ export function TimezoneSelect({
         }
         return {
           value: zone,
-          label: `${zone}${cities[zone] ? ` · ${cities[zone]}` : ""} · ${offset}`,
+          label: `${zone}${uiLabels_cities[zone] ? ` · ${uiLabels_cities[zone]}` : ""} · ${offset}`,
         };
       });
-  }, [value]);
+  }, [value, t]);
   return (
     <CatalogCombobox
       id={id}
-      label="时区"
+      label={t("ui.timeZone")}
       value={[value]}
       options={options}
       onChange={(values) => {

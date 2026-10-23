@@ -1,4 +1,5 @@
 """User-owned mailbox cache. Remote read flags change only on explicit reading."""
+from app.i18n import message as system_message
 
 import asyncio
 import base64
@@ -52,11 +53,11 @@ def config(box):
     result = public(box)
     for protocol in ("imap", "smtp"):
         if result[protocol + "_security"] not in ("ssl", "starttls"):
-            raise HTTPException(422, "邮箱连接必须使用 SSL/TLS 或 STARTTLS")
+            raise HTTPException(422, system_message("errors.mailboxConnectionsRequireSslTlsOrStarttls"))
     try:
         result["password"] = decrypt_credential(box.password_encrypted, "mail")
     except InvalidToken:
-        raise HTTPException(422, "邮箱密码无法解密，请重新保存密码") from None
+        raise HTTPException(422, system_message("errors.cannotDecryptMailboxCredentialsSaveThePasswordAgain")) from None
     return result
 
 
@@ -65,7 +66,7 @@ async def owned_box(db, ident, user_id):
         select(WBMailbox).where(WBMailbox.id == ident, WBMailbox.user_id == user_id)
     )
     if not box:
-        raise HTTPException(404, "邮箱不存在")
+        raise HTTPException(404, system_message("errors.mailboxNotFound"))
     return box
 
 
@@ -81,7 +82,7 @@ async def owned_folder(db, ident, user_id):
         )
     )
     if not folder:
-        raise HTTPException(404, "文件夹不存在或不能收取邮件")
+        raise HTTPException(404, system_message("errors.folderNotFoundOrUnavailableForReading"))
     return folder
 
 
@@ -94,7 +95,7 @@ async def owned_mail(db, ident, user_id):
         )
     )
     if not mail:
-        raise HTTPException(404, "邮件不存在或已超过30天")
+        raise HTTPException(404, system_message("errors.emailNotFoundOrOlderThan30Days"))
     return mail
 
 
@@ -105,7 +106,7 @@ async def sync(db, box):
         {"key": "mail:" + str(box.id)},
     )
     if not locked:
-        raise HTTPException(409, "邮箱正在同步，请稍后刷新")
+        raise HTTPException(409, system_message("errors.mailboxIsSynchronizingRefreshLater"))
     settings = config(box)
     cached = list(
         (await db.scalars(select(WBMail).where(WBMail.mailbox_id == box.id))).all()
@@ -148,21 +149,21 @@ async def sync(db, box):
         raise HTTPException(502, str(exc)) from None
     except imaplib.IMAP4.error:
         raise HTTPException(
-            502, "邮箱服务器拒绝了 IMAP 请求，请检查邮箱授权码、IMAP 服务权限和连接限制"
+            502, system_message("errors.imapConnectionRejectedCheckCredentialsImapPermissionsAndServerConfiguration")
         ) from None
     except ssl.SSLError:
         raise HTTPException(
-            502, "邮箱 TLS 连接或证书校验失败，请检查服务器和加密方式"
+            502, system_message("errors.mailboxTlsConnectionOrCertificateValidationFailedCheckTheHostAndEncryption")
         ) from None
     except TimeoutError:
-        raise HTTPException(502, "邮箱同步网络超时，请稍后重试") from None
+        raise HTTPException(502, system_message("errors.mailboxSynchronizationTimedOutTryAgainLater")) from None
     except OSError:
-        raise HTTPException(502, "无法连接邮箱服务器，请检查网络和服务器地址") from None
+        raise HTTPException(502, system_message("errors.cannotConnectToTheMailboxServerCheckTheNetworkAndHost")) from None
     except Exception as exc:
         # Do not log remote mail content or credential-bearing exception messages.
         logger.error("邮箱同步适配器异常：%s", type(exc).__name__)
         raise HTTPException(
-            502, "邮箱同步失败，请检查账号授权、服务器证书和网络；原有缓存已保留"
+            502, system_message("errors.mailboxSynchronizationFailedCheckCredentialsCertificatesAndNetworkExistingCachedMailIs")
         ) from None
     folders = {
         folder.path: folder
@@ -237,7 +238,7 @@ async def read(db, mail, box):
         {"key": "mail:" + str(box.id)},
     )
     if not locked:
-        raise HTTPException(409, "邮箱正在收取，请同步完成后打开邮件以同步已读")
+        raise HTTPException(409, system_message("errors.mailboxIsCollectingMessagesWaitForSynchronizationBeforeOpeningTheMessage"))
     await db.refresh(mail)
     rows = (
         await db.execute(
@@ -247,7 +248,7 @@ async def read(db, mail, box):
         )
     ).all()
     if not rows:
-        raise HTTPException(409, "邮件位置已变化，请同步后重试")
+        raise HTTPException(409, system_message("errors.theMessageLocationChangedSynchronizeAndTryAgain"))
     try:
         await asyncio.to_thread(
             transport.mark_read,
@@ -260,7 +261,7 @@ async def read(db, mail, box):
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(502, "无法同步邮箱已读状态，请重试") from None
+        raise HTTPException(502, system_message("errors.cannotSynchronizeReadStatusTryAgain")) from None
     mail.is_read = True
     for loc, _ in rows:
         loc.is_read = True

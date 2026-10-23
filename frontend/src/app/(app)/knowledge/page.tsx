@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
@@ -11,11 +12,13 @@ import { errorMessage } from "@/lib/errors";
 import UploadModal from "@/components/knowledge/upload-modal";
 
 export default function KnowledgePage() {
+  const t = useUiTranslations();
+
   const { data: session } = useSession();
   const router = useRouter();
-  const [docs,    setDocs]    = useState<Document[]>([]);
+  const [docs, setDocs] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search,  setSearch]  = useState("");
+  const [search, setSearch] = useState("");
   const [showUpload, setShowUpload] = useState(false);
 
   async function fetchDocs() {
@@ -30,11 +33,14 @@ export default function KnowledgePage() {
     }
   }
 
-  useEffect(() => { fetchDocs(); }, []);
+  useEffect(() => {
+    fetchDocs();
+  }, []);
 
-  const filtered = docs.filter(d =>
-    d.title.toLowerCase().includes(search.toLowerCase()) ||
-    d.tags?.some(t => t.toLowerCase().includes(search.toLowerCase()))
+  const filtered = docs.filter(
+    (d) =>
+      d.title.toLowerCase().includes(search.toLowerCase()) ||
+      d.tags?.some((t) => t.toLowerCase().includes(search.toLowerCase())),
   );
 
   return (
@@ -43,11 +49,14 @@ export default function KnowledgePage() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-wrap gap-3">
         {/* 搜索框 */}
         <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Search
+            size={14}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
           <input
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="搜索标题或标签..."
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("ui.searchTitlesOrTags")}
             className="pl-8 pr-4 py-2 text-sm rounded-lg border border-border bg-muted/30
                        focus:outline-none focus:ring-2 focus:ring-primary/30 w-64"
           />
@@ -66,33 +75,39 @@ export default function KnowledgePage() {
             className="flex items-center gap-1.5 px-3 py-2 text-sm border border-border
                        rounded-lg hover:bg-muted/50 transition-colors"
           >
-            <Upload size={14} /> 上传文件
+            <Upload size={14} /> {t("ui.uploadFile")}
           </button>
           <button
             onClick={() => router.push("/knowledge/new")}
             className="flex items-center gap-1.5 px-4 py-2 text-sm bg-primary
                        text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
           >
-            <Plus size={14} /> 撰写文档
+            <Plus size={14} /> {t("ui.writeDocument")}
           </button>
         </div>
       </div>
 
       {/* 文档列表 */}
       <div className="p-6">
-        <p className="text-xs text-muted-foreground mb-4">AI 只检索已发布且你有权访问的文档。向量服务不可用时仍可通过产品型号、名称等关键词检索；旧文档可点击“重建索引”。</p>
+        <p className="text-xs text-muted-foreground mb-4">
+          {t(
+            "ui.aiSearchesOnlyPublishedDocumentsYouCanAccessIfEmbeddingsAreUnavailable",
+          )}
+        </p>
         {loading ? (
           <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
-            加载中...
+            {t("ui.loading")}
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-            <p className="text-sm">暂无文档</p>
-            <p className="text-xs mt-1">点击右上角&quot;撰写文档&quot;或&quot;上传文件&quot;开始创建</p>
+            <p className="text-sm">{t("ui.noDocumentsYet")}</p>
+            <p className="text-xs mt-1">
+              {t("ui.clickWriteDocumentOrUploadFileToGetStarted")}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {filtered.map(doc => (
+            {filtered.map((doc) => (
               <DocCard
                 key={doc.id}
                 doc={doc}
@@ -109,7 +124,10 @@ export default function KnowledgePage() {
       {showUpload && (
         <UploadModal
           onClose={() => setShowUpload(false)}
-          onSuccess={() => { setShowUpload(false); fetchDocs(); }}
+          onSuccess={() => {
+            setShowUpload(false);
+            fetchDocs();
+          }}
         />
       )}
     </div>
@@ -118,7 +136,11 @@ export default function KnowledgePage() {
 
 // ── Doc Card ──────────────────────────────────────────────────
 function DocCard({
-  doc, currentUserId, currentUserRole, onClick, onDeleted,
+  doc,
+  currentUserId,
+  currentUserRole,
+  onClick,
+  onDeleted,
 }: {
   doc: Document;
   currentUserId?: string;
@@ -126,21 +148,36 @@ function DocCard({
   onClick: () => void;
   onDeleted: () => void;
 }) {
+  const t = useUiTranslations();
+  const uiLabels_CONTENT_TYPE_LABEL = translateLabels(CONTENT_TYPE_LABEL, t);
+  const uiLabels_INDEX_STATUS_LABEL = translateLabels(INDEX_STATUS_LABEL, t);
+
   const isAuthor = doc.author.id === currentUserId;
-  const isDev    = currentUserRole === "developer";
+  const isDev = currentUserRole === "developer";
   const [indexing, setIndexing] = useState(false);
   const [indexError, setIndexError] = useState("");
 
   async function handleReindex(e: React.MouseEvent) {
-    e.stopPropagation(); setIndexing(true); setIndexError("");
-    try { await apiClient.post(`/api/v1/knowledge/${doc.id}/reindex`, {}, { timeout: 60_000 }); onDeleted(); }
-    catch (error) { setIndexError(errorMessage(error)); }
-    finally { setIndexing(false); }
+    e.stopPropagation();
+    setIndexing(true);
+    setIndexError("");
+    try {
+      await apiClient.post(
+        `/api/v1/knowledge/${doc.id}/reindex`,
+        {},
+        { timeout: 60_000 },
+      );
+      onDeleted();
+    } catch (error) {
+      setIndexError(errorMessage(error));
+    } finally {
+      setIndexing(false);
+    }
   }
 
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!confirm(`确定删除文档「${doc.title}」？`)) return;
+    if (!confirm(t("dynamic.deleteDocument", { p0: doc.title }))) return;
     try {
       await apiClient.delete(`/api/v1/knowledge/${doc.id}`);
       onDeleted();
@@ -158,12 +195,16 @@ function DocCard({
       {/* 顶部：类型 + 可见性 */}
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs text-muted-foreground">
-          {CONTENT_TYPE_LABEL[doc.content_type]}
+          {uiLabels_CONTENT_TYPE_LABEL[doc.content_type]}
         </span>
         <div className="flex items-center gap-1.5">
           {!doc.is_published && (
-            <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-950/50
-                             dark:text-amber-400 px-1.5 py-0.5 rounded">草稿</span>
+            <span
+              className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-950/50
+                             dark:text-amber-400 px-1.5 py-0.5 rounded"
+            >
+              {t("ui.draft")}
+            </span>
           )}
           {doc.visibility === "private" ? (
             <Lock size={12} className="text-muted-foreground" />
@@ -174,18 +215,37 @@ function DocCard({
       </div>
 
       {/* 标题 */}
-      <h3 className="font-medium text-sm leading-snug mb-2 line-clamp-2
-                     group-hover:text-primary transition-colors">
+      <h3
+        className="font-medium text-sm leading-snug mb-2 line-clamp-2
+                     group-hover:text-primary transition-colors"
+      >
         {doc.title}
       </h3>
-      <p className={`text-xs mb-2 ${doc.index_status === "ready" ? "text-green-600" : "text-muted-foreground"}`}>{INDEX_STATUS_LABEL[doc.index_status ?? "pending"]}{doc.indexed_chunks ? ` · ${doc.indexed_vectors ?? 0}/${doc.indexed_chunks} 向量块` : ""}</p>
-      {indexError && <p className="text-xs text-red-600 mb-2" role="alert">{indexError}</p>}
+      <p
+        className={`text-xs mb-2 ${doc.index_status === "ready" ? "text-green-600" : "text-muted-foreground"}`}
+      >
+        {uiLabels_INDEX_STATUS_LABEL[doc.index_status ?? "pending"]}
+        {doc.indexed_chunks
+          ? t("dynamic.vectorChunks", {
+              p0: doc.indexed_vectors ?? 0,
+              p1: doc.indexed_chunks,
+            })
+          : ""}
+      </p>
+      {indexError && (
+        <p className="text-xs text-red-600 mb-2" role="alert">
+          {indexError}
+        </p>
+      )}
 
       {/* 标签 */}
       {doc.tags && doc.tags.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-3">
-          {doc.tags.slice(0, 4).map(tag => (
-            <span key={tag} className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+          {doc.tags.slice(0, 4).map((tag) => (
+            <span
+              key={tag}
+              className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground"
+            >
               {tag}
             </span>
           ))}
@@ -195,14 +255,26 @@ function DocCard({
       {/* 底部：作者 + 操作 */}
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
         <div className="flex items-center gap-1.5">
-          <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center
-                          text-xs font-semibold text-primary">
+          <div
+            className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center
+                          text-xs font-semibold text-primary"
+          >
             {doc.author.name[0].toUpperCase()}
           </div>
-          <span className="text-xs text-muted-foreground">{doc.author.name}</span>
+          <span className="text-xs text-muted-foreground">
+            {doc.author.name}
+          </span>
         </div>
         <div className="flex items-center gap-2">
-          {isAuthor && doc.is_published && doc.index_status !== "empty" && <button disabled={indexing} onClick={handleReindex} className="text-xs text-primary hover:underline disabled:opacity-50">{indexing ? "重建中…" : "重建索引"}</button>}
+          {isAuthor && doc.is_published && doc.index_status !== "empty" && (
+            <button
+              disabled={indexing}
+              onClick={handleReindex}
+              className="text-xs text-primary hover:underline disabled:opacity-50"
+            >
+              {indexing ? t("ui.rebuilding") : t("ui.rebuildIndex")}
+            </button>
+          )}
           <span className="text-xs text-muted-foreground flex items-center gap-1">
             <Eye size={11} /> {doc.view_count}
           </span>
@@ -211,7 +283,7 @@ function DocCard({
               onClick={handleDelete}
               className="text-xs text-red-400 hover:text-red-600 transition-colors"
             >
-              删除
+              {t("ui.delete")}
             </button>
           )}
         </div>

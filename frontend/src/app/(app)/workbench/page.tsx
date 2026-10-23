@@ -1,4 +1,9 @@
 "use client";
+import { useLocale } from "next-intl";
+import { getBrowserUiLocale } from "@/i18n/browser";
+
+import { systemMessage } from "@/i18n/system-messages";
+import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import {
   ArrowDown,
@@ -102,11 +107,11 @@ const MailWindow = dynamic(
 );
 const endpoint = "/api/v1/workbench";
 const stepLabels: Record<Step["type"], string> = {
-  read: "读取消息与人工补充",
-  ai: "AI 整理",
-  map: "字段映射",
-  ticket: "写入 Ticket",
-  result: "记录执行结果",
+  read: "Read message and notes",
+  ai: "AI processing",
+  map: "Map fields",
+  ticket: "Create ticket",
+  result: "Record result",
 };
 const platforms = { jira: "Jira", youtrack: "YouTrack" };
 const defaultAccount = {
@@ -138,19 +143,24 @@ function dates(period: string) {
 }
 function dateTime(value?: string | null) {
   return value
-    ? new Date(value).toLocaleString([], {
+    ? new Date(value).toLocaleString(getBrowserUiLocale(), {
         month: "2-digit",
         day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
       })
-    : "尚未执行";
+    : "Not run yet";
 }
 function safeUrl(value: string) {
   return /^https?:\/\//i.test(value) ? value : undefined;
 }
 
 export default function WorkbenchPage() {
+  const locale = useLocale();
+
+  const t = useUiTranslations();
+  const uiLabels_stepLabels = translateLabels(stepLabels, t);
+
   const [data, setData] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
@@ -218,7 +228,8 @@ export default function WorkbenchPage() {
   } | null>(null);
   const interacting = useRef(false);
   const [submittingCheck, setSubmittingCheck] = useState(false);
-  const checkActive = data?.manual_check?.status === "queued" ||
+  const checkActive =
+    data?.manual_check?.status === "queued" ||
     data?.manual_check?.status === "running";
 
   const [absorbed, setAbsorbed] = useState<string[]>([]),
@@ -307,11 +318,18 @@ export default function WorkbenchPage() {
     setSubmittingCheck(true);
     setError("");
     try {
-      const response = await api.post<{ accepted: boolean; check: Overview["manual_check"] }>(
-        `${endpoint}/check-updates`,
+      const response = await api.post<{
+        accepted: boolean;
+        check: Overview["manual_check"];
+      }>(`${endpoint}/check-updates`);
+      setData((current) =>
+        current ? { ...current, manual_check: response.data.check } : current,
       );
-      setData((current) => current ? { ...current, manual_check: response.data.check } : current);
-      setNotice(response.data.accepted ? "检查更新已加入队列，将先收取邮件，再更新托管平台。" : "检查已排队或正在执行，请等待完成。");
+      setNotice(
+        response.data.accepted
+          ? t("ui.updateCheckQueuedMailWillBeCollectedBeforeCheckingPlatforms")
+          : t("ui.checkQueuedOrRunningWaitForCompletion"),
+      );
       await fetchData(true);
     } catch (e) {
       setError(errorMessage(e));
@@ -425,7 +443,7 @@ export default function WorkbenchPage() {
             : current,
         );
       },
-      "已标记已读",
+      t("ui.markedAsRead"),
       false,
     );
   }
@@ -442,7 +460,7 @@ export default function WorkbenchPage() {
       });
       setAbsorbed((ids) => [...ids, message.id]);
       if (dialog?.type === "message") setMessageSubmitted(true);
-      setNotice("已成功入队，自动化将独立执行");
+      setNotice(t("ui.queuedAutomationWillRunIndependently"));
       const timer = setTimeout(() => {
         timers.current.delete(timer);
         void fetchData(true);
@@ -475,8 +493,8 @@ export default function WorkbenchPage() {
       });
       setNotice(
         kind === "accounts"
-          ? "平台顺序已保存，下一轮收取生效"
-          : "自动化顺序已保存",
+          ? t("ui.platformOrderSavedForTheNextCollection")
+          : t("ui.automationOrderSaved"),
       );
     } catch (e) {
       setData((current) =>
@@ -493,14 +511,14 @@ export default function WorkbenchPage() {
   const active = data?.accounts.find((a) => a.id === selected);
   const title =
     dialog?.type === "schedule"
-      ? "定时收取设置"
+      ? t("ui.scheduledCollectionSettings")
       : dialog?.type === "account"
-        ? "托管平台设置"
+        ? t("ui.platformSettings")
         : dialog?.type === "automation"
-          ? "自动化步骤"
+          ? t("ui.automationSteps")
           : dialog?.type === "message"
-            ? "消息详情与人工补充"
-            : "执行记录";
+            ? t("ui.messageDetailsAndNotes")
+            : t("ui.executionHistory");
 
   return (
     <WorkbenchDragCards
@@ -514,7 +532,7 @@ export default function WorkbenchPage() {
           data?.automations.find((item) => item.id === automationId)?.kind ===
           "tapd"
         )
-          setNotice("TAPD 缺陷提交待开发，消息仍保留");
+          setNotice(t("ui.tapdSubmissionIsNotAvailableYetMessagesAreRetained"));
         else if (message) void submit(message, automationId);
       }}
     >
@@ -525,7 +543,7 @@ export default function WorkbenchPage() {
           styles.root,
         )}
       >
-        <TopNav title="工作台" />
+        <TopNav title={t("ui.workbench")} />
         <Container className="flex shrink-0 flex-wrap items-center gap-2 border-b py-2">
           <Tabs
             value={period}
@@ -534,11 +552,11 @@ export default function WorkbenchPage() {
               setPeriod(String(value));
             }}
           >
-            <TabsList aria-label="查看周期">
-              <TabsTrigger value="today">今天</TabsTrigger>
-              <TabsTrigger value="week">本周</TabsTrigger>
-              <TabsTrigger value="month" title="最近 30 天">
-                此月
+            <TabsList aria-label={t("ui.timeRange")}>
+              <TabsTrigger value="today">{t("ui.today")}</TabsTrigger>
+              <TabsTrigger value="week">{t("ui.thisWeek")}</TabsTrigger>
+              <TabsTrigger value="month" title={t("ui.last30Days")}>
+                {t("ui.thisMonth")}
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -546,7 +564,7 @@ export default function WorkbenchPage() {
           <Button
             variant="ghost"
             size="icon"
-            aria-label="刷新工作台"
+            aria-label={t("ui.refreshWorkbench")}
             disabled={loading}
             onClick={() => void fetchData()}
           >
@@ -565,12 +583,12 @@ export default function WorkbenchPage() {
             }}
           >
             <Mail data-icon="inline-start" />
-            邮箱
+            {t("ui.email")}
             {!!mailData?.unread_total && (
               <Badge
                 variant="destructive"
                 className="bg-destructive absolute -top-2 -right-2 min-w-5 justify-center px-1 text-white"
-                aria-label={`${mailData.unread_total} 封未读邮件`}
+                aria-label={t("dynamic.other", { p0: mailData.unread_total })}
               >
                 {mailData.unread_total}
               </Badge>
@@ -580,15 +598,26 @@ export default function WorkbenchPage() {
             variant="outline"
             disabled={!data?.has_mailboxes || submittingCheck || checkActive}
             onClick={() => void checkUpdates()}
-            title={!data?.has_mailboxes ? "请先登录邮箱" : "先收取邮件，再按托管顺序检查更新"}
+            title={
+              !data?.has_mailboxes
+                ? t("ui.signInToAMailboxFirst")
+                : t("ui.collectMailThenCheckPlatformsInOrder")
+            }
           >
-            {submittingCheck || checkActive ? <Loader2 className="animate-spin" /> : <Search />}
-            {data?.manual_check?.status === "running" ? "正在检查" :
-              data?.manual_check?.status === "queued" ? "检查已排队" : "检查更新"}
+            {submittingCheck || checkActive ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <Search />
+            )}
+            {data?.manual_check?.status === "running"
+              ? t("ui.checking")
+              : data?.manual_check?.status === "queued"
+                ? t("ui.checkQueued")
+                : t("ui.checkUpdates")}
           </Button>
           <Button variant="outline" onClick={openSchedule} disabled={!data}>
             <Clock3 data-icon="inline-start" />
-            定时任务
+            {t("ui.scheduledTasks")}
           </Button>
           <Button
             variant="outline"
@@ -597,18 +626,27 @@ export default function WorkbenchPage() {
             onClick={() => setLogOpen(true)}
           >
             <Terminal data-icon="inline-start" />
-            AI 实时输出
+            {t("ui.liveAiOutput")}
           </Button>
         </Container>
         <Container className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 py-6">
           <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-xs">
             <span>
               {data?.schedule.enabled
-                ? `每 ${data.schedule.interval_minutes} 分钟 · ${data.schedule.start}–${data.schedule.end} · ${data.schedule.timezone}`
-                : "未启用定时收取，可点击检查更新立即收取"}
+                ? t("dynamic.everyMinutes", {
+                    p0: data.schedule.interval_minutes,
+                    p1: data.schedule.start,
+                    p2: data.schedule.end,
+                    p3: data.schedule.timezone,
+                  })
+                : t(
+                    "ui.scheduledCollectionIsDisabledClickCheckUpdatesToCollectNow",
+                  )}
             </span>
             <span>
-              下次收取：{dateTime(data?.next_run_at)} · 临时内容保留 30 天
+              {t("ui.nextCollection")}
+              {dateTime(data?.next_run_at)}{" "}
+              {t("ui.temporaryContentIsRetainedFor30Days")}
             </span>
           </div>
           {error && !dialog && (
@@ -616,14 +654,17 @@ export default function WorkbenchPage() {
               <AlertDescription>{error}</AlertDescription>
               <AlertAction>
                 <Button variant="ghost" size="xs" onClick={() => setError("")}>
-                  关闭
+                  {t("ui.closed")}
                 </Button>
               </AlertAction>
             </Alert>
           )}
           {data?.manual_check?.status === "failed" && !dialog && (
             <Alert variant="destructive">
-              <AlertDescription>{data.manual_check.error}；可点击“检查更新”重试。</AlertDescription>
+              <AlertDescription>
+                {systemMessage(data.manual_check.error, t)}
+                {t("ui.clickCheckUpdatesToRetry")}
+              </AlertDescription>
             </Alert>
           )}
           {notice && !dialog && (
@@ -641,23 +682,27 @@ export default function WorkbenchPage() {
             className={styles.columns}
           >
             <section
-              aria-label="正在托管"
+              aria-label={t("ui.monitoredPlatforms")}
               className={cn("space-y-2", styles.accounts)}
             >
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-medium">正在托管</h2>
+                <h2 className="text-sm font-medium">
+                  {t("ui.monitoredPlatforms")}
+                </h2>
                 <span className="text-muted-foreground text-xs">
                   {data?.accounts.length ?? 0}
                 </span>
               </div>
               <p className="text-muted-foreground text-xs">
-                拖动排序 · 按顺序依次收取
+                {t("ui.dragToReorderCollectedSequentially")}
               </p>
               {data?.accounts.some(
                 (a) => !a.mail_folder_id || !a.project_id,
               ) && (
                 <p className="text-muted-foreground text-xs">
-                  现有托管平台需在设置中补充所属项目与邮件文件夹。
+                  {t(
+                    "ui.addAProjectAndMailFolderInSettingsForExistingPlatforms",
+                  )}
                 </p>
               )}
               <CardList
@@ -680,7 +725,9 @@ export default function WorkbenchPage() {
                       <Badge
                         variant="destructive"
                         className="bg-destructive absolute -top-1.5 -right-1.5 text-white"
-                        aria-label={`${data.unread[a.id]} 条未读`}
+                        aria-label={t("dynamic.othermessage16", {
+                          p0: data.unread[a.id],
+                        })}
                       >
                         {data.unread[a.id]}
                       </Badge>
@@ -708,14 +755,14 @@ export default function WorkbenchPage() {
                         </span>
                         <span className="text-muted-foreground text-xs">
                           {platforms[a.platform]}
-                          {!a.enabled && " · 已暂停"}
+                          {!a.enabled && t("ui.paused")}
                         </span>
                       </span>
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      aria-label={`设置${a.name}`}
+                      aria-label={t("dynamic.configure", { p0: a.name })}
                       onClick={() => openAccount(a)}
                     >
                       <Settings />
@@ -723,7 +770,7 @@ export default function WorkbenchPage() {
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      aria-label={`删除${a.name}`}
+                      aria-label={t("dynamic.delete", { p0: a.name })}
                       disabled={busy}
                       onClick={() => {
                         setRemoveError("");
@@ -751,24 +798,24 @@ export default function WorkbenchPage() {
                   }}
                 >
                   <Plus data-icon="inline-start" />
-                  新增平台
+                  {t("ui.addPlatform")}
                 </Button>
               </CardList>
             </section>
             <div className={styles.mobileTabs}>
-              <TabsList className="w-full" aria-label="工作台区域">
+              <TabsList className="w-full" aria-label={t("ui.workbenchArea")}>
                 <TabsTrigger className="flex-1" value="messages">
-                  工作面板
+                  {t("ui.workPanel")}
                 </TabsTrigger>
                 <TabsTrigger className="flex-1" value="automations">
-                  自动化
+                  {t("ui.automation")}
                 </TabsTrigger>
               </TabsList>
             </div>
             <WorkbenchPanel
               wide={widePanels}
               value="messages"
-              aria-label="工作面板"
+              aria-label={t("ui.workPanel")}
               className={cn("space-y-3", styles.messages)}
             >
               <div
@@ -776,14 +823,14 @@ export default function WorkbenchPage() {
                 className="flex items-center justify-between gap-3"
               >
                 <h2 className={cn("text-sm font-medium", styles.panelTitle)}>
-                  工作面板
+                  {t("ui.workPanel")}
                 </h2>
                 <span className="text-muted-foreground text-xs">
                   {active?.name} {active && platforms[active.platform]}
                 </span>
               </div>
               <p className="text-muted-foreground text-xs">
-                按信息时间从旧到新展示 · 以关联邮件时间保留 30 天
+                {t("ui.oldestFirstRetainedFor30DaysFromTheLinkedEmailDate")}
               </p>
               <Tabs
                 value={messageState}
@@ -792,10 +839,12 @@ export default function WorkbenchPage() {
                   setMessageState(String(v));
                 }}
               >
-                <TabsList variant="line" aria-label="信息处理状态">
-                  <TabsTrigger value="pending">待处理</TabsTrigger>
-                  <TabsTrigger value="processed">已处理</TabsTrigger>
-                  <TabsTrigger value="ignored">已忽略</TabsTrigger>
+                <TabsList variant="line" aria-label={t("ui.processingStatus")}>
+                  <TabsTrigger value="pending">{t("ui.pending")}</TabsTrigger>
+                  <TabsTrigger value="processed">
+                    {t("ui.processed")}
+                  </TabsTrigger>
+                  <TabsTrigger value="ignored">{t("ui.dismissed")}</TabsTrigger>
                 </TabsList>
               </Tabs>
               {loading && !data ? (
@@ -810,11 +859,13 @@ export default function WorkbenchPage() {
                     </EmptyMedia>
                     <EmptyTitle>
                       {data?.accounts.length
-                        ? "所选平台在此期间没有此状态的信息"
-                        : "添加托管平台，开始汇聚客户信息"}
+                        ? t("ui.noMatchingMessagesForThisPlatformAndTimeRange")
+                        : t("ui.addAPlatformToCollectCustomerInformation")}
                     </EmptyTitle>
                     <EmptyDescription>
-                      邮箱分类规则将推送移入关联文件夹后，自动收取网站详情。
+                      {t(
+                        "ui.issueDetailsAreCollectedAfterMailRulesMoveNotificationsIntoTheLinked",
+                      )}
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
@@ -834,7 +885,10 @@ export default function WorkbenchPage() {
                         messageState !== "pending" ||
                         absorbed.includes(m.id)
                       }
-                      aria-label={`查看消息 ${m.payload.key} ${m.payload.title}`}
+                      aria-label={t("dynamic.viewMessage", {
+                        p0: m.payload.key,
+                        p1: m.payload.title,
+                      })}
                       onClick={() => {
                         if (!busy) void openMessage(m);
                       }}
@@ -862,7 +916,9 @@ export default function WorkbenchPage() {
                           <Button
                             variant="ghost"
                             size="icon-xs"
-                            aria-label={`移除消息 ${m.payload.key}`}
+                            aria-label={t("dynamic.removeMessage", {
+                              p0: m.payload.key,
+                            })}
                             disabled={busy}
                             onClick={(event) => {
                               event.stopPropagation();
@@ -882,14 +938,14 @@ export default function WorkbenchPage() {
                         </CardTitle>
                         <div className="flex gap-2 text-xs">
                           <Badge variant={m.is_read ? "outline" : "secondary"}>
-                            {m.is_read ? "已读" : "未读"}
+                            {m.is_read ? t("ui.read") : t("ui.unread")}
                           </Badge>
                           <Badge variant="outline">
                             {m.dismissed
-                              ? "已忽略"
+                              ? t("ui.dismissed")
                               : m.submitted
-                                ? "已处理"
-                                : "待处理"}
+                                ? t("ui.processed")
+                                : t("ui.pending")}
                           </Badge>
                         </div>
                       </CardHeader>
@@ -908,10 +964,10 @@ export default function WorkbenchPage() {
                               openMailbox();
                             }}
                           >
-                            最新来源：邮件 ·{" "}
+                            {t("ui.latestSourceEmail")}{" "}
                             {dateTime(m.resource_source.timestamp)}
                             {!m.resource_source.mail_id &&
-                              "（已过期或移出文件夹）"}
+                              t("ui.expiredOrMovedOutOfTheFolder")}
                           </Button>
                         )}
 
@@ -920,7 +976,8 @@ export default function WorkbenchPage() {
                         </p>
                         {m.note && (
                           <p className="text-muted-foreground line-clamp-2 text-xs whitespace-pre-wrap">
-                            补充：{m.note}
+                            {t("ui.notes")}
+                            {m.note}
                           </p>
                         )}
                       </CardContent>
@@ -930,16 +987,18 @@ export default function WorkbenchPage() {
               )}
               {data && data.total_messages > 0 && (
                 <nav
-                  aria-label="工作面板分页"
+                  aria-label={t("ui.workPanelPagination")}
                   className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 pb-20 sm:pb-3"
                 >
                   <span className="text-muted-foreground text-xs">
-                    共 {data.total_messages} 条 · 第 {data.page} /{" "}
+                    {t("ui.total2")}
+                    {data.total_messages} {t("ui.itemsPage")}
+                    {data.page} /{" "}
                     {Math.max(
                       1,
                       Math.ceil(data.total_messages / data.page_size),
                     )}{" "}
-                    页
+                    {t("ui.page")}
                   </span>
                   <div className="flex gap-2">
                     <Button
@@ -948,7 +1007,7 @@ export default function WorkbenchPage() {
                       disabled={loading || busy || data.page <= 1}
                       onClick={() => changePage(data.page - 1)}
                     >
-                      上一页
+                      {t("ui.previous")}
                     </Button>
                     <Button
                       variant="outline"
@@ -960,7 +1019,7 @@ export default function WorkbenchPage() {
                       }
                       onClick={() => changePage(data.page + 1)}
                     >
-                      下一页
+                      {t("ui.next")}
                     </Button>
                   </div>
                 </nav>
@@ -969,17 +1028,19 @@ export default function WorkbenchPage() {
             <WorkbenchPanel
               wide={widePanels}
               value="automations"
-              aria-label="自动化"
+              aria-label={t("ui.automation")}
               className={cn("space-y-3", styles.automations)}
             >
               <div className="flex items-center justify-between">
                 <h2 className={cn("text-sm font-medium", styles.panelTitle)}>
-                  自动化
+                  {t("ui.automation")}
                 </h2>
-                <span className="text-muted-foreground text-xs">顺序轮询</span>
+                <span className="text-muted-foreground text-xs">
+                  {t("ui.sequentialPolling")}
+                </span>
               </div>
               <p className="text-muted-foreground text-xs">
-                独立执行 · 同一卡片内先进先出
+                {t("ui.independentExecutionFifoWithinEachCard")}
               </p>
               <CardList
                 kind="automations"
@@ -1010,7 +1071,7 @@ export default function WorkbenchPage() {
                         <Button
                           variant="ghost"
                           size="icon-xs"
-                          aria-label={`设置${a.name}`}
+                          aria-label={t("dynamic.configure", { p0: a.name })}
                           onClick={() => void openAutomation(a)}
                         >
                           <Settings2 />
@@ -1018,7 +1079,7 @@ export default function WorkbenchPage() {
                         <Button
                           variant="ghost"
                           size="icon-xs"
-                          aria-label={`删除${a.name}`}
+                          aria-label={t("dynamic.delete", { p0: a.name })}
                           disabled={busy}
                           onClick={() => {
                             setRemoveError("");
@@ -1036,22 +1097,25 @@ export default function WorkbenchPage() {
                         {a.kind === "tapd" ? (
                           <>
                             <p className="text-muted-foreground text-xs">
-                              仅支持缺陷 · 提交功能待开发
+                              {t("ui.issuesOnlySubmissionIsNotAvailableYet")}
                             </p>
                             <span className="text-muted-foreground text-xs">
-                              暂不接收消息
+                              {t("ui.notAcceptingMessagesYet")}
                             </span>
                           </>
                         ) : (
                           <>
                             <p className="text-xs">
-                              {counts.running ? "● 正在执行" : "等待任务"}{" "}
-                              {counts.running ?? 0} · 排队 {counts.queued ?? 0}
+                              {counts.running
+                                ? t("ui.running2")
+                                : t("ui.waitingForTasks")}{" "}
+                              {counts.running ?? 0} {t("ui.queued")}
+                              {counts.queued ?? 0}
                             </p>
                             <p className="text-muted-foreground text-xs">
-                              {a.steps.length} 个步骤
+                              {a.steps.length} {t("ui.steps")}
                               {a.steps.some((s) => s.type === "ticket") &&
-                                " · 沿用信息所属项目"}
+                                t("ui.usesTheMessageProject")}
                             </p>
                             <Button
                               variant="link"
@@ -1061,8 +1125,9 @@ export default function WorkbenchPage() {
                                 openDialog({ type: "history", automation: a })
                               }
                             >
-                              已完成 {counts.completed ?? 0} · 失败{" "}
-                              {counts.failed ?? 0} · 执行记录
+                              {t("ui.completed")}
+                              {counts.completed ?? 0} {t("ui.failed")}{" "}
+                              {counts.failed ?? 0} {t("ui.executionHistory2")}
                             </Button>
                           </>
                         )}
@@ -1076,7 +1141,7 @@ export default function WorkbenchPage() {
                   onClick={() => void openAutomation()}
                 >
                   <Plus data-icon="inline-start" />
-                  新建自动化
+                  {t("ui.newAutomation")}
                 </Button>
               </CardList>
             </WorkbenchPanel>
@@ -1105,12 +1170,20 @@ export default function WorkbenchPage() {
         {removeConfig && (
           <ConfirmDialog
             open
-            title={`删除${removeConfig.kind === "accounts" ? "托管平台" : "自动化"}？`}
-            description={`删除“${removeConfig.name}”后停止后续使用。已入队任务继续执行，已有处理记录按缓存期限保留，已创建的 Ticket 不受影响。`}
+            title={t("dynamic.deletemessage23", {
+              p0:
+                removeConfig.kind === "accounts"
+                  ? t("ui.platform")
+                  : t("ui.automation"),
+            })}
+            description={t(
+              "dynamic.deletingPreventsFutureUseQueuedJobsContinueHistoryFollowsThe",
+              { p0: removeConfig.name },
+            )}
             destructive
             busy={removing}
             error={removeError}
-            confirmLabel="确认删除"
+            confirmLabel={t("ui.confirmDeletion")}
             onCancel={() => setRemoveConfig(null)}
             onConfirm={async () => {
               if (removing) return;
@@ -1122,7 +1195,7 @@ export default function WorkbenchPage() {
                 );
                 setRemoveConfig(null);
                 setPage(1);
-                setNotice("已删除");
+                setNotice(t("ui.deleted"));
                 await fetchData(true);
               } catch (e) {
                 setRemoveError(errorMessage(e));
@@ -1135,12 +1208,15 @@ export default function WorkbenchPage() {
         {removeMessage && (
           <ConfirmDialog
             open
-            title="移除此消息？"
-            description={`将“${removeMessage.payload.title}”移到已忽略。收到更新仍保留在已忽略，并标记未读；30天后随缓存清理。`}
+            title={t("ui.removeThisMessage")}
+            description={t(
+              "dynamic.dismissUpdatesRemainDismissedAndAreMarkedUnreadTheMessage",
+              { p0: removeMessage.payload.title },
+            )}
             destructive
             busy={removing}
             error={removeError}
-            confirmLabel="确认移除"
+            confirmLabel={t("ui.confirmRemoval")}
             onCancel={() => setRemoveMessage(null)}
             onConfirm={async () => {
               if (removing) return;
@@ -1161,7 +1237,7 @@ export default function WorkbenchPage() {
                     : current,
                 );
                 setRemoveMessage(null);
-                setNotice("消息已移除");
+                setNotice(t("ui.messageRemoved"));
                 await fetchData(true);
               } catch (e) {
                 setRemoveError(errorMessage(e));
@@ -1190,12 +1266,21 @@ export default function WorkbenchPage() {
               <DialogTitle>{title}</DialogTitle>
               <DialogDescription>
                 {dialog?.type === "schedule"
-                  ? "只控制平台收取时间，自动化执行不受此计划限制。"
+                  ? t(
+                      "ui.thisScheduleControlsPlatformCollectionOnlyAutomationExecutionIsIndependent",
+                    )
                   : dialog?.type === "automation"
-                    ? "自由组合操作，按步骤顺序执行。已入队任务使用提交时的步骤快照。"
+                    ? t(
+                        "ui.combineOperationsInOrderQueuedTasksUseASnapshotOfTheSteps",
+                      )
                     : dialog?.type === "history"
-                      ? `自动化：${dialog.automation.name}。失败任务可重试并重新排队。`
-                      : "所有设置和数据仅对当前账户可见。"}
+                      ? t(
+                          "dynamic.automationFailedJobsCanBeRetriedAndRequeued",
+                          { p0: dialog.automation.name },
+                        )
+                      : t(
+                          "ui.allSettingsAndDataAreVisibleOnlyToTheCurrentAccount",
+                        )}
               </DialogDescription>
             </DialogHeader>
             {dialog?.type !== "history" && (
@@ -1218,12 +1303,12 @@ export default function WorkbenchPage() {
                           }
                         />
                         <FieldLabel htmlFor="workbench-field-2">
-                          启用定时收取
+                          {t("ui.enableScheduledCollection")}
                         </FieldLabel>
                       </Field>
                       <Field>
                         <FieldLabel htmlFor="workbench-field-3">
-                          收取间隔
+                          {t("ui.collectionInterval")}
                         </FieldLabel>
                         <NativeSelect
                           id="workbench-field-3"
@@ -1237,47 +1322,56 @@ export default function WorkbenchPage() {
                         >
                           {[15, 30, 60, 120, 180, 240].map((n) => (
                             <NativeSelectOption key={n} value={n}>
-                              {n < 60 ? `${n} 分钟` : `${n / 60} 小时`}
+                              {n < 60
+                                ? t("dynamic.othermessage27", { p0: n })
+                                : t("dynamic.othermessage28", { p0: n / 60 })}
                             </NativeSelectOption>
                           ))}
                         </NativeSelect>
                       </Field>
                       <div>
-                        <p className="mb-2">工作日</p>
+                        <p className="mb-2">{t("ui.weekdays")}</p>
                         <div className="flex flex-wrap gap-4">
-                          {["一", "二", "三", "四", "五", "六", "日"].map(
-                            (day, i) => (
-                              <Field
-                                key={day}
-                                orientation="horizontal"
-                                className="w-auto"
-                              >
-                                <Checkbox
-                                  id={`workbench-field-4-${i}`}
-                                  checked={schedule.weekdays.includes(i)}
-                                  onCheckedChange={(checked) =>
-                                    setSchedule({
-                                      ...schedule,
-                                      weekdays: checked
-                                        ? [...schedule.weekdays, i]
-                                        : schedule.weekdays.filter(
-                                            (d) => d !== i,
-                                          ),
-                                    })
-                                  }
-                                />
-                                <FieldLabel htmlFor={`workbench-field-4-${i}`}>
-                                  周{day}
-                                </FieldLabel>
-                              </Field>
-                            ),
-                          )}
+                          {[
+                            t("ui.mon"),
+                            t("ui.tue"),
+                            t("ui.wed"),
+                            t("ui.thu"),
+                            t("ui.fri"),
+                            t("ui.sat"),
+                            t("ui.sun"),
+                          ].map((day, i) => (
+                            <Field
+                              key={day}
+                              orientation="horizontal"
+                              className="w-auto"
+                            >
+                              <Checkbox
+                                id={`workbench-field-4-${i}`}
+                                checked={schedule.weekdays.includes(i)}
+                                onCheckedChange={(checked) =>
+                                  setSchedule({
+                                    ...schedule,
+                                    weekdays: checked
+                                      ? [...schedule.weekdays, i]
+                                      : schedule.weekdays.filter(
+                                          (d) => d !== i,
+                                        ),
+                                  })
+                                }
+                              />
+                              <FieldLabel htmlFor={`workbench-field-4-${i}`}>
+                                {t("ui.week")}
+                                {day}
+                              </FieldLabel>
+                            </Field>
+                          ))}
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <Field>
                           <FieldLabel htmlFor="workbench-field-5">
-                            开始时间
+                            {t("ui.startTime")}
                           </FieldLabel>
                           <Input
                             id="workbench-field-5"
@@ -1304,7 +1398,7 @@ export default function WorkbenchPage() {
                         </Field>
                         <Field>
                           <FieldLabel htmlFor="workbench-field-6">
-                            结束时间
+                            {t("ui.endTime")}
                           </FieldLabel>
                           <Input
                             id="workbench-field-6"
@@ -1329,7 +1423,7 @@ export default function WorkbenchPage() {
                       </div>
                       <Field>
                         <FieldLabel htmlFor="workbench-field-7">
-                          时区
+                          {t("ui.timeZone")}
                         </FieldLabel>
                         <div className="flex min-w-0 items-center gap-2">
                           <div className="min-w-0 flex-1 [&>button]:overflow-hidden [&>button]:text-ellipsis [&>button]:whitespace-nowrap">
@@ -1358,7 +1452,7 @@ export default function WorkbenchPage() {
                               })
                             }
                           >
-                            使用浏览器时区
+                            {t("ui.useBrowserTimeZone")}
                           </Button>
                         </div>
                         {fieldErrors["workbench-field-7"] && (
@@ -1368,7 +1462,9 @@ export default function WorkbenchPage() {
                         )}
                       </Field>
                       <p className="text-muted-foreground text-xs">
-                        从所设开始时间按间隔触发；只判断每个平台开始时是否在工作时间内，已开始则执行到结束。出差后请手动更新时区或时间。
+                        {t(
+                          "ui.runsAtIntervalsFromTheStartTimeWorkingHoursAreCheckedBefore",
+                        )}
                       </p>
                     </FieldGroup>
                   )}
@@ -1376,12 +1472,12 @@ export default function WorkbenchPage() {
                     <div className="space-y-5">
                       {dialog.account?.error && (
                         <p role="alert" className="text-destructive text-sm">
-                          {dialog.account.error}
+                          {systemMessage(dialog.account.error, t)}
                         </p>
                       )}
                       <Field>
                         <FieldLabel htmlFor="workbench-field-8">
-                          客户 / 账户名称
+                          {t("ui.customerAccountName")}
                         </FieldLabel>
                         <Input
                           id="workbench-field-8"
@@ -1404,7 +1500,7 @@ export default function WorkbenchPage() {
                       </Field>
                       <Field>
                         <FieldLabel htmlFor="workbench-field-9">
-                          平台
+                          {t("ui.platform")}
                         </FieldLabel>
                         <NativeSelect
                           id="workbench-field-9"
@@ -1427,7 +1523,7 @@ export default function WorkbenchPage() {
                       </Field>
                       <Field>
                         <FieldLabel htmlFor="workbench-field-10">
-                          HTTPS 站点根地址
+                          {t("ui.httpsSiteRootUrl")}
                         </FieldLabel>
                         <Input
                           id="workbench-field-10"
@@ -1451,7 +1547,7 @@ export default function WorkbenchPage() {
                       </Field>
                       <Field>
                         <FieldLabel htmlFor="workbench-field-11">
-                          用户名
+                          {t("ui.username")}
                         </FieldLabel>
                         <Input
                           id="workbench-field-11"
@@ -1476,8 +1572,8 @@ export default function WorkbenchPage() {
                       <Field>
                         <FieldLabel htmlFor="workbench-field-12">
                           {account.platform === "youtrack"
-                            ? "永久访问令牌"
-                            : "密码 / 授权码"}
+                            ? t("ui.permanentAccessToken")
+                            : t("ui.passwordAuthorizationCode")}
                         </FieldLabel>
                         <Input
                           id="workbench-field-12"
@@ -1491,7 +1587,9 @@ export default function WorkbenchPage() {
                           autoComplete="new-password"
                           value={account.password}
                           placeholder={
-                            account.id ? "留空保持原凭据" : "请输入授权凭据"
+                            account.id
+                              ? t("ui.leaveBlankToKeepCurrentCredentials")
+                              : t("ui.enterCredentials")
                           }
                           onChange={(e) =>
                             setAccount({ ...account, password: e.target.value })
@@ -1504,9 +1602,9 @@ export default function WorkbenchPage() {
                         )}
                       </Field>
                       <Field>
-                        <FieldLabel>所属项目</FieldLabel>
+                        <FieldLabel>{t("ui.project")}</FieldLabel>
                         <SearchSelect
-                          label="选择所属项目"
+                          label={t("ui.selectProject")}
                           value={account.project_id}
                           selectedLabel={
                             projectLabels[account.project_id] ??
@@ -1528,7 +1626,7 @@ export default function WorkbenchPage() {
                       </Field>
                       <CatalogCombobox
                         id="hosting-mail-folder"
-                        label="链接邮件文件夹"
+                        label={t("ui.linkedMailFolder")}
                         value={
                           account.mail_folder_id ? [account.mail_folder_id] : []
                         }
@@ -1546,7 +1644,9 @@ export default function WorkbenchPage() {
                         }
                       />
                       <p className="text-muted-foreground text-xs">
-                        仅监控此文件夹最近30天的邮件推送，通过邮件内的同站点链接收取问题详情。
+                        {t(
+                          "ui.monitorNotificationsFromTheLast30DaysInThisFolderAndCollect",
+                        )}
                       </p>
                       <Field orientation="horizontal" className="w-auto">
                         <Checkbox
@@ -1557,24 +1657,28 @@ export default function WorkbenchPage() {
                           }
                         />
                         <FieldLabel htmlFor="workbench-field-14">
-                          启用此平台
+                          {t("ui.enableThisPlatform")}
                         </FieldLabel>
                       </Field>
                       <p className="text-muted-foreground text-xs">
-                        平台主机须由管理员加入允许列表。凭据加密保存，收取只读取来源数据。
+                        {t(
+                          "ui.anAdministratorMustAllowThisPlatformHostCredentialsAreEncryptedCollectionReads",
+                        )}
                       </p>
                     </div>
                   )}
                   {dialog?.type === "automation" &&
                     (dialog.automation?.kind === "tapd" ? (
                       <p className="text-muted-foreground py-8">
-                        导入类型：缺陷。提交与配置功能将在后续开发，当前暂不接收消息。
+                        {t(
+                          "ui.importTypeIssueSubmissionAndConfigurationWillBeAvailableLaterMessagesAre",
+                        )}
                       </p>
                     ) : (
                       <div className="space-y-3">
                         <Field>
                           <FieldLabel htmlFor="workbench-field-15">
-                            自动化名称
+                            {t("ui.automationName")}
                           </FieldLabel>
                           <Input
                             id="workbench-field-15"
@@ -1605,7 +1709,7 @@ export default function WorkbenchPage() {
                                 {i + 1}
                               </span>
                               <NativeSelect
-                                aria-label={`第${i + 1}步操作`}
+                                aria-label={t("dynamic.step", { p0: i + 1 })}
                                 className="min-w-0 flex-1"
                                 value={step.type}
                                 onChange={(e) => {
@@ -1617,16 +1721,18 @@ export default function WorkbenchPage() {
                                   setAutomation({ ...automation, steps });
                                 }}
                               >
-                                {Object.entries(stepLabels).map(([k, v]) => (
-                                  <NativeSelectOption key={k} value={k}>
-                                    {v}
-                                  </NativeSelectOption>
-                                ))}
+                                {Object.entries(uiLabels_stepLabels).map(
+                                  ([k, v]) => (
+                                    <NativeSelectOption key={k} value={k}>
+                                      {v}
+                                    </NativeSelectOption>
+                                  ),
+                                )}
                               </NativeSelect>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                aria-label="步骤上移"
+                                aria-label={t("ui.moveStepUp")}
                                 disabled={i === 0}
                                 onClick={() => {
                                   const steps = [...automation.steps];
@@ -1642,7 +1748,7 @@ export default function WorkbenchPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                aria-label="步骤下移"
+                                aria-label={t("ui.moveStepDown")}
                                 disabled={i === automation.steps.length - 1}
                                 onClick={() => {
                                   const steps = [...automation.steps];
@@ -1658,7 +1764,7 @@ export default function WorkbenchPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                aria-label="删除步骤"
+                                aria-label={t("ui.deleteStep")}
                                 onClick={() =>
                                   setAutomation({
                                     ...automation,
@@ -1673,9 +1779,11 @@ export default function WorkbenchPage() {
                             </div>
                             {step.type === "ai" && (
                               <Textarea
-                                aria-label="AI处理要求"
+                                aria-label={t("ui.aiInstructions")}
                                 value={step.instruction ?? ""}
-                                placeholder="填写整理要求，保留来源事实"
+                                placeholder={t(
+                                  "ui.describeTheProcessingRequirementsPreserveSourceFacts",
+                                )}
                                 onChange={(e) => {
                                   const steps = [...automation.steps];
                                   steps[i] = {
@@ -1688,14 +1796,16 @@ export default function WorkbenchPage() {
                             )}
                             {step.type === "ticket" && (
                               <p className="text-muted-foreground text-xs">
-                                目标项目自动沿用此信息绑定的托管项目，无需单独选择。
+                                {t(
+                                  "ui.theTargetProjectFollowsTheMonitoredProjectLinkedToThisMessage",
+                                )}
                               </p>
                             )}
                             {(step.type === "map" ||
                               step.type === "ticket") && (
                               <Field>
                                 <FieldLabel htmlFor={`workbench-field-17-${i}`}>
-                                  优先级
+                                  {t("ui.priority")}
                                 </FieldLabel>
                                 <NativeSelect
                                   id={`workbench-field-17-${i}`}
@@ -1710,13 +1820,13 @@ export default function WorkbenchPage() {
                                   }}
                                 >
                                   <NativeSelectOption value="critical">
-                                    严重
+                                    {t("ui.critical")}
                                   </NativeSelectOption>
                                   <NativeSelectOption value="major">
-                                    一般
+                                    {t("ui.major")}
                                   </NativeSelectOption>
                                   <NativeSelectOption value="trivial">
-                                    轻微
+                                    {t("ui.trivial")}
                                   </NativeSelectOption>
                                 </NativeSelect>
                               </Field>
@@ -1734,7 +1844,7 @@ export default function WorkbenchPage() {
                           }
                         >
                           <Plus data-icon="inline-start" />
-                          添加操作
+                          {t("ui.addOperation")}
                         </Button>
                       </div>
                     ))}
@@ -1743,7 +1853,9 @@ export default function WorkbenchPage() {
                       {!!dialog.message.mails?.length && (
                         <div className="space-y-1">
                           <p className="text-muted-foreground text-xs">
-                            关联邮件 · 点击原文才同步邮箱已读
+                            {t(
+                              "ui.linkedEmailOpeningTheOriginalSynchronizesItsReadStatus",
+                            )}
                           </p>
                           {dialog.message.mails.map((m) => (
                             <Button
@@ -1757,7 +1869,7 @@ export default function WorkbenchPage() {
                               }}
                             >
                               {dialog.message.resource_source?.mail_id ===
-                                m.id && "最新来源 · "}
+                                m.id && t("ui.latestSource")}
                               {m.subject} · {dateTime(m.received_at)}
                             </Button>
                           ))}
@@ -1773,18 +1885,18 @@ export default function WorkbenchPage() {
                                 api.post(
                                   `${endpoint}/messages/${dialog.message.id}/restore`,
                                 ),
-                              "已恢复到待处理",
+                              t("ui.restoredToPending"),
                               true,
                             )
                           }
                         >
-                          恢复到待处理
+                          {t("ui.restoreToPending")}
                         </Button>
                       )}
                       {!!dialog.message.jobs?.length && (
                         <div className="space-y-3">
                           <h4 className="text-sm font-medium">
-                            自动化处理记录
+                            {t("ui.automationHistory")}
                           </h4>
                           {dialog.message.jobs.map((job) => (
                             <div
@@ -1794,24 +1906,24 @@ export default function WorkbenchPage() {
                               <p>
                                 {
                                   {
-                                    queued: "排队中",
-                                    running: "正在执行",
-                                    completed: "已完成",
-                                    failed: "失败",
+                                    queued: t("ui.queued2"),
+                                    running: t("ui.running3"),
+                                    completed: t("ui.completed"),
+                                    failed: t("ui.failed2"),
                                   }[job.status]
                                 }{" "}
-                                · {job.step_index}/{job.steps.length} 步 ·{" "}
-                                {dateTime(job.queued_at)}
+                                · {job.step_index}/{job.steps.length}{" "}
+                                {t("ui.step")} {dateTime(job.queued_at)}
                               </p>
                               {job.steps.map((step, i) => (
                                 <p key={i}>
-                                  {i + 1}. {stepLabels[step.type]} ·{" "}
+                                  {i + 1}. {uiLabels_stepLabels[step.type]} ·{" "}
                                   {i < job.step_index
-                                    ? "完成"
+                                    ? t("ui.done")
                                     : i === job.step_index &&
                                         job.status === "running"
-                                      ? "执行中"
-                                      : "未完成"}
+                                      ? t("ui.running3")
+                                      : t("ui.incomplete")}
                                 </p>
                               ))}
                               {job.logs.map((log, i) => (
@@ -1819,11 +1931,14 @@ export default function WorkbenchPage() {
                                   className="text-muted-foreground whitespace-pre-wrap"
                                   key={i}
                                 >
-                                  {dateTime(log.at)} {log.message}
+                                  {dateTime(log.at)}{" "}
+                                  {systemMessage(log.message, t)}
                                 </p>
                               ))}
                               {job.error && (
-                                <p className="text-destructive">{job.error}</p>
+                                <p className="text-destructive">
+                                  {systemMessage(job.error, t)}
+                                </p>
                               )}
                               {job.snapshot.summary && (
                                 <p className="whitespace-pre-wrap">
@@ -1832,7 +1947,7 @@ export default function WorkbenchPage() {
                               )}
                               {job.ticket_id && (
                                 <a className="underline" href="/ticket">
-                                  前往 Ticket
+                                  {t("ui.goToTicket")}
                                 </a>
                               )}
                               {job.status === "failed" && (
@@ -1846,24 +1961,25 @@ export default function WorkbenchPage() {
                                         api.post(
                                           `${endpoint}/jobs/${job.id}/retry`,
                                         ),
-                                      "已重新入队",
+                                      t("ui.queuedAgain"),
                                       true,
                                     )
                                   }
                                 >
-                                  重试
+                                  {t("ui.retry")}
                                 </Button>
                               )}
                             </div>
                           ))}
                           {(dialog.message.jobs_total ?? 0) > 10 && (
                             <nav
-                              aria-label="信息执行记录分页"
+                              aria-label={t("ui.messageExecutionPagination")}
                               className="flex flex-wrap items-center justify-between gap-2"
                             >
                               <span className="text-muted-foreground text-xs">
-                                共 {dialog.message.jobs_total} 次 · 第{" "}
-                                {dialog.message.jobs_page ?? 1} 页
+                                {t("ui.total2")}
+                                {dialog.message.jobs_total} {t("ui.runsPage")}{" "}
+                                {dialog.message.jobs_page ?? 1} {t("ui.page")}
                               </span>
                               <div className="flex gap-2">
                                 {[-1, 1].map((offset) => (
@@ -1896,10 +2012,12 @@ export default function WorkbenchPage() {
                                             ? { ...current, message }
                                             : current,
                                         );
-                                      }, "执行记录已更新");
+                                      }, t("ui.executionHistoryUpdated"));
                                     }}
                                   >
-                                    {offset < 0 ? "上一页" : "下一页"}
+                                    {offset < 0
+                                      ? t("ui.previous")
+                                      : t("ui.next")}
                                   </Button>
                                 ))}
                               </div>
@@ -1920,13 +2038,13 @@ export default function WorkbenchPage() {
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-sm underline"
                         >
-                          查看来源
+                          {t("ui.viewSource")}
                           <ExternalLink className="size-3" />
                         </a>
                       )}
                       {dialog.message.payload.attachments?.map((a, i) => (
                         <p key={i} className="text-xs">
-                          附件：
+                          {t("ui.attachments")}
                           {safeUrl(a.url) ? (
                             <a
                               className="underline"
@@ -1943,7 +2061,7 @@ export default function WorkbenchPage() {
                       ))}
                       <Field>
                         <FieldLabel htmlFor="workbench-field-18">
-                          人工补充
+                          {t("ui.notes2")}
                         </FieldLabel>
                         <Textarea
                           id="workbench-field-18"
@@ -1957,7 +2075,7 @@ export default function WorkbenchPage() {
                       </Field>
                       <Field>
                         <FieldLabel htmlFor="workbench-field-19">
-                          提交至自动化
+                          {t("ui.submitToAutomation")}
                         </FieldLabel>
                         <NativeSelect
                           id="workbench-field-19"
@@ -2004,7 +2122,9 @@ export default function WorkbenchPage() {
                       }
                       onClick={() => void submit(dialog.message, target)}
                     >
-                      {messageSubmitted ? "已提交至自动化" : "提交并移入队列"}
+                      {messageSubmitted
+                        ? t("ui.submittedToAutomation")
+                        : t("ui.submitAndEnqueue")}
                     </Button>
                   )}
                   <Button
@@ -2019,32 +2139,44 @@ export default function WorkbenchPage() {
                       const errors: Record<string, string> = {};
                       if (dialog?.type === "account") {
                         if (!account.name.trim())
-                          errors["workbench-field-8"] = "请输入客户 / 账户名称";
+                          errors["workbench-field-8"] = t(
+                            "ui.enterACustomerAccountName",
+                          );
                         if (!account.base_url.trim())
-                          errors["workbench-field-10"] = "请输入平台地址";
+                          errors["workbench-field-10"] = t(
+                            "ui.enterAPlatformUrl",
+                          );
                         if (!account.username.trim())
-                          errors["workbench-field-11"] = "请输入用户名";
+                          errors["workbench-field-11"] = t("ui.enterAUsername");
                         if (!account.id && !account.password.trim())
-                          errors["workbench-field-12"] = "请输入授权凭据";
+                          errors["workbench-field-12"] = t(
+                            "ui.enterCredentials",
+                          );
                       }
                       if (
                         dialog?.type === "automation" &&
                         !automation.name.trim()
                       )
-                        errors["workbench-field-15"] = "请输入自动化名称";
+                        errors["workbench-field-15"] = t(
+                          "ui.enterAnAutomationName",
+                        );
                       if (dialog?.type === "schedule" && schedule) {
                         if (!schedule.start)
-                          errors["workbench-field-5"] = "请选择开始时间";
+                          errors["workbench-field-5"] = t(
+                            "ui.selectAStartTime",
+                          );
                         if (!schedule.end || schedule.end <= schedule.start)
-                          errors["workbench-field-6"] =
-                            "结束时间必须晚于开始时间";
+                          errors["workbench-field-6"] = t(
+                            "ui.endTimeMustBeAfterStartTime",
+                          );
                         try {
-                          new Intl.DateTimeFormat(undefined, {
+                          new Intl.DateTimeFormat(locale, {
                             timeZone: schedule.timezone,
                           });
                         } catch {
-                          errors["workbench-field-7"] =
-                            "请输入有效的 IANA 时区";
+                          errors["workbench-field-7"] = t(
+                            "ui.enterAValidIanaTimeZone",
+                          );
                         }
                       }
                       setFieldErrors(errors);
@@ -2052,7 +2184,7 @@ export default function WorkbenchPage() {
                       if (dialog?.type === "schedule" && schedule)
                         void perform(
                           () => api.put(`${endpoint}/schedule`, schedule),
-                          "收取计划已保存",
+                          t("ui.collectionScheduleSaved"),
                         );
                       if (dialog?.type === "account") {
                         const { id, password, ...values } = account;
@@ -2075,7 +2207,7 @@ export default function WorkbenchPage() {
                                       password: "",
                                     }));
                                   }),
-                          "托管平台已保存",
+                          t("ui.platformSaved"),
                         );
                       }
                       if (dialog?.type === "automation") {
@@ -2092,7 +2224,7 @@ export default function WorkbenchPage() {
                                       id: saved.id,
                                     })),
                                   ),
-                          "自动化已保存",
+                          t("ui.automationSaved"),
                         );
                       }
                       if (dialog?.type === "message")
@@ -2102,12 +2234,15 @@ export default function WorkbenchPage() {
                               `${endpoint}/messages/${dialog.message.id}/note`,
                               { note },
                             ),
-                          "补充内容已保存",
+                          t("ui.notesSaved"),
                         );
                     }}
                   >
-                    {busy && <Loader2 className="animate-spin" />}保存
-                    {dialog?.type === "message" ? "补充" : "设置"}
+                    {busy && <Loader2 className="animate-spin" />}
+                    {t("ui.save")}
+                    {dialog?.type === "message"
+                      ? t("ui.notes2")
+                      : t("ui.settings")}
                   </Button>
                 </DialogFooter>
               )}

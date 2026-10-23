@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
@@ -14,6 +15,8 @@ export function MailSplitLayout({
   sidebar: ReactNode;
   children: ReactNode;
 }) {
+  const t = useUiTranslations();
+
   const root = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
@@ -39,7 +42,7 @@ export function MailSplitLayout({
           </ResizablePanel>
           <ResizableHandle
             withHandle
-            aria-label="调整邮箱侧栏宽度"
+            aria-label={t("ui.resizeMailSidebar")}
             className="before:bg-border w-3 bg-transparent before:absolute before:inset-y-0 before:left-1/2 before:w-px"
           />
           <ResizablePanel

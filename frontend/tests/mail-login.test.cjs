@@ -10,15 +10,22 @@ function mailboxWindow() {
   let cursor = 0;
   let poll;
   const overview = {
-    mailboxes: [], folders: [], rules: [], unread: {}, unread_total: 0,
+    mailboxes: [],
+    folders: [],
+    rules: [],
+    unread: {},
+    unread_total: 0,
   };
   const react = {
     useState(initial) {
       const index = cursor++;
       if (!(index in slots)) slots[index] = initial;
-      return [slots[index], (next) => {
-        slots[index] = typeof next === "function" ? next(slots[index]) : next;
-      }];
+      return [
+        slots[index],
+        (next) => {
+          slots[index] = typeof next === "function" ? next(slots[index]) : next;
+        },
+      ];
     },
     useRef(initial) {
       const index = cursor++;
@@ -30,19 +37,43 @@ function mailboxWindow() {
   };
   const jsx = (type, props) => ({ type, props });
   const exports = {};
-  vm.runInNewContext(ts.transpileModule(
-    fs.readFileSync("src/components/workbench/mail-window.tsx", "utf8"),
-    { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } },
-  ).outputText, {
-    exports,
-    require(name) {
-      if (name === "react") return react;
-      if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "Fragment" };
-      if (name === "@/hooks/use-polling") return { usePolling: (fn) => { poll = fn; } };
-      if (name === "@/lib/api") return { default: { get: async () => ({ data: overview }) } };
-      return new Proxy({}, { get: (_, key) => key });
+  vm.runInNewContext(
+    ts.transpileModule(
+      fs.readFileSync("src/components/workbench/mail-window.tsx", "utf8"),
+      {
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          jsx: ts.JsxEmit.ReactJSX,
+        },
+      },
+    ).outputText,
+    {
+      exports,
+      require(name) {
+        if (name === "@/i18n/client")
+          return {
+            useUiTranslations: () =>
+              require("next-intl").createTranslator({
+                locale: "zh-CN",
+                messages: require("../messages/zh-CN.json"),
+              }),
+          };
+        if (name === "next-intl") return { useLocale: () => "zh-CN" };
+        if (name === "react") return react;
+        if (name === "react/jsx-runtime")
+          return { jsx, jsxs: jsx, Fragment: "Fragment" };
+        if (name === "@/hooks/use-polling")
+          return {
+            usePolling: (fn) => {
+              poll = fn;
+            },
+          };
+        if (name === "@/lib/api")
+          return { default: { get: async () => ({ data: overview }) } };
+        return new Proxy({}, { get: (_, key) => key });
+      },
     },
-  });
+  );
   return {
     render() {
       cursor = 0;
@@ -61,7 +92,8 @@ function find(node, predicate) {
   }
 }
 
-const loginDialog = (tree) => find(tree, (node) => node.props?.title === "登录邮箱");
+const loginDialog = (tree) =>
+  find(tree, (node) => node.props?.title === "登录邮箱");
 
 test("empty mailbox refreshes never open or reopen the login dialog", async () => {
   const window = mailboxWindow();
@@ -69,7 +101,9 @@ test("empty mailbox refreshes never open or reopen the login dialog", async () =
   await window.refresh();
   let tree = window.render();
   assert.equal(loginDialog(tree).props.open, false);
-  find(tree, (node) => node.props?.children?.includes?.("登录邮箱")).props.onClick();
+  find(tree, (node) =>
+    node.props?.children?.includes?.("登录邮箱"),
+  ).props.onClick();
   tree = window.render();
   assert.equal(loginDialog(tree).props.open, true);
   loginDialog(tree).props.onClose();
@@ -82,15 +116,20 @@ test("empty mailbox refreshes never open or reopen the login dialog", async () =
 test("mailbox polling preserves an in-progress login form", async () => {
   const window = mailboxWindow();
   let tree = window.render();
-  find(tree, (node) => node.props?.children?.includes?.("登录邮箱")).props.onClick();
+  find(tree, (node) =>
+    node.props?.children?.includes?.("登录邮箱"),
+  ).props.onClick();
   tree = window.render();
-  find(tree, (node) => node.props?.id === "mail-login-address")
-    .props.onChange({ target: { value: "draft@example.test" } });
+  find(tree, (node) => node.props?.id === "mail-login-address").props.onChange({
+    target: { value: "draft@example.test" },
+  });
   for (let i = 0; i < 3; i++) {
     await window.refresh();
     tree = window.render();
     assert.equal(loginDialog(tree).props.open, true);
-    assert.equal(find(tree, (node) => node.props?.id === "mail-login-address").props.value,
-      "draft@example.test");
+    assert.equal(
+      find(tree, (node) => node.props?.id === "mail-login-address").props.value,
+      "draft@example.test",
+    );
   }
 });

@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, field_validator
@@ -19,7 +20,7 @@ class ChangePasswordRequest(BaseModel):
     @classmethod
     def password_min_length(cls, v: str) -> str:
         if len(v) < 6:
-            raise ValueError("密码长度不能少于 6 位")
+            raise ValueError(system_message("errors.passwordMustBeAtLeast6Characters"))
         return v
 
 
@@ -54,7 +55,7 @@ class CreateUserRequest(BaseModel):
     @classmethod
     def password_min_length(cls, v: str) -> str:
         if len(v) < 6:
-            raise ValueError("密码长度不能少于 6 位")
+            raise ValueError(system_message("errors.passwordMustBeAtLeast6Characters"))
         return v
 
 

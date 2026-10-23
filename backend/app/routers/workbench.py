@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 from datetime import datetime
 from uuid import UUID
 
@@ -32,6 +33,7 @@ from app.services.workbench_limits import (
 from app.services.workbench_mail_service import owned_folder
 from app.services.workbench_resources import validate_source_url
 from app.services.workbench_schedule import next_slot
+from app.i18n import output_locale
 
 router = APIRouter()
 
@@ -85,11 +87,11 @@ async def overview(
     db: AsyncSession = Depends(get_db),
 ):
     if (since and since.tzinfo is None) or (until and until.tzinfo is None):
-        raise HTTPException(422, "时间范围必须包含时区")
+        raise HTTPException(422, system_message("errors.theTimeRangeMustIncludeATimeZone"))
     lower = max(since or now() - service.RETENTION, now() - service.RETENTION)
     upper = until or now()
     if lower > upper:
-        raise HTTPException(422, "开始时间不能晚于结束时间")
+        raise HTTPException(422, system_message("errors.startTimeMustNotBeAfterEndTime"))
     pref = await service.initialize(db, user.id)
     await db.commit()
     result = {
@@ -200,7 +202,7 @@ async def check_updates(user: AnyUser, db: AsyncSession = Depends(get_db)):
     if not await db.scalar(
         select(WBMailbox.id).where(WBMailbox.user_id == user.id).limit(1)
     ):
-        raise HTTPException(422, "请先登录邮箱，再检查更新")
+        raise HTTPException(422, system_message("errors.signInToAMailboxBeforeCheckingUpdates"))
     result = await enqueue_manual(db, user.id)
     await db.commit()
     return result
@@ -212,7 +214,7 @@ async def schedule(body: Schedule, user: AnyUser, db: AsyncSession = Depends(get
     pref = await db.scalar(
         select(WBPreference).where(WBPreference.user_id == user.id).with_for_update()
     )
-    pref.schedule = {**body.model_dump(), "_configured": True}
+    pref.schedule = {**body.model_dump(), "_configured": True, "output_locale": output_locale.get()}
     pref.next_run_at = next_slot(pref.schedule, now(), inclusive=True)
     await db.commit()
     return {"next_run_at": pref.next_run_at}
@@ -262,7 +264,7 @@ async def add_account(body: Account, user: AnyUser, db: AsyncSession = Depends(g
         select(WBPreference).where(WBPreference.user_id == user.id).with_for_update()
     )
     if not body.password or not body.password.get_secret_value():
-        raise HTTPException(422, "请填写密码或访问令牌")
+        raise HTTPException(422, system_message("errors.enterAPasswordOrAccessToken"))
     await check_configuration_limit(db, WBAccount, user.id)
     row = WBAccount(
         user_id=user.id,
@@ -328,7 +330,7 @@ async def edit_automation(
 ):
     row = await service.owned(db, WBAutomation, ident, user.id, True)
     if row.kind == "tapd":
-        raise HTTPException(409, "TAPD 缺陷提交功能尚未开放")
+        raise HTTPException(409, system_message("errors.tapdIssueSubmissionIsNotAvailableYet"))
     row.name, row.steps = body.name, [s.model_dump(mode="json") for s in body.steps]
     await db.commit()
     return service.public(row)
@@ -366,7 +368,7 @@ async def order(
 ):
     model = {"accounts": WBAccount, "automations": WBAutomation}.get(kind)
     if not model:
-        raise HTTPException(404, "排序类型不存在")
+        raise HTTPException(404, system_message("errors.sortCategoryNotFound"))
     await db.scalar(
         select(WBPreference).where(WBPreference.user_id == user.id).with_for_update()
     )
@@ -380,7 +382,7 @@ async def order(
         ).all()
     )
     if len(body.ids) != len(set(body.ids)) or set(body.ids) != {r.id for r in rows}:
-        raise HTTPException(409, "列表已发生变化，请刷新后重新排序")
+        raise HTTPException(409, system_message("errors.theListChangedRefreshBeforeReordering"))
     positions = {ident: i for i, ident in enumerate(body.ids)}
     for row in rows:
         row.position = positions[row.id]
@@ -392,7 +394,7 @@ async def order(
 async def read_message(ident: UUID, user: AnyUser, db: AsyncSession = Depends(get_db)):
     row = await service.owned(db, WBMessage, ident, user.id, True)
     if row.expires_at <= now():
-        raise HTTPException(410, "消息已过期")
+        raise HTTPException(410, system_message("errors.messageExpired"))
     row.is_read = True
     await db.commit()
     return await message_detail(row, db)
@@ -407,7 +409,7 @@ async def get_message(
 ):
     row = await service.owned(db, WBMessage, ident, user.id)
     if row.expires_at <= now():
-        raise HTTPException(410, "消息已过期")
+        raise HTTPException(410, system_message("errors.messageExpired"))
     return await message_detail(row, db, jobs_page)
 
 
@@ -513,11 +515,11 @@ async def bound_steps(db, automation, project_id):
             for s in Automation(name=automation.name, steps=automation.steps).steps
         ]
     except ValidationError:
-        raise HTTPException(422, "请先完善自动化步骤") from None
+        raise HTTPException(422, system_message("errors.completeTheAutomationStepsFirst")) from None
     if any(s["type"] == "ticket" for s in steps):
         project = await db.get(Project, project_id) if project_id else None
         if not project or project.deleted_at:
-            raise HTTPException(422, "托管信息的所属项目不存在，请检查托管平台设置")
+            raise HTTPException(422, system_message("errors.thePlatformProjectDoesNotExistCheckPlatformSettings"))
         for step in steps:
             if step["type"] == "ticket":
                 step["project_id"] = str(project.id)
@@ -530,7 +532,7 @@ async def dismiss_message(
 ):
     row = await service.owned(db, WBMessage, ident, user.id, True)
     if row.expires_at <= now():
-        raise HTTPException(409, "消息已提交或过期，请刷新工作台")
+        raise HTTPException(409, system_message("errors.thisMessageWasSubmittedOrExpiredRefreshTheWorkbench"))
     row.dismissed, row.is_read = True, True
     await db.commit()
     return {"ok": True}
@@ -542,7 +544,7 @@ async def note(
 ):
     row = await service.owned(db, WBMessage, ident, user.id, True)
     if row.submitted or row.dismissed or row.expires_at <= now():
-        raise HTTPException(409, "消息已提交或过期，不能再修改")
+        raise HTTPException(409, system_message("errors.thisMessageWasSubmittedOrExpiredAndCannotBeEdited"))
     row.note = body.note
     await db.commit()
     return {"ok": True}
@@ -554,12 +556,12 @@ async def submit(
 ):
     message = await service.owned(db, WBMessage, ident, user.id, True)
     if message.submitted or message.dismissed or message.expires_at <= now():
-        raise HTTPException(409, "消息已入队或过期，请刷新")
+        raise HTTPException(409, system_message("errors.thisMessageWasDismissedOrExpiredRefresh"))
     automation = await service.owned(
         db, WBAutomation, body.automation_id, user.id, True
     )
     if automation.kind == "tapd":
-        raise HTTPException(409, "TAPD 缺陷提交功能尚未开放")
+        raise HTTPException(409, system_message("errors.tapdIssueSubmissionIsNotAvailableYet"))
     account = await service.owned(db, WBAccount, message.account_id, user.id)
     if not message.project_id:
         message.project_id = account.project_id
@@ -570,6 +572,7 @@ async def submit(
         message_id=message.id,
         input_revision=message.revision,
         snapshot={
+            "output_locale": output_locale.get(),
             "payload": message.payload,
             "note": message.note,
             "platform": account.platform,
@@ -589,7 +592,7 @@ async def submit(
 async def retry(ident: UUID, user: AnyUser, db: AsyncSession = Depends(get_db)):
     job = await service.owned(db, WBJob, ident, user.id)
     if job.status != "failed" or job.expires_at <= now():
-        raise HTTPException(409, "仅可重试保留期内的失败任务")
+        raise HTTPException(409, system_message("errors.onlyFailedJobsWithinTheRetentionPeriodCanBeRetried"))
     # Match collection's message -> job lock order to avoid a retry/update deadlock.
     message = (
         await service.owned(db, WBMessage, job.message_id, user.id, True)
@@ -598,7 +601,7 @@ async def retry(ident: UUID, user: AnyUser, db: AsyncSession = Depends(get_db)):
     )
     await db.refresh(job, with_for_update=True)
     if job.status != "failed" or job.expires_at <= now():
-        raise HTTPException(409, "仅可重试保留期内的失败任务")
+        raise HTTPException(409, system_message("errors.onlyFailedJobsWithinTheRetentionPeriodCanBeRetried"))
     if message:
         active = await db.scalar(
             select(WBJob.id)
@@ -608,9 +611,9 @@ async def retry(ident: UUID, user: AnyUser, db: AsyncSession = Depends(get_db)):
             .limit(1)
         )
         if active:
-            raise HTTPException(409, "该信息已有自动化任务正在执行")
+            raise HTTPException(409, system_message("errors.anAutomationIsStillProcessingThisMessage"))
         if message.dismissed:
-            raise HTTPException(409, "请先将已忽略信息恢复到待处理")
+            raise HTTPException(409, system_message("errors.restoreThisDismissedMessageToPendingFirst"))
         message.submitted, message.is_read = True, True
     automation = await service.owned(db, WBAutomation, job.automation_id, user.id)
     project_id = (
@@ -621,12 +624,12 @@ async def retry(ident: UUID, user: AnyUser, db: AsyncSession = Depends(get_db)):
     current = await bound_steps(db, automation, project_id)
     # Completed operations remain checkpointed. Editing their prefix would invalidate side effects.
     if current[: job.step_index] != job.steps[: job.step_index]:
-        raise HTTPException(409, "已完成步骤已被修改，请保留原步骤前缀后重试")
+        raise HTTPException(409, system_message("errors.completedStepsWereModifiedKeepTheOriginalCompletedPrefixBeforeRetrying"))
     job.steps = current
     job.status, job.error, job.queued_at = "queued", None, now()
     job.logs = [
         *job.logs[-(MAX_JOB_LOG_ENTRIES - 1) :],
-        {"at": now().isoformat(), "message": "手动重试，已进入队尾"},
+        {"at": now().isoformat(), "message": system_message("errors.retryQueued")},
     ]
     await db.commit()
     return service.public(job)
@@ -635,11 +638,11 @@ async def retry(ident: UUID, user: AnyUser, db: AsyncSession = Depends(get_db)):
 async def validate_binding(db, body, user_id):
     if not body.project_id or not body.mail_folder_id:
         raise HTTPException(
-            422, "请选择所属项目、网站平台和链接邮件文件夹；邮箱请通过顶部邮箱入口配置"
+            422, system_message("errors.selectAProjectAndLinkAPlatformToAMailFolderMessages")
         )
     project = await db.get(Project, body.project_id)
     if not project or project.deleted_at:
-        raise HTTPException(422, "所属项目不存在")
+        raise HTTPException(422, system_message("errors.projectNotFound"))
     await owned_folder(db, body.mail_folder_id, user_id)
 
 
@@ -647,7 +650,7 @@ async def validate_binding(db, body, user_id):
 async def restore(ident: UUID, user: AnyUser, db: AsyncSession = Depends(get_db)):
     row = await service.owned(db, WBMessage, ident, user.id, True)
     if row.expires_at <= now():
-        raise HTTPException(410, "消息已过期")
+        raise HTTPException(410, system_message("errors.messageExpired"))
     active = await db.scalar(
         select(WBJob.id)
         .where(WBJob.message_id == row.id, WBJob.status.in_(["queued", "running"]))

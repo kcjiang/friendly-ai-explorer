@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,7 +35,7 @@ async def list_presets(device_type: str, db: AsyncSession, user: User) -> list[P
 async def create_preset(body: CreatePresetRequest, db: AsyncSession, user: User) -> PresetCommand:
     # 只有开发者可以创建公共命令
     if body.is_public and user.role != UserRole.developer:
-        raise HTTPException(status_code=403, detail="只有开发者可以创建公共命令")
+        raise HTTPException(status_code=403, detail=system_message("errors.onlyDevelopersCanCreatePublicCommands"))
 
     preset = PresetCommand(
         name=body.name,
@@ -55,13 +56,13 @@ async def update_preset(preset_id: str, body: UpdatePresetRequest, db: AsyncSess
     result = await db.execute(select(PresetCommand).where(PresetCommand.id == preset_id))
     preset = result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="命令不存在")
+        raise HTTPException(status_code=404, detail=system_message("errors.commandNotFound"))
 
     # 公共命令只有开发者可以修改；个人命令只有本人可以修改
     if preset.is_public and user.role != UserRole.developer:
-        raise HTTPException(status_code=403, detail="只有开发者可以修改公共命令")
+        raise HTTPException(status_code=403, detail=system_message("errors.onlyDevelopersCanEditPublicCommands"))
     if not preset.is_public and preset.owner_id != user.id:
-        raise HTTPException(status_code=403, detail="无权修改他人的命令")
+        raise HTTPException(status_code=403, detail=system_message("errors.youCannotEditAnotherUserSCommand"))
 
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(preset, k, v)
@@ -75,16 +76,16 @@ async def delete_preset(preset_id: str, db: AsyncSession, user: User) -> dict:
     result = await db.execute(select(PresetCommand).where(PresetCommand.id == preset_id))
     preset = result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="命令不存在")
+        raise HTTPException(status_code=404, detail=system_message("errors.commandNotFound"))
 
     if preset.is_public and user.role != UserRole.developer:
-        raise HTTPException(status_code=403, detail="只有开发者可以删除公共命令")
+        raise HTTPException(status_code=403, detail=system_message("errors.onlyDevelopersCanDeletePublicCommands"))
     if not preset.is_public and preset.owner_id != user.id:
-        raise HTTPException(status_code=403, detail="无权删除他人的命令")
+        raise HTTPException(status_code=403, detail=system_message("errors.youCannotDeleteAnotherUserSCommand"))
 
     await db.delete(preset)
     await db.commit()
-    return {"message": "删除成功"}
+    return {"message": system_message("errors.deleteSuccess")}
 
 
 # ── 日志上传 ──────────────────────────────────────────────────
@@ -162,12 +163,12 @@ async def delete_log(log_id: str, db: AsyncSession, user: User) -> dict:
     result = await db.execute(select(UploadedLog).where(UploadedLog.id == log_id))
     log = result.scalar_one_or_none()
     if not log:
-        raise HTTPException(status_code=404, detail="日志不存在")
+        raise HTTPException(status_code=404, detail=system_message("errors.logNotFound"))
     if log.user_id != user.id and user.role != UserRole.developer:
-        raise HTTPException(status_code=403, detail="无权删除")
+        raise HTTPException(status_code=403, detail=system_message("errors.deletionIsNotPermitted"))
 
     if Path(log.file_path).exists():
         Path(log.file_path).unlink(missing_ok=True)
     await db.delete(log)
     await db.commit()
-    return {"message": "删除成功"}
+    return {"message": system_message("errors.deleteSuccess")}

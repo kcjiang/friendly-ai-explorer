@@ -1,4 +1,8 @@
 "use client";
+import { useLocale } from "next-intl";
+
+import { systemMessage } from "@/i18n/system-messages";
+import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -19,10 +23,10 @@ import { errorMessage } from "@/lib/errors";
 import type { Job } from "@/types/workbench";
 
 const labels = {
-  queued: "排队中",
-  running: "执行中",
-  completed: "已完成",
-  failed: "失败",
+  queued: "Queued",
+  running: "Running",
+  completed: "Completed",
+  failed: "Failed",
 };
 export function HistoryRecords({
   automationId,
@@ -33,6 +37,11 @@ export function HistoryRecords({
   open: boolean;
   onRetry: () => void;
 }) {
+  const locale = useLocale();
+
+  const t = useUiTranslations();
+  const uiLabels_labels = translateLabels(labels, t);
+
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<{ items: Job[]; total: number } | null>(
     null,
@@ -64,7 +73,7 @@ export function HistoryRecords({
         }
       } catch (e) {
         if (!controller.signal.aborted)
-          setError(errorMessage(e, "执行记录加载失败"));
+          setError(errorMessage(e, t("ui.failedToLoadExecutionHistory")));
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -77,7 +86,7 @@ export function HistoryRecords({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [automationId, page, refresh, open]);
+  }, [automationId, page, refresh, open, t]);
   const pages = Math.max(1, Math.ceil((result?.total ?? 0) / 30));
   return (
     <>
@@ -98,19 +107,19 @@ export function HistoryRecords({
                   setRefresh((n) => n + 1);
                 }}
               >
-                重新加载
+                {t("ui.reload")}
               </Button>
             </FieldError>
           )}
           {loading && (
             <p role="status" className="text-muted-foreground py-6 text-sm">
-              正在加载执行记录…
+              {t("ui.loadingExecutionHistory")}
             </p>
           )}
           {!loading && !error && result?.total === 0 && (
             <Empty>
               <EmptyHeader>
-                <EmptyTitle>暂无执行记录</EmptyTitle>
+                <EmptyTitle>{t("ui.noExecutionHistory")}</EmptyTitle>
               </EmptyHeader>
             </Empty>
           )}
@@ -126,19 +135,19 @@ export function HistoryRecords({
                       job.status === "failed" ? "destructive" : "secondary"
                     }
                   >
-                    {labels[job.status]}
+                    {uiLabels_labels[job.status]}
                   </Badge>
                 </div>
                 <p className="text-muted-foreground text-xs">
-                  {new Date(job.queued_at).toLocaleString()} · 步骤{" "}
-                  {job.step_index}/{job.steps.length}
+                  {new Date(job.queued_at).toLocaleString(locale)}{" "}
+                  {t("ui.step2")} {job.step_index}/{job.steps.length}
                 </p>
               </CardHeader>
               {(job.error || job.ticket_id || job.status === "failed") && (
                 <CardContent className="space-y-2">
                   {job.error && (
                     <p className="text-destructive text-sm break-words whitespace-pre-wrap">
-                      {job.error}
+                      {systemMessage(job.error, t)}
                     </p>
                   )}
                   <div className="flex flex-wrap items-center gap-2">
@@ -163,12 +172,14 @@ export function HistoryRecords({
                           }
                         }}
                       >
-                        {retrying === job.id ? "正在重新排队…" : "重试"}
+                        {retrying === job.id
+                          ? t("ui.requeuing")
+                          : t("ui.retry")}
                       </Button>
                     )}
                     {job.ticket_id && (
                       <Link className="text-sm underline" href="/ticket">
-                        前往 Ticket
+                        {t("ui.goToTicket")}
                       </Link>
                     )}
                   </div>
@@ -180,7 +191,8 @@ export function HistoryRecords({
       </ScrollArea>
       <DialogFooter className="shrink-0 flex-row flex-wrap items-center justify-between sm:justify-between">
         <span className="text-muted-foreground text-xs">
-          共 {result?.total ?? 0} 条 · 保留 30 天
+          {t("ui.total2")}
+          {result?.total ?? 0} {t("ui.itemsRetainedFor30Days")}
         </span>
         <div className="flex items-center gap-2">
           <Button
@@ -189,7 +201,7 @@ export function HistoryRecords({
             disabled={loading || page <= 1 || !!retrying}
             onClick={() => setPage((p) => p - 1)}
           >
-            上一页
+            {t("ui.previous")}
           </Button>
           <span className="text-xs">
             {page} / {pages}
@@ -200,7 +212,7 @@ export function HistoryRecords({
             disabled={loading || page >= pages || !!retrying}
             onClick={() => setPage((p) => p + 1)}
           >
-            下一页
+            {t("ui.next")}
           </Button>
         </div>
       </DialogFooter>

@@ -27,7 +27,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
     async def test_runtime_rejects_unverified_model_before_network_call(self):
         item = provider(capability_checks={})
         with patch.object(router, "generate") as upstream, patch.object(router, "record_call", AsyncMock()):
-            with self.assertRaisesRegex(provider_client.AIError, "未验证"):
+            with self.assertRaisesRegex(provider_client.AIError, "errors.capabilityMissing"):
                 _ = [chunk async for chunk in router.stream("todo", "test", plan=([item], 5, 128))]
             upstream.assert_not_called()
 
@@ -144,7 +144,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.collect(provider("gemini"), lambda _: httpx.Response(200, text=data, headers={"Content-Type": "text/event-stream"}), stream=True), ["OK"])
 
     async def test_incomplete_stream_fails(self):
-        with self.assertRaisesRegex(provider_client.AIError, "中断"):
+        with self.assertRaisesRegex(provider_client.AIError, "errors.theStreamEndedBeforeCompletion"):
             await self.collect(provider(), lambda _: httpx.Response(200, text='data: {"choices":[{"delta":{"content":"半截"}}]}\n\n', headers={"Content-Type": "text/event-stream"}), stream=True)
 
     async def test_status_errors_are_safe_and_classified(self):
@@ -159,7 +159,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
     async def test_network_timeout_is_safe(self):
         def handler(request):
             raise httpx.ReadTimeout("sk-test-secret", request=request)
-        with self.assertRaisesRegex(provider_client.AIError, "超时"):
+        with self.assertRaisesRegex(provider_client.AIError, "errors.aiRequestTimedOut"):
             await self.collect(provider(), handler)
 
     async def test_truncated_and_malformed_responses_fail(self):

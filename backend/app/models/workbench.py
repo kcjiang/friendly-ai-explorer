@@ -64,6 +64,7 @@ class WBCheck(Base):
         ForeignKey("users.id", ondelete="CASCADE")
     )
     origin: Mapped[str] = mapped_column(String(16))
+    output_locale: Mapped[str] = mapped_column(String(35), default="en", server_default="en")
     status: Mapped[str] = mapped_column(String(16), default="queued")
     queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

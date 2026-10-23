@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import {
   ArrowLeft,
@@ -48,18 +49,23 @@ import {
 const configs = {
   customers: {
     icon: Building2,
-    singular: "客户",
+    singular: "Customer",
   },
   products: {
     icon: Package,
-    singular: "产品",
+    singular: "Product",
   },
   projects: {
     icon: FolderKanban,
-    singular: "项目",
+    singular: "Project",
   },
 };
 export default function CatalogPageView() {
+  const t = useUiTranslations();
+  const uiLabels_configs = translateLabels(configs, t);
+
+  const uiLabels_labels = translateLabels(labels, t);
+
   const { data: session } = useSession();
   const [kind, setKind] = useState<Kind>("customers");
   const [trash, setTrash] = useState(false);
@@ -91,7 +97,7 @@ export default function CatalogPageView() {
     record?: CatalogRecord;
   } | null>(null);
   const [actionError, setActionError] = useState("");
-  const config = configs[kind];
+  const config = uiLabels_configs[kind];
   const developer = session?.user.role === "developer";
   const refresh = () => {
     table.resetRowSelection();
@@ -120,7 +126,7 @@ export default function CatalogPageView() {
         })
         .catch((e) => {
           if (!controller.signal.aborted)
-            setError(errorMessage(e, "资料加载失败"));
+            setError(errorMessage(e, t("ui.failedToLoadRecords")));
         })
         .finally(() => {
           if (!controller.signal.aborted) setLoading(false);
@@ -130,7 +136,7 @@ export default function CatalogPageView() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [kind, query, sort, direction, page, trash, reload]);
+  }, [kind, query, sort, direction, page, trash, reload, t]);
   async function openRecord(
     record: CatalogRecord,
     mode: "view" | "edit" | "copy" = "view",
@@ -167,12 +173,16 @@ export default function CatalogPageView() {
         await api.delete(`/api/v1/catalog/${target.kind}/${target.record.id}`, {
           params: { revision: target.record.revision },
         });
-        setNotice("已移至最近删除，永久清空前可恢复。");
+        setNotice(
+          t("ui.movedToRecentlyDeletedRestoreBeforePermanentlyClearing"),
+        );
       } else {
         const { data: result } = await api.delete(
           `/api/v1/catalog/${target.kind}/trash`,
         );
-        setNotice(`已永久删除 ${result.deleted_count} 条记录。`);
+        setNotice(
+          t("dynamic.permanentlyDeletedOther", { p0: result.deleted_count }),
+        );
       }
       setConfirmation(null);
       setDialog(null);
@@ -190,7 +200,7 @@ export default function CatalogPageView() {
       await api.post(`/api/v1/catalog/${kind}/${record.id}/restore`, null, {
         params: { revision: record.revision },
       });
-      setNotice("记录已恢复。");
+      setNotice(t("ui.recordRestored"));
       afterChange();
     } catch (e) {
       setError(errorMessage(e));
@@ -249,7 +259,7 @@ export default function CatalogPageView() {
   return (
     <Toaster>
       <div className="bg-background text-foreground min-h-full">
-        <TopNav title="数据维护" />
+        <TopNav title={t("ui.dataManagement")} />
         <Tabs
           value={kind}
           onValueChange={(value) => {
@@ -263,13 +273,13 @@ export default function CatalogPageView() {
           }}
         >
           <Container className="flex flex-wrap items-center gap-2 border-b py-2">
-            <TabsList aria-label="资料库">
-              {(Object.keys(labels) as Kind[]).map((key) => {
-                const Icon = configs[key].icon;
+            <TabsList aria-label={t("ui.catalog")}>
+              {(Object.keys(uiLabels_labels) as Kind[]).map((key) => {
+                const Icon = uiLabels_configs[key].icon;
                 return (
                   <TabsTrigger key={key} value={key} disabled={opening || busy}>
                     <Icon size={16} />
-                    {labels[key]}
+                    {uiLabels_labels[key]}
                   </TabsTrigger>
                 );
               })}
@@ -277,11 +287,11 @@ export default function CatalogPageView() {
             <div className="ml-auto max-w-80 min-w-40 flex-1">
               <InputGroup>
                 <InputGroupInput
-                  aria-label="搜索记录"
+                  aria-label={t("ui.searchRecords")}
                   placeholder={
                     trash
-                      ? `搜索最近删除的${config.singular}…`
-                      : `搜索${config.singular}…`
+                      ? t("dynamic.searchDeleted", { p0: config.singular })
+                      : t("dynamic.search", { p0: config.singular })
                   }
                   maxLength={200}
                   value={String(table.state.globalFilter ?? "")}
@@ -298,7 +308,7 @@ export default function CatalogPageView() {
             <Button
               variant="ghost"
               size="icon"
-              aria-label="刷新资料"
+              aria-label={t("ui.refreshRecords")}
               disabled={busy || loading}
               onClick={refresh}
             >
@@ -318,7 +328,7 @@ export default function CatalogPageView() {
               ) : (
                 <Trash2 data-icon="inline-start" />
               )}
-              {trash ? "返回资料库" : "最近删除"}
+              {trash ? t("ui.backToCatalog") : t("ui.recentlyDeleted")}
             </Button>
             {!trash && (
               <Button
@@ -326,7 +336,8 @@ export default function CatalogPageView() {
                 onClick={() => setDialog({ record: null })}
               >
                 <Plus data-icon="inline-start" />
-                新建{config.singular}
+                {t("ui.new")}
+                {config.singular}
               </Button>
             )}
             {trash && developer && (
@@ -335,7 +346,7 @@ export default function CatalogPageView() {
                 disabled={busy || loading || !data.total}
                 onClick={() => requestDelete()}
               >
-                清空最近删除
+                {t("ui.clearRecentlyDeleted")}
               </Button>
             )}
           </Container>
@@ -364,7 +375,7 @@ export default function CatalogPageView() {
             </TabsContent>
             {kind === "customers" && (
               <p className="text-muted-foreground mt-5 text-xs">
-                国家/地区数据：
+                {t("ui.countryRegionData")}
                 <a
                   href="https://www.geonames.org/"
                   target="_blank"
@@ -402,17 +413,29 @@ export default function CatalogPageView() {
           <ConfirmDialog
             open
             title={
-              confirmation.record ? "移至最近删除？" : "永久清空最近删除？"
+              confirmation.record
+                ? t("ui.moveToRecentlyDeleted")
+                : t("ui.permanentlyClearRecentlyDeleted")
             }
             description={
               confirmation.record
-                ? `将「${confirmation.record.display_name}」移至最近删除，之后可以恢复。被其他记录引用的数据无法删除。`
-                : `将永久删除${labels[confirmation.kind]}最近删除中的全部记录，包括当前搜索未显示的记录。此操作无法恢复。`
+                ? t(
+                    "dynamic.moveToRecentlyDeletedYouCanRestoreItLaterReferenced",
+                    { p0: confirmation.record.display_name },
+                  )
+                : t(
+                    "dynamic.permanentlyDeleteAllRecentlyDeletedRecordsInIncludingRecordsHidden",
+                    { p0: uiLabels_labels[confirmation.kind] },
+                  )
             }
             destructive
             busy={busy}
             error={actionError}
-            confirmLabel={confirmation.record ? "确认删除" : "永久清空"}
+            confirmLabel={
+              confirmation.record
+                ? t("ui.confirmDeletion")
+                : t("ui.clearPermanently")
+            }
             onCancel={() => setConfirmation(null)}
             onConfirm={() => void confirmAction()}
           />

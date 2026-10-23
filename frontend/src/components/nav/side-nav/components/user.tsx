@@ -1,4 +1,5 @@
 "use client";
+import { useUiTranslations } from "@/i18n/client";
 
 import { ChevronDown, LogOut, User as UserIcon } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
@@ -12,8 +13,8 @@ import {
 
 const ROLE_LABELS: Record<string, string> = {
   developer: "DEV",
-  leader:    "Manager",
-  engineer:  "FAE",
+  leader: "Manager",
+  engineer: "FAE",
 };
 
 /**
@@ -54,11 +55,13 @@ function getAvatarGradient(name: string) {
 }
 
 export default function User() {
+  const t = useUiTranslations();
+
   const { data: session } = useSession();
 
-  const name = session?.user?.name ?? "Loading...";
+  const name = session?.user?.name ?? t("ui.loading");
   const roleKey = session?.user?.role ?? "Guest";
-  const roleLabel = ROLE_LABELS[roleKey] ?? "Loading...";
+  const roleLabel = ROLE_LABELS[roleKey] ?? t("ui.loading");
 
   const initial = name?.[0]?.toUpperCase() ?? "L";
   const avatarStyle = getAvatarGradient(name);
@@ -68,10 +71,8 @@ export default function User() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <div className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-1 hover:bg-slate-200 dark:hover:bg-slate-800">
-            
             {/* 左侧用户信息 */}
             <div className="flex items-center">
-              
               {/* 动态渐变头像 */}
               <div
                 style={avatarStyle}
@@ -83,7 +84,9 @@ export default function User() {
 
               <div className="flex flex-col">
                 <span className="text-sm font-medium">{name}</span>
-                <span className="text-xs text-muted-foreground">{roleLabel}</span>
+                <span className="text-xs text-muted-foreground">
+                  {roleLabel}
+                </span>
               </div>
             </div>
             <ChevronDown size={16} />
@@ -91,15 +94,14 @@ export default function User() {
         </DropdownMenuTrigger>
 
         {/* 下拉菜单 */}
-        <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
-          
+        <DropdownMenuContent
+          align="start"
+          className="w-[var(--radix-dropdown-menu-trigger-width)]"
+        >
           {/* 用户信息 */}
-          <DropdownMenuItem
-            disabled
-            className="cursor-pointer"
-          >
+          <DropdownMenuItem disabled className="cursor-pointer">
             <UserIcon size={16} className="mr-2" />
-            用户信息
+            {t("ui.userInformation")}
           </DropdownMenuItem>
 
           {/* 退出登录 */}
@@ -108,7 +110,7 @@ export default function User() {
             className="cursor-pointer text-red-500 focus:text-red-500"
           >
             <LogOut size={16} className="mr-2" />
-            退出登录
+            {t("ui.signOut")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

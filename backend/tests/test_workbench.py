@@ -265,10 +265,11 @@ class WorkbenchTests(unittest.IsolatedAsyncioTestCase):
         )
         # The default Ticket automation inherits the message's hosting project.
         r = await self.client.post(
-            base + "/submit", json={"automation_id": self.automation["id"]}
+            base + "/submit", json={"automation_id": self.automation["id"]}, headers={"X-FAE-Locale": "zh-CN"}
         )
         self.assertEqual(r.status_code, 201, r.text)
         self.assertEqual(r.json()["snapshot"]["project_id"], str(self.project.id))
+        self.assertEqual(r.json()["snapshot"]["output_locale"], "zh-CN")
         self.assertEqual(
             next(s["project_id"] for s in r.json()["steps"] if s["type"] == "ticket"),
             str(self.project.id),
@@ -617,12 +618,18 @@ class WorkbenchTests(unittest.IsolatedAsyncioTestCase):
             end="17:40",
             interval_minutes=120,
         ).model_dump()
-        r = await self.client.put("/api/v1/workbench/schedule", json=settings)
+        r = await self.client.put("/api/v1/workbench/schedule", json=settings, headers={"X-FAE-Locale": "zh-CN"})
         self.assertEqual(r.status_code, 200, r.text)
         overview = (await self.client.get("/api/v1/workbench")).json()
         self.assertTrue(overview["schedule_configured"])
         self.assertEqual(overview["schedule"], settings)
         self.assertIsNone(overview["next_run_at"])
+        pref = await self.db.get(WBPreference, self.user.id)
+        self.assertEqual(pref.schedule["output_locale"], "zh-CN")
+        # Merely visiting in English cannot mutate scheduled output language.
+        await self.client.get("/api/v1/workbench", headers={"X-FAE-Locale": "en"})
+        await self.db.refresh(pref)
+        self.assertEqual(pref.schedule["output_locale"], "zh-CN")
 
     async def test_raw_debug_output_cursor_isolation_and_expiry(self):
         outputs = ["raw\n  preserved spacing\n", "second chunk"]

@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import FileResponse
 from pathlib import Path
@@ -88,11 +89,11 @@ async def download_log(
     result = await db.execute(select(UploadedLog).where(UploadedLog.id == log_id))
     log = result.scalar_one_or_none()
     if not log:
-        raise HTTPException(status_code=404, detail="日志不存在")
+        raise HTTPException(status_code=404, detail=system_message("errors.logNotFound"))
     if log.user_id != current_user.id and current_user.role != UserRole.developer:
-        raise HTTPException(status_code=403, detail="无权访问")
+        raise HTTPException(status_code=403, detail=system_message("errors.accessDenied"))
     if not Path(log.file_path).exists():
-        raise HTTPException(status_code=404, detail="文件不存在")
+        raise HTTPException(status_code=404, detail=system_message("errors.fileNotFound"))
     return FileResponse(log.file_path, filename=log.filename, media_type="text/plain")
 
 

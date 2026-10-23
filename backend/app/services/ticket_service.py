@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 from datetime import datetime, timezone
 from sqlalchemy import select, text, func, or_, case, cast, String
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,7 @@ def can_edit(ticket, user):
 
 def require_edit(ticket, user):
     if not can_edit(ticket, user):
-        raise HTTPException(403, '只有开发者、领导、最后更新人或被分配人可以修改此工单')
+        raise HTTPException(403, system_message("errors.onlyDevelopersLeadersTheLastEditorOrTheAssigneeCanEditThis"))
 
 
 def stamp(ticket, user):
@@ -63,7 +64,7 @@ async def decorate(tickets, db, user):
 async def get_tickets(db, user, mine=False, q='', status=None, priority=None, project_id=None, source='', sort='updated_at', direction='desc', assignee_id=None, state='all', created_from=None, created_before=None):
     query = ticket_query().outerjoin(Project, Ticket.project_id == Project.id).outerjoin(Customer, Project.customer_id == Customer.id).outerjoin(Product, Project.product_id == Product.id)
     if created_from and created_before and created_from >= created_before:
-        raise HTTPException(422, '开始时间必须早于结束时间')
+        raise HTTPException(422, system_message("errors.startTimeMustBeBeforeEndTime"))
     if created_from:
         query = query.where(Ticket.created_at >= created_from)
     if created_before:
@@ -96,7 +97,7 @@ async def get_tickets(db, user, mine=False, q='', status=None, priority=None, pr
              'priority': case((Ticket.priority == 'critical', 3), (Ticket.priority == 'major', 2), else_=1),
              'status': case(*[(Ticket.status == value, i) for i, value in enumerate(('open', 'reproducing', 'in_progress', 'verifying', 'pending', 'resolved'))])}
     if sort not in sorts:
-        raise HTTPException(422, '不支持的排序字段')
+        raise HTTPException(422, system_message("errors.unsupportedSortField"))
     order = sorts[sort]
     rows = list((await db.scalars(query.order_by(order.asc() if direction == 'asc' else order.desc(), Ticket.id))).all())
     return await decorate(rows, db, user)
@@ -105,17 +106,17 @@ async def get_tickets(db, user, mine=False, q='', status=None, priority=None, pr
 async def locked_ticket(ticket_id, db, user, revision=None):
     ticket = await db.scalar(select(Ticket).where(Ticket.id == ticket_id).with_for_update().execution_options(populate_existing=True))
     if not ticket:
-        raise HTTPException(404, '工单不存在')
+        raise HTTPException(404, system_message("errors.ticketNotFound"))
     require_edit(ticket, user)
     if revision is not None and ticket.revision != revision:
-        raise HTTPException(409, '此工单已被更新，请刷新后重试')
+        raise HTTPException(409, system_message("errors.thisTicketWasUpdatedRefreshAndTryAgain"))
     return ticket
 
 
 async def get_ticket(ticket_id, db, user):
     ticket = await db.scalar(ticket_query(True).where(Ticket.id == ticket_id))
     if not ticket:
-        raise HTTPException(404, '工单不存在')
+        raise HTTPException(404, system_message("errors.ticketNotFound"))
     return (await decorate([ticket], db, user))[0]
 
 
@@ -125,14 +126,14 @@ async def validate_references(values, db):
     if 'assignee_id' in values:
         assignee = await db.get(User, values['assignee_id'])
         if not assignee or not assignee.is_active:
-            raise HTTPException(422, '请选择一个启用的账号作为被分配人')
+            raise HTTPException(422, system_message("errors.selectAnActiveAccountAsTheAssignee"))
 
 
 def validate_tapd(values, ticket=None):
     enabled = values.get('tapd_created', ticket.tapd_created if ticket else False)
     url = values.get('tapd_url', ticket.tapd_url if ticket else '')
     if enabled and not url:
-        raise HTTPException(422, '已创建内部 TAPD 工单时必须填写 TAPD 链接')
+        raise HTTPException(422, system_message("errors.enterATapdUrlWhenAnInternalTapdTicketHasBeenCreated"))
     if not enabled:
         values['tapd_url'] = ''
 
@@ -173,7 +174,7 @@ async def delete_ticket(ticket_id, db, user, revision):
     ticket = await locked_ticket(ticket_id, db, user, revision)
     await db.delete(ticket)
     await db.commit()
-    return {'message': '删除成功'}
+    return {'message': system_message("errors.deleteSuccess")}
 
 
 async def add_comment(ticket_id, body: AddCommentRequest, db, user):

@@ -13,6 +13,7 @@ from email import policy
 from email.message import EmailMessage
 from email.utils import format_datetime, make_msgid, parseaddr
 from html.parser import HTMLParser
+from app.i18n import message as system_message
 
 
 class MailProtocolError(ValueError):
@@ -143,7 +144,7 @@ def parse_mail(raw):
             (ident or hashlib.sha256(raw).hexdigest()).encode()
         ).hexdigest(),
         "message_id": ident,
-        "subject": str(message.get("Subject", "(无主题)")),
+        "subject": str(message.get("Subject", "")),
         "sender": str(message.get("From", "")),
         "recipients": str(message.get("To", "")),
         "cc": str(message.get("Cc", "")),
@@ -338,7 +339,7 @@ def send(config, body, sent_folder):
     if body.get("in_reply_to"):
         message["In-Reply-To"] = body["in_reply_to"]
         message["References"] = body["in_reply_to"]
-    message.set_content(body["text"] or "请使用支持 HTML 的邮件客户端查看此邮件。")
+    message.set_content(body["text"] or "Please view this message in an HTML-capable email client.")
     html = body["html"]
     inline = []
 
@@ -385,11 +386,7 @@ def send(config, body, sent_folder):
         client.login(config["username"], config["password"])
         refused = client.sendmail(config["address"], recipients, raw)
     warning = (
-        (
-            "部分收件人被服务器拒绝："
-            + ", ".join(refused)
-            + "。其他收件人已接收，请勿整封重发。"
-        )
+        system_message("errors.mailRecipientsRefused")
         if refused
         else ""
     )
@@ -402,9 +399,9 @@ def send(config, body, sent_folder):
                 ):
                     raise MailProtocolError()
         except Exception:
-            warning += "邮件已发送，但保存到已发送文件夹失败，请勿重复发送。"
+            warning = warning or system_message("errors.mailCopyFailed")
     else:
-        warning += "邮件已发送；未找到已发送文件夹，请在邮箱中确认副本。"
+        warning = warning or system_message("errors.mailCopyMissing")
     return {
         "message_id": str(message["Message-ID"]),
         "warning": warning,

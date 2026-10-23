@@ -1,3 +1,4 @@
+from app.i18n import message as system_message
 from typing import Annotated, Literal
 from uuid import UUID
 from datetime import date
@@ -50,7 +51,7 @@ class ProductInput(StrictModel):
         if value:
             parsed = urlsplit(value)
             if parsed.scheme not in ('http', 'https') or not parsed.netloc:
-                raise ValueError('固件下载地址必须是 http 或 https 地址')
+                raise ValueError(system_message("errors.theFirmwareDownloadUrlMustUseHttpOrHttps"))
         return value
 
 
