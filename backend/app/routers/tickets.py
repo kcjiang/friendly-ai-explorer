@@ -6,10 +6,10 @@ from app.models.ticket import TicketStatus, TicketPriority
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.middleware.rbac import AnyUser, LeaderOrDev
+from app.middleware.rbac import AnyUser
 from app.schemas.ticket import (
     CreateTicketRequest, UpdateTicketRequest, AddCommentRequest,
-    TicketListOut, TicketOut, TicketStatsOut, TicketCommentOut,
+    TicketListOut, TicketOut, TicketCommentOut,
 )
 from app.services import ticket_service
 

@@ -1,30 +1,22 @@
-> 全新数据库统一执行 `db/init.sql`；下文归档迁移命令仅适用于旧版本升级，不应在新基线之后执行。清空重建参见 [数据库重建](database-reset.md)。
-
 # AI 服务与任务调度
 
-管理后台 → **AI 服务与调度**（仅 developer 角色）可添加 Gemini 原生或 OpenAI 兼容服务。所有调用和测试由后端发起，浏览器不持有供应商密钥。
+管理后台 → **AI 服务与调度**（仅 developer 角色）按 OpenAI、Gemini、DeepSeek、Qwen、其他兼容服务管理模型。品牌与协议分别保存，不预置任务用途。所有调用和测试由后端发起，浏览器不持有供应商密钥。
 
-## 升级已有数据库
+支持三种通用模型协议：OpenAI Chat Completions、OpenAI Responses、Google Gemini API。Responses 请求禁用服务端保存（`store=false`）。Chat Completions 的输出长度参数显式选择 `max_tokens` 或 `max_completion_tokens`，不再通过域名推断。内部无认证端点可选择“无需认证”。Embedding 独立配置，支持 OpenAI 兼容 Embeddings 和 Google Gemini Embedding API；当前知识库索引维度为 768，接口测试会核验维度，模型应支持输出该维度。
 
-先按原部署流程备份数据库；已有 v7 数据库执行以下新增迁移，无需删除数据卷：
+### 能力验证与任务分配
 
-```powershell
-Get-Content db/archive/migration_v8_ai_routing.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
-Get-Content db/archive/migration_v9_ai_diagnostics.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
-docker compose up -d --build backend frontend
-```
+新增或修改连接后，分别测试文本、结构化 JSON、多轮对话、流式输出。每项保存验证状态及时间；网络、认证等故障标记为未验证，不当作能力缺失。修改模型、地址、密钥、协议、思考/输出参数或请求预算后验证失效；仅改品牌、显示名称或并发数不会使能力失效。
 
-Linux 生产环境先更新部署目录中的 Compose、SQL 和对应应用镜像，再执行：
+任务要求由 `backend/app/ai/capabilities.py` 声明：默认服务及工单分析要求文本生成；TODO 增加结构化 JSON；AI 对话要求多轮对话和流式输出。JSON 能力通过最终业务输出校验，不强制模型原生支持 JSON Schema。当前没有图片或工具调用业务输入，因此不虚设这些必需能力。
 
-```sh
-docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/archive/migration_v8_ai_routing.sql
-docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/archive/migration_v9_ai_diagnostics.sql
-# If FAE_DATA_DIR differs from /opt/fae, use its actual value below.
-sudo install -d -o 10001 -g 10001 -m 750 /opt/fae/logs
-docker compose --env-file .env.production -f compose.prod.yml up -d backend frontend
-```
+管理员手动分配主模型和备用模型。保存前检查包含继承关系的全部实际分配，未验证或不支持必需能力时拒绝保存；运行时再次检查，模型配置变化后不会继续使用旧验证。模型关键配置变化后需重新验证能力。
 
-全新数据库由开发/生产 Compose 自动执行 v8、v9。已有 v8 数据库只需执行 v9。SQL 可重复执行，不覆盖已保存的密钥、模型和路由。迁移必须先于使用新功能。
+全新部署不再预置 Gemini 或其他 AI 服务，也不读取供应商环境密钥。首次部署后添加服务、填写 Base URL / 模型 / API Key，测试成功后在任务分配中选择默认服务。未配置时 AI 入口提示管理员完成配置，知识库保留关键词检索。
+
+## 部署
+
+当前版本仅支持全新数据库部署，开发和生产 Compose 都只执行 `db/init.sql`。旧数据库与旧密文不兼容，请按 [数据库重建](database-reset.md) 准备空库后部署。
 
 ## 接入 DGX / New API
 
@@ -37,14 +29,13 @@ docker compose --env-file .env.production -f compose.prod.yml up -d backend fron
 - 模型：`qwen3.8-27b`（必须与网关暴露的模型名称一致）
 - 并发建议先设为 `1`，超时和输出上限按实际测试调整。
 
-保存后测试“普通回答”和“JSON 输出”；在“任务分配”中把“今日 AI TODO”主服务设为该服务。其余任务继续跟随 Gemini，或分别指定其他服务。也可以设置 OpenAI 官方地址 `https://api.openai.com/v1` 和账号可用的 Chat Completions 模型。不同模型支持的接口和参数可能不同，以测试结果为准。
-
-Gemini 原生 Base URL 默认 `https://generativelanguage.googleapis.com/v1beta`，模型填写实际可用名称。切换聊天服务不会修改知识库向量配置；“知识库向量服务”可独立设置 Gemini、OpenAI 兼容本地 Embedding 接口或仅关键词检索。已有部署须执行 v10 迁移；切换编码器后重建文档索引，详见 [知识库检索与索引](knowledge-rag.md)。独立日志 AI 分析尚无业务入口。
+保存后测试“普通回答”和“JSON 输出”；在“任务分配”中选择默认服务，或给“今日 AI TODO”等任务单独指定主服务。其余任务跟随管理员选择的默认服务。也可以设置 OpenAI 官方地址 `https://api.openai.com/v1` 和账号可用的 Chat Completions 模型。不同模型支持的接口和参数可能不同，以测试结果为准。
 
 ## 路由、失败和缓存
 
 - “默认服务”决定所有“跟随默认”任务的主服务与默认备用。指定主服务的任务拥有自己的备用设置，留空表示不使用备用。
-- 任务超时和输出限制：任务设置 → 默认行设置 → 实际服务设置。未显式设置任务/默认输出限制时，TODO 默认至多 768、邮件 1024、工单 1536 Token，且不超过服务上限。连接测试至多 256 Token。
+- 任务超时和输出限制：任务设置 → 默认行设置 → 实际服务设置。不再通过业务代码隐式缩小输出预算；连接测试仍至多 256 Token。
+- Gemini 2.5 Flash 的自动工单分析及结构化任务关闭内部思考，优先使用预算生成最终结果；管理员明确开启思考时保留该设置。记录最终输出与思考的 Token 用量，达到上限时仍拒绝保存不完整分析。
 - 保存后每个新请求读取数据库配置；正在执行的请求继续使用原快照，无需重启。
 - 网络失败和 HTTP 429/5xx 在同一服务超时总预算内有限重试，默认 1 次，可设置为 0–2 次。429 优先参考 Retry-After，等待时间同样消耗总预算。超时不会自动延长原预算。401/403/404/参数错误直接报错。
 - 结构化输出失败可在剩余预算内额外修正一次；仍失败且配置备用服务时尝试备用。各服务最多使用一次总超时预算，流式回答开始输出后不再重试或切换。
@@ -58,7 +49,7 @@ Gemini 原生 Base URL 默认 `https://generativelanguage.googleapis.com/v1beta`
 - 思考模式“自动”仅对名称形如 `Qwen3-0.6B`、`Qwen/Qwen3-8B` 的经典 Qwen3 请求 `chat_template_kwargs.enable_thinking=false`，并追加 `/no_think`。该策略不会仅凭 `Qwen` 名称应用到未知的新架构。其他模型可手动选择开/关，但接口需支持相应参数。[Qwen 官方说明](https://qwen.readthedocs.io/en/latest/deployment/vllm.html#thinking-non-thinking-modes)
 - TODO、邮件和 JSON 测试默认优先使用 JSON Schema；接口明确拒绝此参数时，在同一预算内降级到 JSON 对象，再降级为提示词约束。强制 Schema 模式不会降级。普通参数错误、认证错误不触发此降级。[vLLM 结构化输出](https://docs.vllm.ai/en/stable/features/structured_outputs/)
 - 接收完整 `<think>...</think>` 后的最终 JSON、Markdown 代码块，以及说明文字包围的唯一完整 JSON。不会从未结束的思考或截断数组中猜测答案。TODO 同时兼容原数组与 `{"todos": [...]}`，并规范化 high/medium/low 等已知优先级。
-- “应用本地轻量任务参数”可设置 180 秒、1024 输出 Token、并发 1、关闭思考、自动 JSON、温度 0.7 和重试 1 次；需点击保存后生效。该按钮不会改变模型、地址、密钥或任务分配。
+- “应用低延迟参数”可设置 180 秒、1024 输出 Token、并发 1、关闭思考、自动 JSON、温度 0.7 和重试 1 次；需点击保存后生效。该按钮不会改变模型、地址、密钥或任务分配。
 - 模型大小、量化、vLLM 模板和网关透传能力会影响速度。27B 在 GB10 上的实际延迟仍需实测，可单独设置较长超时与较低输出上限；应用重试无法消除上游 503 或硬件性能限制。
 - RAG 查询向量化使用独立服务及可配置超时，失败后改用知识库关键词检索。聊天没有检索到资料时仍可进行通用问答，提示词要求不编造内部产品信息。向量检索使用独立保存点，失败不会使后续工单写回事务失效。
 
@@ -74,7 +65,13 @@ Gemini 原生 Base URL 默认 `https://generativelanguage.googleapis.com/v1beta`
 
 ## 密钥
 
-API Key 使用 Fernet 加密，查询接口仅返回是否配置。编辑时密钥留空表示保留原值。加密从稳定的 `AI_ENCRYPTION_KEY` 派生；未配置时从 `JWT_SECRET_KEY` 派生。首次保存前建议设置独立随机值，后续更改加密来源/密钥需重新录入已有服务密钥。原环境变量 Gemini 服务只引用环境密钥，不复制其明文至数据库；填写新密钥后改为加密存储。
+API Key 使用 Fernet 加密，保存在 PostgreSQL 的 `ai_providers.api_key_encrypted`；独立向量服务密钥保存在 `embedding_profiles.config.api_key_encrypted`。查询接口仅返回是否配置，编辑时密钥留空表示保留原值（更换端点或协议时清除旧密钥）。统一使用 HKDF-SHA256，从 `APP_MASTER_KEY` 分别派生 JWT、AI、平台及邮箱用途的密钥。本版本不兼容旧令牌和旧密文；全新部署后保持根密钥稳定，否则需重新登录并填写凭据。
+
+## 多向量服务
+
+知识库向量服务支持保存最多 50 个具名配置，每个配置独立保存端点、模型、加密密钥和检索参数。保存/测试服务不会自动切换当前服务；管理员使用下拉框或“使用此服务”切换，也可选择仅关键词检索。当前使用的配置不能删除，需先切换。切换编码器后只读取模型标识匹配的向量，必要时重建索引；不会删除知识库原文，也不保留多套模型的历史向量副本。
+
+“其他提供商（兼容接口）”表示品牌未单列但兼容现有协议的服务或 API 网关，不是一种模型。通用模型按实际协议选择 Chat Completions、Responses 或 Google Gemini API；向量模型选择 Embeddings 或 Google Gemini Embedding API。品牌名称不表示服务一定提供 Embedding 能力。
 
 公网 HTTP 会明文传输认证和业务数据，正式使用建议 HTTPS。API 地址仅 developer 可设置，应只配置可信服务。删除或禁用被引用服务前需先修改任务分配；历史调用记录保留服务名称。
 
@@ -84,5 +81,3 @@ API Key 使用 Fernet 加密，查询接口仅返回是否配置。编辑时密�
 cd backend
 python -m unittest tests.test_ai_routing tests.test_ai_admin tests.test_app_logs -v
 ```
-
-适配器及路由测试使用模拟 HTTP，不调用付费模型。管理接口测试需要已执行 v8、v9 的本地 PostgreSQL，测试事务最终回滚。

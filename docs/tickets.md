@@ -1,8 +1,6 @@
-> 全新数据库统一执行 `db/init.sql`；下文归档迁移命令仅适用于旧版本升级，不应在新基线之后执行。清空重建参见 [数据库重建](database-reset.md)。
-
 # 工单库与看板
 
-入口：`/ticket`。默认卡片视图仅展示分配给当前用户的工单；列表视图可切换「只看分配给我 / 所有人的工单」。所有启用的已登录成员都可查看工单。同一浏览器按账户记住最后选择的卡片/列表视图；清除站点数据后恢复默认。
+入口：`/ticket`。仅提供列表视图，默认只看分配给当前用户的工单，可切换「只看分配给我 / 所有人的工单」。所有启用的已登录成员都可查看工单。
 
 ## 新建和维护
 
@@ -13,12 +11,14 @@
 - 选择已创建 TAPD 工单后必须填写 HTTP(S) 链接；选择「否」会清空链接并禁用输入。
 - 重要性：Trivial、Major、Critical。重要性排序使用严重程度，而不是英文拼写顺序。
 - 状态：新工单、待复现、修复中、验证修复、挂起、已解决。
-- 卡片和列表共用「全部 / 打开 / 关闭」筛选，默认打开；打开包含除已解决以外的全部状态，关闭仅包含已解决。可与搜索、工单范围和被分配人筛选组合使用，切换视图时保留当前筛选。
-- 卡片视图点击「创建日期」向下展开日期区间，调整开始和结束日期后点击「确认筛选」。按浏览器本地时区计算，包含结束当天，任一端留空表示不限；「重置」立即清除日期条件。折叠区域保留已确认条件，切换列表视图暂不应用日期条件，返回卡片后继续使用。
-- 点击卡片或列表记录打开详情，点击「编辑」解锁。卡片视图支持拖拽改变状态，同时提供状态选择框供键盘和触屏使用。
-- 顶部操作栏采用串口页的紧凑风格，单行约 54px，高度随窄屏换行增加；日期调整区在工具栏下方展开并推下内容。搜索涵盖工单名称、标题、描述、下一步计划、来源、项目、客户、产品、中文状态、重要性及被分配人；排序按钮可按创建/更新时间、系统序号、重要性、状态或标题排序。列表每页显示 20 条。
-- 列表「只看分配给我」显示名称/标题、项目（客户公司名-产品型号）、重要性、简要问题描述、状态、下一步计划。描述和计划最多显示两行，超出省略；悬停或打开详情可查看完整内容。
-- 列表「所有人的工单」在第一列增加「分配给」，并提供被分配人筛选，可与搜索组合使用。该筛选不影响个人列表和卡片视图。
+- 列表提供「全部 / 打开 / 关闭」筛选，默认打开；打开包含除已解决以外的全部状态，关闭仅包含已解决。可与搜索、工单范围和被分配人筛选组合使用。
+- 点击列表记录打开详情，点击「编辑」解锁，可在详情中修改状态。
+- 工具栏、图标 Tabs、Select、搜索 InputGroup、列菜单均采用共享的 shadcn/ui Base / Nova 组件，不覆盖官方控件尺寸。窄屏工具栏自动换行。
+- 表格使用 TanStack Table v9，支持本页全选、跨页选中统计、Columns 列显隐、行操作菜单及每页 30 条分页。首列固定显示工单名称及标题；默认显示更新时间，创建时间可按需开启。
+- 默认按更新时间降序排列；系统序号、标题（可通过 Columns 开启）、重要性、状态、创建时间和更新时间可点击表头排序，箭头显示当前方向。排序由服务端针对完整搜索结果执行，分页在完整结果上切片，加载期间保留表头与已有行。
+- 描述和计划在表格中单行截断，悬停或打开详情可查看全文。「全部工单」默认显示分配给列，可搜索筛选账户；该筛选不影响个人列表。
+- 弹窗使用官方 Dialog、Tabs、Field、ScrollArea、Select / Combobox、AlertDialog、Collapsible 和 Toast。宽屏基本字段双列，窄屏单列；记录审计信息默认折叠在「编辑记录」中。
+- 必填校验统一显示红色「请填写此字段。」并聚焦首个错误；HTTP(S) 链接单独校验。点击蒙版或按 Escape 不关闭弹窗，仅右上角叉关闭；未保存修改或未发布评论需要确认放弃。删除使用独立危险确认弹窗。
 
 ## 编号规则
 
@@ -37,44 +37,11 @@
 
 创建后，只有开发者、领导、最后更新人、被分配人可修改或删除。创建人身份本身不提供永久编辑权。每次成功修改、评论或 AI 分析写回都会更新最后更新人与时间，并递增 revision。
 
-后端在持有行锁时重新检查权限和 revision。发生修改冲突会提示刷新；普通工程师不能通过直接调用 API、拖拽、评论或 AI 分析绕过权限。删除需要确认且检查 revision；系统保留邮件与 AI 任务历史，但其已删除工单关联置空。
+后端在持有行锁时重新检查权限和 revision。发生修改冲突会提示刷新；普通工程师不能通过直接调用 API、评论或 AI 分析绕过权限。删除需要确认且检查 revision；工作台保留缓存有效期内的自动化记录，但其已删除工单关联置空。
 
-## 已有数据库升级
+## 部署
 
-先备份，按顺序执行 `migration_v5_catalog.sql`、`migration_v6_tickets.sql`、`migration_v7_catalog_trash.sql`，然后部署对应版本后端和前端。此更改不能只更新前端。
-
-Windows 本地开发（项目根目录 PowerShell）：
-
-```powershell
-Get-Content db/archive/migration_v5_catalog.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
-Get-Content db/archive/migration_v6_tickets.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
-Get-Content db/archive/migration_v7_catalog_trash.sql -Raw | docker compose -f docker-compose.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1
-docker compose -f docker-compose.yml up -d --build
-```
-
-生产环境需要将新 SQL 复制到 `/opt/fae/db/` 并同步 Compose 文件。在维护窗口暂停后端，执行迁移后再启动包含本次代码的镜像：
-
-```bash
-cd /opt/fae
-sudo docker compose --env-file .env.production -f compose.prod.yml stop backend
-sudo docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/archive/migration_v5_catalog.sql
-sudo docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/archive/migration_v6_tickets.sql
-sudo docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/archive/migration_v7_catalog_trash.sql
-sudo docker compose --env-file .env.production -f compose.prod.yml pull backend frontend
-sudo docker compose --env-file .env.production -f compose.prod.yml up -d --wait
-```
-
-只有镜像已经发布并确认包含此迁移对应代码后才能升级生产。目前本次开发未发布镜像。迁移后不能直接回退到旧镜像，需使用备份恢复对应旧数据库。
-
-全新数据库由 Compose 自动按顺序执行 SQL。v6 迁移记录在 `schema_migrations`，重复执行不会重新改号。
-
-### 历史数据处理
-
-- 保留原 UUID、文本资料、评论与创建时间；原工单号保存在 `legacy_ticket_no`，并为存量记录分配 `ft` 编号。
-- 旧库没有项目关联或最后更新人记录，不能可靠推断：历史工单显示「待关联项目」，首次编辑需选择项目；初始更新人回填创建人，迁移写入会将存量记录的更新时间设为迁移执行时间。未分配工单回填创建人为被分配人。
-- 旧状态：open → 新工单，in_progress → 修复中，pending → 挂起，resolved/closed → 已解决。
-- 旧重要性：critical → Critical，high/medium → Major，low → Trivial。
-- 邮件批准转工单时新增项目选择，使用同一编号与校验流程；原始邮件正文写入原始提报字段。首页统计和 AI TODO 已适配新状态。
+当前版本仅支持全新数据库部署，开发和生产 Compose 都只执行 `db/init.sql`。旧数据库与旧密文不兼容，请按 [数据库重建](database-reset.md) 准备空库后部署。
 
 ## 开发验证
 

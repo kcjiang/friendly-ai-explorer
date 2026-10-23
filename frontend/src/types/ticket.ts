@@ -28,7 +28,6 @@ export interface Ticket {
   id: string;
   ticket_no: string;
   display_name: string;
-  legacy_ticket_no?: string;
   system_seq: number;
   project_id: string | null;
   project_seq: number | null;
@@ -65,42 +64,30 @@ export interface Ticket {
 }
 export const TICKET_STATUS_CONFIG: Record<
   TicketStatus,
-  { label: string; bgColor: string; dotColor: string; textColor: string }
+  { label: string; textColor: string }
 > = {
   open: {
     label: "新工单",
-    bgColor: "bg-blue-50 dark:bg-blue-950/30",
-    dotColor: "bg-blue-500",
     textColor: "text-blue-600 dark:text-blue-400",
   },
   reproducing: {
     label: "待复现",
-    bgColor: "bg-violet-50 dark:bg-violet-950/30",
-    dotColor: "bg-violet-500",
     textColor: "text-violet-600 dark:text-violet-400",
   },
   in_progress: {
     label: "修复中",
-    bgColor: "bg-amber-50 dark:bg-amber-950/30",
-    dotColor: "bg-amber-500",
     textColor: "text-amber-600 dark:text-amber-400",
   },
   verifying: {
     label: "验证修复",
-    bgColor: "bg-cyan-50 dark:bg-cyan-950/30",
-    dotColor: "bg-cyan-500",
     textColor: "text-cyan-600 dark:text-cyan-400",
   },
   pending: {
     label: "挂起",
-    bgColor: "bg-slate-100 dark:bg-slate-800/40",
-    dotColor: "bg-slate-500",
     textColor: "text-slate-600 dark:text-slate-400",
   },
   resolved: {
     label: "已解决",
-    bgColor: "bg-green-50 dark:bg-green-950/30",
-    dotColor: "bg-green-500",
     textColor: "text-green-600 dark:text-green-400",
   },
 };

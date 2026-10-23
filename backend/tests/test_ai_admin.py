@@ -12,7 +12,7 @@ from app.ai import router as runtime
 from app.database import engine, get_db
 from app.main import app
 from app.middleware.auth import get_current_user
-from app.models.ai_config import AIProvider
+from app.models.ai_config import AIProvider, AIRoute
 from app.models.user import User, UserRole
 
 BASE = "/api/v1/admin/ai"
@@ -24,6 +24,12 @@ class AIAdminTests(unittest.IsolatedAsyncioTestCase):
         self.connection = await engine.connect()
         self.transaction = await self.connection.begin()
         self.db = AsyncSession(bind=self.connection, expire_on_commit=False, join_transaction_mode="create_savepoint")
+        for route in (await self.db.scalars(select(AIRoute))).all():
+            route.provider_id = route.fallback_provider_id = None
+        from app.ai.embedding_config import EmbeddingSettings
+        settings = await self.db.get(EmbeddingSettings, 1)
+        settings.active_profile_id = None
+        await self.db.commit()
         self.user = User(id=uuid4(), name="test", email="test@example.test", role=UserRole.developer)
         async def db_override():
             yield self.db
@@ -40,6 +46,17 @@ class AIAdminTests(unittest.IsolatedAsyncioTestCase):
         await self.transaction.rollback()
         await self.connection.close()
         await engine.dispose()
+
+    async def set_embedding(self, json):
+        if json.get("protocol") == "disabled":
+            return await self.client.put(BASE + "/embedding/active", json={"profile_id":None})
+        current = (await self.client.get(BASE + "/embedding")).json()
+        ident = current["active_profile_id"]
+        body = {"name":"fixture", **json}
+        response = await self.client.put(BASE + "/embedding/profiles/" + ident, json=body) if ident else await self.client.post(BASE + "/embedding/profiles", json=body)
+        if response.status_code >= 400:
+            return response
+        return await self.client.put(BASE + "/embedding/active", json={"profile_id":response.json()["id"]})
 
     async def create(self, **patches):
         body = dict(name="DGX test", protocol="openai", base_url="http://example.test:10443/v1/", model="qwen3.8-27b", api_key="sk-private-test")
@@ -65,8 +82,12 @@ class AIAdminTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_routes_drive_runtime_and_protect_referenced_services(self):
         p, body = await self.create()
+        row = await self.db.get(AIProvider, p["id"])
+        row.capability_checks = {k: {"status": "verified"} for k in ("text", "json", "stream", "conversation")}
+        await self.db.commit()
         routes = (await self.client.get(BASE + "/routes")).json()
-        payload = [{k: v for k, v in r.items() if k != "label"} for r in routes]
+        payload = [{k: v for k, v in r.items() if k not in ("label", "requirements")} for r in routes]
+        next(r for r in payload if r["task"] == "default")["provider_id"] = p["id"]
         todo = next(r for r in payload if r["task"] == "todo")
         todo["provider_id"] = p["id"]
         response = await self.client.put(BASE + "/routes", json={"routes": payload})
@@ -102,7 +123,7 @@ class AIAdminTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_reject_disabled_missing_and_duplicate_routes(self):
         p, _ = await self.create(enabled=False)
-        routes = [{k: v for k, v in r.items() if k != "label"} for r in (await self.client.get(BASE + "/routes")).json()]
+        routes = [{k: v for k, v in r.items() if k not in ("label", "requirements")} for r in (await self.client.get(BASE + "/routes")).json()]
         todo = next(r for r in routes if r["task"] == "todo")
         todo["provider_id"] = p["id"]
         self.assertEqual((await self.client.put(BASE + "/routes", json={"routes": routes})).status_code, 422)
@@ -124,6 +145,31 @@ class AIAdminTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(row["last_test_ok"])
         self.assertEqual((await self.client.get(BASE + "/routes")).json(), before)
 
+    async def test_capability_checks_gate_inherited_primary_and_fallback(self):
+        p, body = await self.create(vendor="qwen")
+        routes = [{k: v for k, v in r.items() if k not in ("label", "requirements")} for r in (await self.client.get(BASE + "/routes")).json()]
+        for r in routes:
+            r["provider_id"] = p["id"] if r["task"] == "default" else None
+            r["fallback_provider_id"] = None
+        response = await self.client.put(BASE + "/routes", json={"routes": routes})
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("未验证", response.text)
+        async def fake_stream(*args, **kwargs):
+            yield "FAE742" if args[0] == "test_conversation" else '{"ok":true}' if args[0] == "test_json" else "OK"
+        with patch("app.services.ai_admin_service.stream", fake_stream):
+            for mode in ("chat", "json", "conversation", "stream"):
+                result = await self.client.post(BASE + "/providers/" + p["id"] + "/test", json={"mode": mode})
+                self.assertTrue(result.json()["ok"], result.text)
+        response = await self.client.put(BASE + "/routes", json={"routes": routes})
+        self.assertEqual(response.status_code, 200, response.text)
+        backup, _ = await self.create(name="unverified backup")
+        next(r for r in routes if r["task"] == "default")["fallback_provider_id"] = backup["id"]
+        response = await self.client.put(BASE + "/routes", json={"routes": routes})
+        self.assertEqual(response.status_code, 422)
+        response = await self.client.put(BASE + "/providers/" + p["id"], json={**body, "model": "new-model", "api_key": None})
+        self.assertEqual(response.json()["capability_checks"], {})
+        self.assertTrue(response.json()["has_api_key"])
+
     async def test_permissions_apply_to_all_management_endpoints(self):
         self.user.role = UserRole.engineer
         for method, path in (("GET", "/providers"), ("POST", "/providers"), ("PUT", "/providers/" + str(uuid4())), ("DELETE", "/providers/" + str(uuid4())), ("POST", "/providers/" + str(uuid4()) + "/test"), ("GET", "/routes"), ("PUT", "/routes"), ("GET", "/logs")):
@@ -137,10 +183,43 @@ class AIAdminTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post(BASE + "/providers", json=dict(name="bad", protocol="openai", base_url="https://example.test/v1", model="test"))
         self.assertEqual(response.status_code, 422)
 
+    async def test_no_auth_endpoint_can_be_saved_but_enabling_auth_requires_key(self):
+        row, body = await self.create(auth_required=False, api_key=None, vendor="qwen")
+        self.assertFalse(row["has_api_key"])
+        response = await self.client.put(BASE + "/providers/" + row["id"], json={**body, "auth_required": True})
+        self.assertEqual(response.status_code, 422)
+
+    async def test_unconfigured_routes_are_valid_and_give_setup_guidance(self):
+        routes = [{k: v for k, v in r.items() if k not in ("label", "requirements")} for r in (await self.client.get(BASE + "/routes")).json()]
+        for route in routes:
+            route['provider_id'] = route['fallback_provider_id'] = None
+        response = await self.client.put(BASE + '/routes', json={'routes': routes})
+        self.assertEqual(response.status_code, 200, response.text)
+        @asynccontextmanager
+        async def session(): yield self.db
+        with patch.object(runtime, 'AsyncSessionLocal', session):
+            with self.assertRaisesRegex(runtime.AIError, '管理后台'):
+                await runtime.resolve('todo')
+
+    async def test_embedding_unconfigured_by_default_and_gemini_can_be_added_manually(self):
+        from app.ai.embedding_config import EmbeddingSettings
+        row = await self.db.get(EmbeddingSettings, 1)
+        row.active_profile_id = None
+        await self.db.commit()
+        response = await self.client.get(BASE + '/embedding')
+        self.assertEqual(response.json()['protocol'], 'disabled')
+        self.assertFalse(response.json()['has_api_key'])
+        response = await self.set_embedding( json={'protocol': 'disabled'})
+        self.assertEqual(response.status_code, 200, response.text)
+        response = await self.set_embedding( json={'protocol': 'gemini', 'base_url': 'https://generativelanguage.googleapis.com/v1beta', 'model': 'manual-model'})
+        self.assertEqual(response.status_code, 422)
+        provider, _ = await self.create(protocol='gemini', base_url='https://generativelanguage.googleapis.com/v1beta', model='manual-model')
+        self.assertTrue(provider['has_api_key'])
+
     async def test_embedding_config_encrypts_preserves_and_clears_endpoint_credentials(self):
         from app.ai.embedding_config import EmbeddingSettings, load_embedding_config
         body = {"protocol": "openai", "base_url": "http://local.test/v1", "model": "bge", "api_key": "secret-embedding-test"}
-        response = await self.client.put(BASE + "/embedding", json=body)
+        response = await self.set_embedding( json=body)
         self.assertEqual(response.status_code, 200, response.text)
         self.assertNotIn("secret-embedding-test", response.text)
         self.assertNotIn("api_key_encrypted", response.text)
@@ -148,23 +227,65 @@ class AIAdminTests(unittest.IsolatedAsyncioTestCase):
         config = await load_embedding_config(self.db)
         self.assertNotIn("secret-embedding-test", config.api_key_encrypted)
         encrypted = config.api_key_encrypted
-        await self.client.put(BASE + "/embedding", json={**body, "api_key": None})
+        await self.set_embedding( json={**body, "api_key": None})
         self.assertEqual((await load_embedding_config(self.db)).api_key_encrypted, encrypted)
-        response = await self.client.put(BASE + "/embedding", json={**body, "api_key": None, "base_url": "http://other.test/v1"})
+        response = await self.set_embedding( json={**body, "api_key": None, "base_url": "http://other.test/v1"})
         self.assertFalse(response.json()["has_api_key"])
+
+    async def test_embedding_profiles_switch_without_overwriting_credentials_or_vector_identity(self):
+        from app.ai.embedding_config import EmbeddingProfile, load_embedding_config
+        body = {"name": "Encoder A", "vendor": "qwen", "protocol": "openai", "base_url": "https://encoder-a.test/v1", "model": "encoder-a", "api_key": "private-encoder-a"}
+        response = await self.client.post(BASE + "/embedding/profiles", json=body)
+        self.assertEqual(response.status_code, 201, response.text)
+        first = response.json()
+        self.assertNotIn("private-encoder-a", response.text)
+        self.assertNotIn("api_key_encrypted", response.text)
+        second = (await self.client.post(BASE + "/embedding/profiles", json={**body, "name": "Encoder B", "base_url": "https://encoder-b.test/v1", "model": "encoder-b", "api_key": "private-encoder-b"})).json()
+        self.assertEqual((await load_embedding_config(self.db)).protocol, "disabled")
+        response = await self.client.put(BASE + "/embedding/active", json={"profile_id": first["id"]})
+        self.assertEqual(response.json()["model"], "encoder-a")
+        first_config = await load_embedding_config(self.db)
+        with patch("app.services.embedding_admin_service.embed_text", AsyncMock(return_value=[1.0]*768)) as mocked:
+            tested = await self.client.post(BASE + "/embedding/profiles/" + second["id"] + "/test")
+            self.assertTrue(tested.json()["success"])
+            self.assertEqual(mocked.await_args.kwargs["config"].model, "encoder-b")
+        self.assertEqual((await load_embedding_config(self.db)).identity, first_config.identity)
+        response = await self.client.put(BASE + "/embedding/active", json={"profile_id": second["id"]})
+        self.assertNotEqual(response.json()["identity"], first_config.identity)
+        self.assertEqual((await self.client.delete(BASE + "/embedding/profiles/" + second["id"])).status_code, 409)
+        response = await self.client.put(BASE + "/embedding/active", json={"profile_id": first["id"]})
+        self.assertEqual(response.json()["identity"], first_config.identity)
+        self.assertEqual((await load_embedding_config(self.db)).api_key_encrypted, first_config.api_key_encrypted)
+        edited = await self.client.put(BASE + "/embedding/profiles/" + second["id"], json={**body, "name": "Renamed B", "base_url": "https://encoder-b.test/v1", "model": "encoder-b", "api_key": None})
+        self.assertTrue(edited.json()["has_api_key"])  # same endpoint retains B's key
+        self.assertEqual((await load_embedding_config(self.db)).model, "encoder-a")
+        response = await self.client.put(BASE + "/embedding/active", json={"profile_id": None})
+        self.assertEqual(response.json()["protocol"], "disabled")
+        self.assertEqual((await self.client.delete(BASE + "/embedding/profiles/" + first["id"])).status_code, 200)
+        self.assertIsNone(await self.db.get(EmbeddingProfile, first["id"]))
+
+    async def test_embedding_profile_endpoints_validate_and_require_developer(self):
+        self.assertEqual((await self.client.put(BASE + "/embedding/active", json={"profile_id": str(uuid4())})).status_code, 404)
+        for body in ({"name": " "}, {"name": "valid", "protocol": "disabled"}):
+            result = await self.client.post(BASE + "/embedding/profiles", json=body)
+            self.assertEqual(result.status_code, 422)
+        self.user.role = UserRole.engineer
+        for method, path in (("GET", "/embedding/profiles"), ("POST", "/embedding/profiles"), ("PUT", "/embedding/active"), ("PUT", "/embedding/profiles/" + str(uuid4())), ("DELETE", "/embedding/profiles/" + str(uuid4())), ("POST", "/embedding/profiles/" + str(uuid4()) + "/test")):
+            result = await self.client.request(method, BASE + path, json={})
+            self.assertEqual(result.status_code, 403, result.text)
 
     async def test_embedding_api_permissions_validation_and_test(self):
         body = {"protocol": "openai", "base_url": "http://local.test/v1", "model": "bge"}
         for invalid in ({"base_url": "http://user:password@local.test"}, {"use_env_key": True}, {"timeout_seconds": 100}):
-            response = await self.client.put(BASE + "/embedding", json={**body, **invalid})
+            response = await self.set_embedding( json={**body, **invalid})
             self.assertEqual(response.status_code, 422, response.text)
-        self.assertEqual((await self.client.put(BASE + "/embedding", json=body)).status_code, 200)
+        self.assertEqual((await self.set_embedding( json=body)).status_code, 200)
         with patch("app.services.embedding_admin_service.embed_text", AsyncMock(return_value=[1.0]*768)) as api:
             response = await self.client.post(BASE + "/embedding/test")
         self.assertTrue(response.json()["success"], response.text)
         self.assertEqual(api.await_count, 2)
         self.user.role = UserRole.engineer
-        for method, path in (("get", "/embedding"), ("put", "/embedding"), ("post", "/embedding/test")):
+        for method, path in (("get", "/embedding"), ("post", "/embedding/test")):
             response = await getattr(self.client, method)(BASE + path, **({"json": body} if method == "put" else {}))
             self.assertEqual(response.status_code, 403)
 
@@ -199,10 +320,12 @@ class AIAdminTests(unittest.IsolatedAsyncioTestCase):
     async def test_rag_failure_does_not_abort_business_transaction(self):
         from sqlalchemy import text
         from app.ai.rag_engine import retrieve_context
+        from app.ai.embedding_config import load_embedding_config
+        await self.set_embedding( json={"protocol":"openai","base_url":"http://local.test/v1","model":"test-encoder"})
+        configured = await load_embedding_config(self.db)
         with patch("app.ai.rag_engine._keyword_candidates", AsyncMock(return_value=[])), patch("app.ai.rag_engine._has_vectors", AsyncMock(return_value=True)), patch("app.ai.rag_engine.embed_text", AsyncMock(return_value=[1.0] * 768)) as embedded, patch("app.ai.rag_engine.text", return_value=text("SELECT 1 / 0")):
             self.assertEqual(await retrieve_context("private test query", self.db), "")
-        from app.ai.embedding_config import environment_config
-        embedded.assert_awaited_once_with("private test query", task_type="retrieval_query", config=environment_config())
+        embedded.assert_awaited_once_with("private test query", task_type="retrieval_query", config=configured)
         self.assertEqual(await self.db.scalar(text("SELECT 1")), 1)
 
 

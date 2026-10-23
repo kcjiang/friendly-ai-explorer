@@ -211,8 +211,7 @@ class TicketTests(unittest.IsolatedAsyncioTestCase):
                        {'created_from': params['created_before'], 'created_before': params['created_from']}):
             self.assertEqual((await c.get('/api/v1/tickets/', params=values)).status_code, 422)
 
-    async def test_comments_ai_and_email_approval(self):
-        from app.models.email_account import EmailAccount, SyncedEmail, PreTicket
+    async def test_comments_and_ai_analysis(self):
         c=self.client
         ticket=await self.create()
         url='/api/v1/tickets/'+ticket['id']
@@ -225,28 +224,7 @@ class TicketTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(ai.call_args.args[0]['raw_report'],'Original report')
             self.assertEqual(ai.call_args.args[0]['product_name'],'TestModel')
         self.assertEqual((await c.get(url)).json()['revision'],3)
-        account=EmailAccount(user_id=self.user.id,email_address=self.user.email,imap_host='example.com',username='test',password_encrypted='test')
-        self.db.add(account)
-        await self.db.flush()
-        email=SyncedEmail(account_id=account.id,message_id=str(uuid4()),body_text='Original email body')
-        self.db.add(email)
-        await self.db.flush()
-        pre=PreTicket(email_id=email.id,creator_id=self.user.id,title='Email test',priority='high')
-        self.db.add(pre)
-        await self.db.flush()
-        approval='/api/v1/email/pre-tickets/'+str(pre.id)+'/approve'
-        self.assertEqual((await c.post(approval,json={})).status_code,422)
-        r=await c.post(approval,json={'project_id':self.projects[0]})
-        self.assertEqual(r.status_code,200,r.text)
-        created=r.json()['ticket_id']
-        row=(await c.get('/api/v1/tickets/'+created)).json()
-        self.assertEqual(row['raw_report'],'Original email body')
-        self.assertEqual(row['priority'],'major')
-        self.assertEqual(row['project_seq'],2)
-        self.assertEqual((await c.post(approval,json={'project_id':self.projects[0]})).status_code,400)
-        self.assertEqual((await c.delete('/api/v1/tickets/'+created,params={'revision':1})).status_code,200)
-        await self.db.refresh(pre)
-        self.assertIsNone(pre.created_ticket_id)
+
 
 
 class TicketConcurrencyTests(unittest.IsolatedAsyncioTestCase):

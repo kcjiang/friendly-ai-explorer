@@ -1,11 +1,14 @@
 import enum
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from sqlalchemy import String, Text, DateTime, Enum as SAEnum, ForeignKey, Boolean, ARRAY, BigInteger, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class TicketStatus(str, enum.Enum):
@@ -36,7 +39,6 @@ class Ticket(Base):
     firmware_version: Mapped[Optional[str]]      = mapped_column(String(100), nullable=True)
     status:           Mapped[TicketStatus]       = mapped_column(SAEnum(TicketStatus, native_enum=False), nullable=False, default=TicketStatus.open)
     priority:         Mapped[TicketPriority]     = mapped_column(SAEnum(TicketPriority, native_enum=False), nullable=False, default=TicketPriority.major)
-    legacy_ticket_no: Mapped[Optional[str]] = mapped_column(String(50))
     system_seq: Mapped[int] = mapped_column(BigInteger, unique=True)
     project_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey('catalog_projects.id'))
     project_seq: Mapped[Optional[int]] = mapped_column(BigInteger)

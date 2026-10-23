@@ -1,11 +1,13 @@
 name: Publish Docker images
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       version:
         description: 'Version to publish (existing v-prefixed Git tag, without v here)'
         required: true
-        default: '0.2.5-dev.4'
+        default: '0.3.1-dev.2'
         type: string
 
 permissions:
@@ -22,16 +24,24 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       commit: ${{ steps.release.outputs.commit }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: v${{ inputs.version }}
+          ref: ${{ github.event_name == 'push' && github.ref_name || format('v{0}', inputs.version) }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          version="${INPUT_VERSION:-${GITHUB_REF_NAME#v}}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Check version of the selected release tag
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: node scripts/set-version.mjs --check
       - name: Resolve release commit
         id: release
@@ -68,7 +78,7 @@ jobs:
           tags: ${{ steps.image.outputs.name }}:sha-${{ needs.prepare.outputs.commit }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.version=${{ inputs.version }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
             org.opencontainers.image.revision=${{ needs.prepare.outputs.commit }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
@@ -87,7 +97,7 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
           COMMIT: ${{ needs.prepare.outputs.commit }}
-          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           set -euo pipefail
           for service in frontend backend; do

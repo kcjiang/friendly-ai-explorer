@@ -10,8 +10,9 @@ from app.logging_config import configure_logging, log_event, request_id_context
 from app.middleware.request_logging import RequestLoggingMiddleware
 import logging
 from app.version import APP_VERSION
-from app.routers import auth, tickets, knowledge, ai, admin, users, email_router, preset_router, catalog, ai_admin, app_logs
-from app.routers import ai_tasks
+from app.routers import auth, tickets, knowledge, ai, admin, users, preset_router, catalog, ai_admin, app_logs
+from app.routers import workbench
+from app.routers import workbench_mail
 
 configure_logging()
 log_event(logging.INFO, "后端应用已加载", version=APP_VERSION)
@@ -51,10 +52,10 @@ app.include_router(ai.router,            prefix="/api/v1/ai",        tags=["AI"]
 app.include_router(admin.router,         prefix="/api/v1/admin",     tags=["Admin"])
 app.include_router(ai_admin.router,      prefix="/api/v1/admin/ai",  tags=["AI Admin"])
 app.include_router(app_logs.router,      prefix="/api/v1/admin",     tags=["Application Logs"])
-app.include_router(email_router.router,  prefix="/api/v1/email",     tags=["Email"])
 app.include_router(preset_router.router, prefix="/api/v1/debug",     tags=["Debug"])
 app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["Catalog"])
-app.include_router(ai_tasks.router, prefix="/api/v1/ai-tasks", tags=["AI Tasks"])
+app.include_router(workbench.router, prefix="/api/v1/workbench", tags=["Workbench"])
+app.include_router(workbench_mail.router, prefix="/api/v1/workbench/mail", tags=["Workbench Mail"])
 
 
 @app.get("/health", tags=["Health"])

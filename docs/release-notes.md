@@ -1,6 +1,6 @@
 # 版本展示与发布说明
 
-版本按钮读取 `frontend/package.json` 中的 version 信息。使用 `node scripts/set-version.mjs 0.2.5-dev.4` 同步前后端版本后，在 `frontend/src/config/release-notes.ts` 中添加同名条目，填写标题和更新条目，再构建镜像。
+版本按钮读取 `frontend/package.json` 中的 version 信息。使用 `node scripts/set-version.mjs 0.3.1-dev.2` 同步前后端版本后，在 `frontend/src/config/release-notes.ts` 中添加同名条目，填写标题和更新条目，再构建镜像。
 
 发布说明打包进镜像，不依赖 GitHub 网络请求。气泡展示文件内的全部版本，标记当前版本并显示版本总数。维护时保留历史条目，将新版本添加到文件最前面，以保持从新到旧的顺序。当前版本没有说明时显示提示，历史内容仍可查看。条目按纯文本渲染，长内容在气泡内滚动。
 

@@ -36,7 +36,7 @@ with httpx.Client(base_url="http://nginx", headers={"Host": host}, timeout=30) a
     print("PASS: Nginx, login page, NextAuth credentials, session and protected page")
 
     client.headers["Authorization"] = f"Bearer {session['accessToken']}"
-    for path in ("/api/v1/tickets/", "/api/v1/knowledge/", "/api/v1/email/emails",
+    for path in ("/api/v1/tickets/", "/api/v1/knowledge/", "/api/v1/workbench/mail",
                  "/api/v1/debug/commands?device_type=adb"):
         ok(client.get(path))
     print("PASS: authenticated database APIs and initialized module tables")

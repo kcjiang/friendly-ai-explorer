@@ -7,18 +7,11 @@ from app.ai.provider_client import AIError
 TODO_SCHEMA = {"type": "object", "properties": {"todos": {"type": "array", "minItems": 1, "maxItems": 8,
     "items": {"type": "object", "properties": {"task": {"type": "string"}, "priority": {"type": "string", "enum": ["critical", "major", "trivial"]}},
               "required": ["task", "priority"], "additionalProperties": False}}}, "required": ["todos"], "additionalProperties": False}
-EMAIL_SCHEMA = {"type": "object", "properties": {
-    "is_customer_email": {"type": "boolean"}, "is_defect_report": {"type": "boolean"}, "summary": {"type": "string"},
-    "ticket": {"anyOf": [{"type": "null"}, {"type": "object", "properties": {
-        **{k: {"type": ["string", "null"]} for k in ("description", "customer_name", "customer_contact", "product_name", "firmware_version")},
-        "title": {"type": "string"}, "priority": {"type": "string", "enum": ["critical", "high", "medium", "low"]}},
-        "required": ["title", "description", "customer_name", "customer_contact", "product_name", "firmware_version", "priority"], "additionalProperties": False}]}},
-    "required": ["is_customer_email", "is_defect_report", "summary", "ticket"], "additionalProperties": False}
 TEST_SCHEMA = {"type": "object", "properties": {"ok": {"type": "boolean", "enum": [True]}}, "required": ["ok"], "additionalProperties": False}
 
 
 def schema_for(task):
-    return {"todo": TODO_SCHEMA, "email_analysis": EMAIL_SCHEMA, "test_json": TEST_SCHEMA}.get(task)
+    return {"todo": TODO_SCHEMA, "test_json": TEST_SCHEMA}.get(task)
 
 
 def strip_thinking(raw):

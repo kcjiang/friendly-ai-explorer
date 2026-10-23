@@ -14,7 +14,8 @@ from app.ai import provider_client, router
 def provider(protocol="openai", **kwargs):
     fields = dict(id=uuid4(), name="test", protocol=protocol, base_url="https://example.test/v1",
                   model="qwen3.8-27b", api_key_encrypted=provider_client.encrypt_key("sk-test-secret"),
-                  use_env_key=False, enabled=True, timeout_seconds=5, max_output_tokens=128, max_concurrency=1)
+                  capability_checks={k: {"status": "verified"} for k in ("text", "json", "stream", "conversation")},
+                  enabled=True, timeout_seconds=5, max_output_tokens=128, max_concurrency=1)
     fields.update(kwargs)
     return router.Provider(**fields)
 
@@ -22,6 +23,13 @@ def provider(protocol="openai", **kwargs):
 class AdapterTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.real_client = httpx.AsyncClient
+
+    async def test_runtime_rejects_unverified_model_before_network_call(self):
+        item = provider(capability_checks={})
+        with patch.object(router, "generate") as upstream, patch.object(router, "record_call", AsyncMock()):
+            with self.assertRaisesRegex(provider_client.AIError, "未验证"):
+                _ = [chunk async for chunk in router.stream("todo", "test", plan=([item], 5, 128))]
+            upstream.assert_not_called()
 
     async def collect(self, item, handler, **kwargs):
         def client(**options):
@@ -48,7 +56,31 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(body["max_completion_tokens"], 128)
             self.assertNotIn("max_tokens", body)
             return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
-        await self.collect(provider(base_url="https://api.openai.com/v1"), handler)
+        await self.collect(provider(base_url="https://api.openai.com/v1", token_parameter="max_completion_tokens"), handler)
+
+    async def test_responses_payload_and_stream(self):
+        def handler(request):
+            self.assertTrue(request.url.path.endswith("/responses"))
+            body = json.loads(request.content)
+            self.assertFalse(body["store"])
+            self.assertEqual(body["input"][-1]["content"], "你好")
+            self.assertNotIn("chat_template_kwargs", body)
+            if body["stream"]:
+                events = [{"type": "response.output_text.delta", "delta": "OK"},
+                          {"type": "response.completed", "response": {"status": "completed", "usage": {"input_tokens": 2, "output_tokens": 1}}}]
+                return httpx.Response(200, headers={"content-type": "text/event-stream"}, text="".join("data: " + json.dumps(e) + "\n\n" for e in events))
+            return httpx.Response(200, json={"status": "completed", "output": [{"type": "message", "content": [{"type": "output_text", "text": "OK"}]}]})
+        for streaming in (False, True):
+            self.assertEqual(await self.collect(provider("responses"), handler, stream=streaming), ["OK"])
+
+    async def test_provider_brand_does_not_inject_qwen_options(self):
+        def handler(request):
+            body = json.loads(request.content)
+            self.assertNotIn("chat_template_kwargs", body)
+            self.assertEqual(body["max_completion_tokens"], 128)
+            self.assertNotIn("authorization", request.headers)
+            return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+        await self.collect(provider(model="deepseek-chat", auth_required=False, api_key_encrypted=None, token_parameter="max_completion_tokens"), handler)
 
     async def test_multi_turn_roles_reach_both_provider_protocols(self):
         history = [{"role": "user", "content": "previous question"}, {"role": "assistant", "content": "previous answer"}]
@@ -76,6 +108,24 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         result = await self.collect(provider("gemini", model="models/gemini-2.5-flash"), handler, usage=usage)
         self.assertEqual(result, ["回答"])
         self.assertEqual(usage["output_tokens"], 1)
+
+    async def test_ticket_analysis_auto_thinking_preserves_explicit_opt_in(self):
+        for thinking, task, disabled in (("auto", "ticket_analysis", True), ("on", "ticket_analysis", False), ("auto", "rag_chat", False)):
+            def handler(request):
+                config = json.loads(request.content)["generationConfig"]
+                self.assertEqual(config.get("thinkingConfig") == {"thinkingBudget": 0}, disabled)
+                return httpx.Response(200, json={"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": "完整分析"}]}}]})
+            self.assertEqual(await self.collect(provider("gemini", model="gemini-2.5-flash", thinking_mode=thinking), handler, task=task), ["完整分析"])
+
+    async def test_gemini_truncation_records_reasoning_usage_without_accepting_partial_answer(self):
+        usage = {}
+        response = {"candidates": [{"finishReason": "MAX_TOKENS", "content": {"parts": [{"text": "partial"}]}}],
+                    "usageMetadata": {"promptTokenCount": 874, "candidatesTokenCount": 62, "thoughtsTokenCount": 1474, "totalTokenCount": 2410}}
+        with self.assertRaises(provider_client.AIError) as raised:
+            await self.collect(provider("gemini"), lambda _: httpx.Response(200, json=response), usage=usage)
+        self.assertEqual(raised.exception.kind, "truncated")
+        self.assertEqual(usage["diagnostics"]["reasoning_tokens"], 1474)
+        self.assertEqual(usage["diagnostics"]["total_tokens"], 2410)
 
     async def test_stream_and_usage(self):
         events = [
@@ -180,7 +230,7 @@ class AdapterTests(unittest.IsolatedAsyncioTestCase):
         from app.ai.embeddings import embed_text
         from app.ai.embedding_config import EmbeddingConfig
         response = httpx.Response(200, json={"data": [{"index": 0, "embedding": [1.0] + [0.0] * 767}]})
-        config = EmbeddingConfig(protocol="openai", base_url="http://embedding.test/v1", model="local", use_env_key=False)
+        config = EmbeddingConfig(protocol="openai", base_url="http://embedding.test/v1", model="local")
         with patch("httpx.AsyncClient.post", AsyncMock(return_value=response)) as embedded:
             self.assertEqual(await embed_text("query", task_type="retrieval_query", config=config), [1.0] + [0.0] * 767)
         self.assertEqual(embedded.await_args.args[0], "http://embedding.test/v1/embeddings")
@@ -197,6 +247,25 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         self.record_mock = self.record.start()
         self.addCleanup(self.resolve.stop)
         self.addCleanup(self.record.stop)
+
+    async def test_analysis_uses_configured_budget_or_explicit_route_override(self):
+        for limit, override, expected in ((2048, None, 2048), (4096, None, 4096), (4096, 1024, 1024)):
+            item = replace(self.first, max_output_tokens=limit)
+            async def generated(p, prompt, **kwargs):
+                self.assertEqual(kwargs["max_tokens"], expected)
+                yield "完整分析"
+            with patch.object(router, "generate", generated):
+                result = [chunk async for chunk in router.stream("ticket_analysis", "test", streaming=False, plan=([item], 5, override))]
+            self.assertEqual(result, ["完整分析"])
+
+    async def test_unverified_primary_can_use_verified_backup(self):
+        async def generated(p, *args, **kwargs):
+            self.assertEqual(p.id, self.second.id)
+            yield "backup"
+        with patch.object(router, "generate", generated):
+            result = [chunk async for chunk in router.stream("ticket_analysis", "test", streaming=False,
+                      plan=([replace(self.first, capability_checks={}), self.second], 5, None))]
+        self.assertEqual(result, ["backup"])
 
     async def test_retryable_failure_uses_backup_and_records_both(self):
         async def generate(p, *args, **kwargs):
@@ -254,7 +323,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
 
     def test_structured_output_validation(self):
         self.assertEqual(json.loads(router.validate_result("todo", '```json\n[{"task":"检查","priority":"major"}]\n```'))[0]["task"], "检查")
-        for task, raw in (("todo", "[]"), ("todo", '[{"task":"x","priority":"bad"}]'), ("email_analysis", '{"is_customer_email":"false","is_defect_report":false,"summary":"x"}'), ("email_analysis", '{"is_customer_email":true,"is_defect_report":true,"summary":"x","ticket":null}')):
+        for task, raw in (("todo", "[]"), ("todo", '[{"task":"x","priority":"bad"}]')):
             with self.subTest(task=task, raw=raw), self.assertRaises(provider_client.AIError):
                 router.validate_result(task, raw)
 

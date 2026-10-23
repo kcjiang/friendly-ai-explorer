@@ -1,8 +1,8 @@
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.user import CreateUserRequest, UpdateUserRequest
 from app.services.auth_service import hash_password
 

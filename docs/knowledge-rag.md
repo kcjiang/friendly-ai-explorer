@@ -1,12 +1,10 @@
-> 全新数据库统一执行 `db/init.sql`；下文归档迁移命令仅适用于旧版本升级，不应在新基线之后执行。清空重建参见 [数据库重建](database-reset.md)。
-
 # 知识库问答与索引
 
 ## 本次修复
 
 Google 的 `text-embedding-004` 已在 2026-01-14 停用，继续调用会得到 NotFound。[Google 官方生命周期说明](https://ai.google.dev/gemini-api/docs/deprecations#embedding-models)
 
-向量服务现在可在管理后台 → AI 服务与调度 → 知识库向量服务独立配置，支持 Gemini 原生、OpenAI 兼容 `/embeddings` 及“仅关键词检索”。首次未保存配置时，继续读取 `EMBEDDING_MODEL` 和 `GOOGLE_API_KEY`；保存后使用数据库配置，不随聊天模型切换。独立密钥加密保存，查询不返回明文。
+向量服务在管理后台 → AI 服务与调度 → 知识库向量服务独立配置，支持 Gemini 原生、OpenAI 兼容 `/embeddings` 及“仅关键词检索”。首次未配置时仅使用关键词检索，不自动选择模型或读取供应商环境密钥；保存后使用数据库配置，不随聊天模型切换。独立密钥加密保存，查询不返回明文。
 
 维度固定为 768，进行有限值、维度校验和归一化，不改变现有 `vector(768)` 列。Gemini 查询使用 `retrieval_query`，文档使用 `retrieval_document`；OpenAI 兼容接口可分别配置查询和文档前缀。更换模型、接口地址或前缀后必须重新生成文档向量；维度相同也不能混用不同编码器的向量空间，服务临时失败时不自动切换到不同向量模型。
 
@@ -29,20 +27,9 @@ Google 的 `text-embedding-004` 已在 2026-01-14 停用，继续调用会得到
 
 “待重建索引”表示无文本块，系统仍可回查非空原文；“草稿”不参与问答；“正文为空”需先补充内容。索引重建权限与编辑权限一致，仅作者可操作。重新编辑期间，较早的索引任务不会覆盖更新后的正文版本。
 
-## 部署与配置
+## 部署
 
-已有 v0.2.0-dev.1 部署需要先备份并执行新增的 v10 迁移，再更新前后端镜像。迁移不修改原文和现有向量。开发环境代码挂载会热更新，环境变量变化需重新创建容器。
-
-```sh
-docker compose --env-file .env.production -f compose.prod.yml exec -T postgres psql -U admin -d fae_app_pgdb -v ON_ERROR_STOP=1 < db/archive/migration_v10_embedding_settings.sql
-```
-
-```text
-GOOGLE_API_KEY=原有 Google API 密钥
-EMBEDDING_MODEL=gemini-embedding-001
-```
-
-向量请求单次默认最多等待 16 秒，后台可设置 5–30 秒，一篇文档的在线向量构建最多等待 45 秒，超出后保留关键词索引；文档内容按 800 字符分块，逐批（最多 8 块）提交。暂不可用的服务短暂冷却，避免每个问题都重复等待失败。大量长文档的完整向量重建应安排独立后台任务；当前同步重建适用于小规模文档，关键词路径始终可用。
+当前版本仅支持全新数据库部署，开发和生产 Compose 都只执行 `db/init.sql`。旧数据库与旧密文不兼容，请按 [数据库重建](database-reset.md) 准备空库后部署。
 
 ## 本地模型接入示例
 

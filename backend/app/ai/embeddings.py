@@ -8,8 +8,7 @@ import asyncio
 import hashlib
 import math
 import time
-from app.config import settings
-from app.ai.embedding_config import environment_config
+from app.ai.embedding_config import default_embedding_config, load_embedding_config
 from app.ai.provider_client import provider_key, AIError
 
 EMBED_DIMENSIONS = 768
@@ -24,13 +23,9 @@ class EmbeddingUnavailable(Exception):
         super().__init__("向量服务不可用：" + reason)
 
 
-def embedding_model():
-    return "models/" + settings.embedding_model.removeprefix("models/")
-
-
 def embedding_identity(config=None):
     # Dimensions alone do not make different models' vector spaces compatible.
-    return (config or environment_config()).identity
+    return (config or default_embedding_config()).identity
 
 
 def normalize_vector(vector):
@@ -45,11 +40,11 @@ def normalize_vector(vector):
 
 
 async def _embed(content, task_type, config=None):
-    config = config or environment_config()
+    config = config or await load_embedding_config()
     if config.protocol == "disabled":
         raise EmbeddingUnavailable("disabled")
     try:
-        key = provider_key(config) if config.api_key_encrypted or config.use_env_key else ""
+        key = provider_key(config) if config.api_key_encrypted else ""
     except AIError:
         raise EmbeddingUnavailable("missing_or_invalid_key") from None
     cache_key = (embedding_identity(config), hashlib.sha256(key.encode()).hexdigest())

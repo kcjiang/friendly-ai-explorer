@@ -4,13 +4,16 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
-TASKS = {"default": "默认服务", "todo": "今日 AI TODO", "ticket_analysis": "工单分析", "email_analysis": "邮件分析", "rag_chat": "AI 对话（知识库优先）"}
+TASKS = {"default": "默认服务", "todo": "今日 AI TODO", "ticket_analysis": "工单分析", "rag_chat": "AI 对话（知识库优先）"}
 
 
 class ProviderInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     name: str = Field(min_length=1, max_length=100)
-    protocol: Literal["gemini", "openai"]
+    vendor: Literal["openai", "gemini", "deepseek", "qwen", "other"] = "other"
+    auth_required: bool = True
+    token_parameter: Literal["max_tokens", "max_completion_tokens"] = "max_tokens"
+    protocol: Literal["gemini", "openai", "responses"]
     base_url: str = Field(min_length=1, max_length=1000)
     model: str = Field(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9_.:/-]+$")
     api_key: SecretStr | None = None
@@ -39,30 +42,28 @@ class ProviderInput(BaseModel):
 
 class RouteInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    task: Literal["default", "todo", "ticket_analysis", "email_analysis", "rag_chat"]
+    task: Literal["default", "todo", "ticket_analysis", "rag_chat"]
     provider_id: UUID | None = None
     fallback_provider_id: UUID | None = None
     timeout_seconds: int | None = Field(default=None, ge=5, le=300)
     max_output_tokens: int | None = Field(default=None, ge=16, le=65536)
 
     @model_validator(mode="after")
-    def valid_default(self):
-        if self.task == "default" and self.provider_id is None:
-            raise ValueError("默认服务不能为空")
+    def valid_pair(self):
         if self.provider_id and self.provider_id == self.fallback_provider_id:
             raise ValueError("主服务与备用服务不能相同")
         return self
 
 
 class RoutesInput(BaseModel):
-    routes: list[RouteInput] = Field(min_length=5, max_length=5)
+    routes: list[RouteInput] = Field(min_length=len(TASKS), max_length=len(TASKS))
 
     @model_validator(mode="after")
     def all_tasks(self):
         if {r.task for r in self.routes} != set(TASKS):
-            raise ValueError("必须包含默认服务和全部四项任务，且不能重复")
+            raise ValueError("必须包含默认服务和全部任务，且不能重复")
         return self
 
 
 class TestInput(BaseModel):
-    mode: Literal["chat", "json", "stream"] = "chat"
+    mode: Literal["chat", "json", "stream", "conversation"] = "chat"

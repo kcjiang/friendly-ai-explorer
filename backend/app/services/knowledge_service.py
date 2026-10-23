@@ -1,4 +1,3 @@
-import os
 import uuid
 import asyncio
 import logging
@@ -13,7 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.models.document import Document, DocumentChunk, DocVisibility
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.schemas.document import CreateDocumentRequest, UpdateDocumentRequest
 from app.ai.file_parser import parse_file
 from app.ai.embeddings import chunk_text, embed_chunks, embedding_identity, EmbeddingUnavailable

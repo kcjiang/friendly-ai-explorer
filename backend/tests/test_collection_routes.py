@@ -7,6 +7,12 @@ from app.main import app
 
 
 class CollectionRoutesTest(unittest.TestCase):
+    def test_retired_features_are_not_exposed(self):
+        with TestClient(app) as client:
+            for path in ("/api/v1/email/emails", "/api/v1/ai-tasks"):
+                with self.subTest(path=path):
+                    self.assertEqual(client.get(path).status_code, 404)
+
     def test_collection_routes_do_not_redirect_before_auth(self):
         with TestClient(app, base_url="http://backend:8000") as client:
             for method, path in (

@@ -29,7 +29,6 @@ class TicketListOut(BaseModel):
     id: uuid.UUID
     ticket_no: str
     display_name: str
-    legacy_ticket_no: str | None = None
     system_seq: int
     project_id: uuid.UUID | None
     project_seq: int | None

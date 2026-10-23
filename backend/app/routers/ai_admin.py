@@ -12,14 +12,39 @@ from app.services import embedding_admin_service as embedding
 router = APIRouter()
 
 
+@router.get("/embedding/profiles")
+async def embedding_profiles(user: DevOnly, db: AsyncSession = Depends(get_db)):
+    return await embedding.list_profiles(db)
+
+
+@router.post("/embedding/profiles", status_code=201)
+async def create_embedding_profile(body: embedding.ProfileInput, user: DevOnly, db: AsyncSession = Depends(get_db)):
+    return await embedding.save_profile(db, body)
+
+
+@router.put("/embedding/profiles/{profile_id}")
+async def update_embedding_profile(profile_id: UUID, body: embedding.ProfileInput, user: DevOnly, db: AsyncSession = Depends(get_db)):
+    return await embedding.save_profile(db, body, profile_id)
+
+
+@router.delete("/embedding/profiles/{profile_id}")
+async def delete_embedding_profile(profile_id: UUID, user: DevOnly, db: AsyncSession = Depends(get_db)):
+    return await embedding.delete_profile(db, profile_id)
+
+
+@router.post("/embedding/profiles/{profile_id}/test")
+async def test_embedding_profile(profile_id: UUID, user: DevOnly, db: AsyncSession = Depends(get_db)):
+    return await embedding.test_config(db, profile_id)
+
+
+@router.put("/embedding/active")
+async def activate_embedding_profile(body: embedding.ActiveProfileInput, user: DevOnly, db: AsyncSession = Depends(get_db)):
+    return await embedding.activate_profile(db, body.profile_id)
+
+
 @router.get("/embedding")
 async def embedding_settings(user: DevOnly, db: AsyncSession = Depends(get_db)):
     return await embedding.public_config(db)
-
-
-@router.put("/embedding")
-async def save_embedding_settings(body: embedding.EmbeddingInput, user: DevOnly, db: AsyncSession = Depends(get_db)):
-    return await embedding.save_config(db, body)
 
 
 @router.post("/embedding/test")

@@ -1,9 +1,6 @@
 from typing import AsyncGenerator
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import HTTPException
 
-from app.models.ticket import Ticket
 from app.models.user import User
 from app.ai.rag_engine import retrieve_context, build_prompt
 from app.ai.router import stream

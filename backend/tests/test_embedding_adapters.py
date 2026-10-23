@@ -12,7 +12,7 @@ VECTOR = [2.0] + [0.0] * 767
 class LocalEmbeddingTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         embeddings._cooldowns.clear()
-        self.config = EmbeddingConfig(protocol="openai", base_url="http://local.test/v1", model="bge", use_env_key=False)
+        self.config = EmbeddingConfig(protocol="openai", base_url="http://local.test/v1", model="bge")
 
     async def test_local_batches_ordered_by_index_and_prefixes(self):
         response = httpx.Response(200, json={"data": [{"index": 1, "embedding": [0.0, 2.0] + [0.0]*766}, {"index": 0, "embedding": VECTOR}]})

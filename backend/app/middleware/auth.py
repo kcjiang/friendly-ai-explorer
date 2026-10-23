@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.security import derive_key
 from app.database import get_db
 from app.models.user import User
 
@@ -21,7 +22,7 @@ def create_access_token(payload: dict) -> str:
     data = payload.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
     data.update({"exp": expire})
-    return jwt.encode(data, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(data, derive_key("jwt"), algorithm=settings.jwt_algorithm)
 
 
 # ── Token 解析 & 用户提取 ────────────────────────────────────
@@ -39,7 +40,7 @@ async def get_current_user(
     try:
         payload = jwt.decode(
             credentials.credentials,
-            settings.jwt_secret_key,
+            derive_key("jwt"),
             algorithms=[settings.jwt_algorithm],
         )
         user_id: str | None = payload.get("sub")

@@ -1,12 +1,11 @@
 // frontend/src/config/site.tsx
 import {
   BookOpen,
-  Bot,
   Cable,
   Database,
   Gauge,
   type LucideIcon,
-  MessagesSquare,
+  PanelsTopLeft,
   Settings,
   SquareKanban,
   Usb,
@@ -33,6 +32,11 @@ export const navigations: Navigation[] = [
     href: "/",
   },
   {
+    icon: PanelsTopLeft,
+    name: "工作台",
+    href: "/workbench",
+  },
+  {
     icon: SquareKanban,
     name: "Ticket",
     href: "/ticket",
@@ -46,16 +50,6 @@ export const navigations: Navigation[] = [
     icon: BookOpen,
     name: "Knowledge",
     href: "/knowledge",
-  },
-  {
-    icon: MessagesSquare,
-    name: "Email Analysis",
-    href: "/email",
-  },
-  {
-    icon: Bot,
-    name: "AI任务",
-    href: "/ai-tasks",
   },
   {
     icon: Usb,

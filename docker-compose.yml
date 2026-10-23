@@ -29,14 +29,9 @@ services:
     container_name: fae_backend
     environment:
       DATABASE_URL: postgresql+asyncpg://admin:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/fae_app_pgdb
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini-embedding-001}
-      AI_ENCRYPTION_KEY: ${AI_ENCRYPTION_KEY:-}
-      TASK_ENCRYPTION_KEY: ${TASK_ENCRYPTION_KEY:-}
-      JIRA_ALLOWED_HOSTS: ${JIRA_ALLOWED_HOSTS:-jira.sdmctech.com:9380}
       LOG_DIR: /app/logs
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+      APP_MASTER_KEY: ${APP_MASTER_KEY:?Set APP_MASTER_KEY in .env}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
       UPLOAD_DIR: /app/uploads
@@ -60,18 +55,14 @@ services:
     networks:
       - fae_network
 
-  task-worker:
+  workbench-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: [python, -m, app.task_worker]
+    command: [python, -m, app.workbench_worker]
     environment:
       DATABASE_URL: postgresql+asyncpg://admin:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/fae_app_pgdb
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
-      AI_ENCRYPTION_KEY: ${AI_ENCRYPTION_KEY:-}
-      TASK_ENCRYPTION_KEY: ${TASK_ENCRYPTION_KEY:-}
-      JIRA_ALLOWED_HOSTS: ${JIRA_ALLOWED_HOSTS:-jira.sdmctech.com:9380}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+      APP_MASTER_KEY: ${APP_MASTER_KEY:?Set APP_MASTER_KEY in .env}
       LOG_DIR: /app/logs
     volumes:
       - ./backend:/app

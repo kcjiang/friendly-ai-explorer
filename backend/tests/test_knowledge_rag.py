@@ -9,25 +9,29 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import app
-from app.config import settings
+from dataclasses import asdict, replace
+from app.ai.provider_client import encrypt_key
 from app.database import engine, get_db
 from app.middleware.auth import get_current_user
 from app.models.document import Document, DocumentChunk, DocVisibility
 from app.models.user import User, UserRole
 from app.ai import embeddings, rag_engine
-from app.ai.embedding_config import EmbeddingConfig
+from app.ai.embedding_config import EmbeddingConfig, EmbeddingSettings, EmbeddingProfile
 from app.services import knowledge_service, ai_service
 
 VECTOR = [1.0] + [0.0] * 767
 
 
 class EmbeddingTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.config = EmbeddingConfig(protocol="gemini", base_url="https://generativelanguage.googleapis.com/v1beta", model="gemini-embedding-001", api_key_encrypted=encrypt_key("non-secret-test-key"))
+
     async def test_batch_dimensions_normalization_and_task_types(self):
         embeddings._cooldowns.clear()
         vectors = [[2.0] + [0.0] * 767, [0.0, 3.0] + [0.0] * 766]
         response = httpx.Response(200, json={"embeddings": [{"values": vector} for vector in vectors]})
-        with patch.object(settings, "google_api_key", "non-secret-test-key"), patch("httpx.AsyncClient.post", AsyncMock(return_value=response)) as api:
-            results = await embeddings.embed_chunks(["first", "second"])
+        with patch("httpx.AsyncClient.post", AsyncMock(return_value=response)) as api:
+            results = await embeddings.embed_chunks(["first", "second"], config=self.config)
         self.assertEqual(api.await_count, 1)
         self.assertEqual(api.await_args.kwargs["json"]["requests"][0]["taskType"], "RETRIEVAL_DOCUMENT")
         self.assertEqual(api.await_args.kwargs["json"]["requests"][0]["outputDimensionality"], 768)
@@ -39,10 +43,10 @@ class EmbeddingTests(unittest.IsolatedAsyncioTestCase):
     async def test_unavailable_model_uses_short_cooldown(self):
         embeddings._cooldowns.clear()
         try:
-            with patch.object(settings, "google_api_key", "non-secret-test-key"), patch("httpx.AsyncClient.post", AsyncMock(return_value=httpx.Response(404))) as api:
+            with patch("httpx.AsyncClient.post", AsyncMock(return_value=httpx.Response(404))) as api:
                 for _ in range(2):
                     with self.assertRaises(embeddings.EmbeddingUnavailable) as raised:
-                        await embeddings.embed_text("test")
+                        await embeddings.embed_text("test", config=self.config)
                     self.assertEqual(raised.exception.reason, "model_not_found")
                 self.assertEqual(api.await_count, 1)
         finally:
@@ -56,6 +60,15 @@ class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
         self.db = AsyncSession(bind=self.connection, expire_on_commit=False, join_transaction_mode="create_savepoint")
         self.owner = User(id=uuid4(), name="RAG owner", email=f"{uuid4()}@example.test", password_hash="test-only", role=UserRole.engineer, is_active=True)
         self.other = User(id=uuid4(), name="RAG other", email=f"{uuid4()}@example.test", password_hash="test-only", role=UserRole.engineer, is_active=True)
+        self.embedding_config = EmbeddingConfig(protocol="gemini", base_url="https://generativelanguage.googleapis.com/v1beta", model="gemini-embedding-001", api_key_encrypted=encrypt_key("non-secret-test-key"))
+        embedding_row = await self.db.get(EmbeddingSettings, 1)
+        if not embedding_row:
+            embedding_row = EmbeddingSettings(id=1); self.db.add(embedding_row)
+        profile = EmbeddingProfile(name="test encoder", config=asdict(self.embedding_config))
+        self.db.add(profile)
+        await self.db.flush()
+        self.embedding_profile_id = profile.id
+        embedding_row.active_profile_id = profile.id
         self.db.add_all([self.owner, self.other])
         await self.db.flush()
         self.code = "RAGSKU-" + uuid4().hex[:12]
@@ -129,7 +142,7 @@ class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
         await self.db.flush()
         for index, doc in enumerate(docs):
             self.db.add(DocumentChunk(document_id=doc.id, chunk_index=0, content=doc.content, embedding=VECTOR,
-                metadata_={"embedding_model": embeddings.embedding_identity() if index < 2 else "models/text-embedding-004:768"}))
+                metadata_={"embedding_model": embeddings.embedding_identity(self.embedding_config) if index < 2 else "models/text-embedding-004:768"}))
         await self.db.commit()
         with patch("app.ai.rag_engine.embed_text", AsyncMock(return_value=VECTOR)):
             context = await rag_engine.retrieve_context("unmatchedsemantic" + uuid4().hex, self.db, user=self.owner)
@@ -146,7 +159,7 @@ class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["index_status"], "ready")
         self.assertEqual(response.json()["indexed_vectors"], response.json()["indexed_chunks"])
-        self.assertIn("gemini-embedding-001", response.json()["index_model"])
+        self.assertEqual(response.json()["index_model"], self.embedding_config.identity)
         async def other():
             return self.other
         app.dependency_overrides[get_current_user] = other
@@ -158,16 +171,16 @@ class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
         doc = Document(author_id=self.owner.id, title=self.code, content="semantic-only fixture", is_published=True, visibility=DocVisibility.public)
         self.db.add(doc)
         await self.db.flush()
-        self.db.add(DocumentChunk(document_id=doc.id, chunk_index=0, content=doc.content, embedding=VECTOR, metadata_={"embedding_model": embeddings.embedding_identity()}))
-        row = await self.db.get(EmbeddingSettings, 1)
-        row.config = asdict(EmbeddingConfig(protocol="openai", base_url="http://encoder.test/v1", model="bge", use_env_key=False))
+        self.db.add(DocumentChunk(document_id=doc.id, chunk_index=0, content=doc.content, embedding=VECTOR, metadata_={"embedding_model": embeddings.embedding_identity(self.embedding_config)}))
+        row = await self.db.get(EmbeddingProfile, self.embedding_profile_id)
+        row.config = asdict(EmbeddingConfig(protocol="openai", base_url="http://encoder.test/v1", model="bge"))
         await self.db.commit()
         with patch("app.ai.rag_engine.embed_text", AsyncMock(return_value=VECTOR)) as api:
             result = await rag_engine.retrieve_context("unmatchedsemantic" + uuid4().hex, self.db, user=self.owner)
         self.assertEqual(result, "")
         api.assert_not_awaited()
         self.assertEqual((await knowledge_service._index_states([doc], self.db))[0].index_status, "text_only")
-        row.config = asdict(EmbeddingConfig(protocol="disabled", use_env_key=False))
+        row.config = asdict(EmbeddingConfig(protocol="disabled"))
         await self.db.commit()
         with patch("app.services.knowledge_service.embed_chunks") as api:
             await knowledge_service._vectorize_document(doc, doc.content, self.db)
@@ -182,13 +195,13 @@ class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
         doc = Document(author_id=self.owner.id, title=self.code, content="WEAK_SEMANTIC_MATCH", is_published=True, visibility=DocVisibility.public)
         self.db.add(doc)
         await self.db.flush()
-        self.db.add(DocumentChunk(document_id=doc.id, chunk_index=0, content=doc.content, embedding=VECTOR, metadata_={"embedding_model": embeddings.embedding_identity()}))
+        self.db.add(DocumentChunk(document_id=doc.id, chunk_index=0, content=doc.content, embedding=VECTOR, metadata_={"embedding_model": embeddings.embedding_identity(self.embedding_config)}))
         await self.db.commit()
         query = "unmatchedsemantic" + uuid4().hex
         with patch("app.ai.rag_engine.embed_text", AsyncMock(return_value=[0.6, 0.8] + [0.0]*766)):
             self.assertEqual(await rag_engine.retrieve_context(query, self.db, user=self.owner), "")
-            row = await self.db.get(EmbeddingSettings, 1)
-            row.config = asdict(EmbeddingConfig(min_similarity=0.5))
+            row = await self.db.get(EmbeddingProfile, self.embedding_profile_id)
+            row.config = asdict(replace(self.embedding_config, min_similarity=0.5))
             await self.db.commit()
             self.assertIn("WEAK_SEMANTIC_MATCH", await rag_engine.retrieve_context(query, self.db, user=self.owner))
 

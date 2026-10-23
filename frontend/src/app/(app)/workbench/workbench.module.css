@@ -1,0 +1,82 @@
+.root {
+  container: workbench / inline-size;
+}
+.columns {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  min-height: 0;
+  gap: 16px;
+}
+.accounts {
+  flex: none;
+  min-width: 0;
+}
+.accountList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 2px;
+}
+.accountList > * {
+  flex: 0 0 160px;
+  margin: 0;
+}
+.accountList > button {
+  align-self: center;
+  flex-basis: 128px;
+}
+.messages,
+.automations {
+  min-height: 0;
+  min-width: 0;
+  padding-bottom: 8px;
+}
+.mobileTabs {
+  flex: none;
+}
+.panelTitle {
+  display: none;
+}
+@container workbench (min-width: 640px) {
+  .columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-rows: auto auto;
+    align-items: start;
+  }
+  .accounts {
+    grid-column: 1 / -1;
+  }
+  .mobileTabs {
+    display: none;
+  }
+  .columns .messages,
+  .columns .automations {
+    display: block;
+  }
+  .panelTitle {
+    display: block;
+  }
+}
+@container workbench (min-width: 960px) {
+  .columns {
+    grid-template-columns: 176px minmax(0, 1fr) 240px;
+    grid-template-rows: auto;
+    gap: 20px;
+  }
+  .accounts {
+    grid-column: auto;
+  }
+  .accountList {
+    flex-direction: column;
+    overflow: visible;
+  }
+  .accountList > * {
+    flex: none;
+    width: 100%;
+  }
+  .accountList > button {
+    flex-basis: auto;
+  }
+}

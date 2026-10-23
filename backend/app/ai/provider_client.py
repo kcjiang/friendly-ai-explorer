@@ -1,7 +1,5 @@
 """HTTP adapters. Never surface provider bodies, URLs or credentials in errors."""
 import asyncio
-import base64
-import hashlib
 import json
 import re
 import time
@@ -10,9 +8,9 @@ from contextlib import asynccontextmanager
 from urllib.parse import quote
 
 import httpx
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import InvalidToken
 
-from app.config import settings
+from app.security import credential_cipher
 from app.logging_config import register_secret
 
 
@@ -25,8 +23,7 @@ class AIError(Exception):
 
 
 def cipher():
-    secret = settings.ai_encryption_key or settings.jwt_secret_key
-    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(("fae-ai:" + secret).encode()).digest()))
+    return credential_cipher("ai")
 
 
 def encrypt_key(value: str) -> str:
@@ -36,10 +33,10 @@ def encrypt_key(value: str) -> str:
 def provider_key(provider) -> str:
     try:
         value = (cipher().decrypt(provider.api_key_encrypted.encode()).decode()
-                 if provider.api_key_encrypted else settings.google_api_key if provider.use_env_key else "")
+                 if provider.api_key_encrypted else "")
     except InvalidToken:
         raise AIError("密钥无法解密，请重新填写 API Key") from None
-    if not value:
+    if not value and getattr(provider, "auth_required", True):
         raise AIError("未配置 API Key")
     register_secret(value)
     return value
@@ -98,6 +95,22 @@ def parse_payload(data, protocol, usage, streaming):
     diagnostics = usage.setdefault("diagnostics", {})
     if "error" in data:
         raise AIError("AI 服务返回错误事件", retryable=True, kind="upstream_unavailable")
+    if protocol == "responses":
+        if streaming:
+            kind = data.get("type")
+            if kind in ("response.failed", "response.incomplete", "error"):
+                raise AIError("Responses 输出失败或未完成", retryable=True, kind="invalid_output")
+            if kind == "response.output_text.delta":
+                return data.get("delta", "")
+            if kind != "response.completed":
+                return ""
+            data = data.get("response", {})
+        if data.get("status") != "completed":
+            raise AIError("Responses 输出未完成", retryable=True, kind="truncated")
+        tokens = data.get("usage") or {}
+        usage.update(input_tokens=tokens.get("input_tokens"), output_tokens=tokens.get("output_tokens"))
+        return "" if streaming else "".join(part.get("text", "") for item in data.get("output", [])
+                if item.get("type") == "message" for part in item.get("content", []) if part.get("type") == "output_text")
     if protocol == "openai":
         tokens = data.get("usage") or {}
         usage.update(input_tokens=tokens.get("prompt_tokens", usage.get("input_tokens")),
@@ -119,6 +132,9 @@ def parse_payload(data, protocol, usage, streaming):
     tokens = data.get("usageMetadata") or {}
     usage.update(input_tokens=tokens.get("promptTokenCount", usage.get("input_tokens")),
                  output_tokens=tokens.get("candidatesTokenCount", usage.get("output_tokens")))
+    for source, target in (("thoughtsTokenCount", "reasoning_tokens"), ("totalTokenCount", "total_tokens")):
+        if tokens.get(source) is not None:
+            diagnostics[target] = tokens[source]
     candidates = data.get("candidates") or []
     if not candidates:
         return ""
@@ -205,14 +221,23 @@ async def generate(provider, prompt, *, stream=False, timeout=None, max_tokens=N
     thinking = getattr(provider, "thinking_mode", "auto")
     classic = qwen3_classic(provider)
     diagnostics.update(effective_timeout_seconds=round(seconds, 2), effective_max_tokens=limit, thinking_mode=thinking)
-    if provider.protocol == "openai":
+    if provider.protocol == "responses":
+        url = provider.base_url + "/responses"
+        headers = {"Authorization": "Bearer " + key} if key else {}
+        body = {"model": provider.model, "input": [*(history or []), {"role": "user", "content": prompt}],
+                "stream": stream, "store": False, "max_output_tokens": limit}
+        if provider.temperature is not None:
+            body["temperature"] = provider.temperature
+        if structured != "off":
+            body["text"] = {"format": {"type": "json_object"} if structured == "object" else
+                            {"type": "json_schema", "name": task or "result", "strict": True, "schema": schema}}
+    elif provider.protocol == "openai":
         url = provider.base_url + "/chat/completions"
-        headers = {"Authorization": "Bearer " + key}
+        headers = {"Authorization": "Bearer " + key} if key else {}
         body = {"model": provider.model, "messages": [*(history or []), {"role": "user", "content": prompt}], "stream": stream,
-                "max_completion_tokens": limit}
-        # New API/vLLM commonly expect max_tokens; configurable through protocol-specific adapter.
-        if "api.openai.com" != httpx.URL(provider.base_url).host:
-            body["max_tokens"] = body.pop("max_completion_tokens")
+                getattr(provider, "token_parameter", "max_tokens"): limit}
+        # Length parameters are explicit configuration, independent of hostname.
+        if classic:
             if thinking in ("on", "off") or classic:
                 body["chat_template_kwargs"] = {"enable_thinking": thinking == "on"}
                 if thinking != "on" and classic:
@@ -238,7 +263,8 @@ async def generate(provider, prompt, *, stream=False, timeout=None, max_tokens=N
             if structured != "object":
                 body["generationConfig"]["responseJsonSchema"] = schema
             diagnostics["structured_mode"] = "object" if structured == "object" else "schema"
-        if (thinking == "off" or thinking == "auto" and schema) and "gemini-2.5-flash" in provider.model:
+        auto_final_answer = thinking == "auto" and (schema is not None or task == "ticket_analysis")
+        if (thinking == "off" or auto_final_answer) and "gemini-2.5-flash" in provider.model:
             body["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 0}
             diagnostics["thinking_disabled"] = True
     started = time.monotonic()
@@ -259,7 +285,9 @@ async def generate(provider, prompt, *, stream=False, timeout=None, max_tokens=N
                                 break
                             data = json.loads(event)
                             chunk = parse_payload(data, provider.protocol, usage, True)
-                            if provider.protocol == "gemini":
+                            if provider.protocol == "responses":
+                                finished = finished or data.get("type") == "response.completed"
+                            elif provider.protocol == "gemini":
                                 finished = finished or any(c.get("finishReason") == "STOP" for c in data.get("candidates", []))
                             else:
                                 finished = finished or any(c.get("finish_reason") == "stop" for c in data.get("choices", []))
@@ -281,7 +309,12 @@ async def generate(provider, prompt, *, stream=False, timeout=None, max_tokens=N
                         if response.status_code < 300:
                             break
                         if structured == "auto" and unsupported_option(response, ("response_format", "json_schema", "json_object", "responsejsonschema", "response_json_schema")):
-                            if provider.protocol == "openai" and "response_format" in body:
+                            if provider.protocol == "responses" and "text" in body:
+                                if body["text"]["format"]["type"] == "json_schema":
+                                    body["text"]["format"] = {"type": "json_object"}
+                                else:
+                                    body.pop("text")
+                            elif provider.protocol == "openai" and "response_format" in body:
                                 if body["response_format"]["type"] == "json_schema":
                                     body["response_format"] = {"type": "json_object"}
                                     diagnostics["structured_mode"] = "object"

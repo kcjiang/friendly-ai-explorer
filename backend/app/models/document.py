@@ -1,12 +1,15 @@
 import uuid
 import enum
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from sqlalchemy import String, Text, DateTime, Enum as SAEnum, ForeignKey, Boolean, Integer, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from pgvector.sqlalchemy import Vector
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class DocVisibility(str, enum.Enum):

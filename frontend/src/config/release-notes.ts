@@ -2,6 +2,15 @@
 // Keep all published entries and insert new versions at the top (newest first).
 export const releaseNotes: Record<string, { title: string; items: string[] }> =
   {
+    "0.3.1-dev.2": {
+      title: "工作台与 AI 服务升级",
+      items: [
+        "新增工作台邮箱、消息流转及自动化处理。",
+        "支持多提供商 AI、能力校验及多向量服务切换。",
+        "优化工单体验，统一空库初始化与凭据加密。",
+        "移除旧 AI任务和邮件分析入口，统一使用工作台。",
+      ],
+    },
     "0.2.5-dev.4": {
       title: "重构数据维护界面与数据库优化",
       items: [

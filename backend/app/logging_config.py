@@ -22,7 +22,7 @@ def register_secret(value):
 
 def redact(value: str, limit=4000):
     value = str(value)
-    for secret in (settings.google_api_key, settings.jwt_secret_key, settings.ai_encryption_key, *_secrets):
+    for secret in (settings.app_master_key, *_secrets):
         if secret:
             value = value.replace(secret, "[REDACTED]")
     value = re.sub(r"(?i)Bearer\s+[^\s\"',;]+", "Bearer [REDACTED]", value)

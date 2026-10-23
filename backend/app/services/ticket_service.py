@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from uuid import UUID
 from sqlalchemy import select, text, func, or_, case, cast, String
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -85,7 +84,7 @@ async def get_tickets(db, user, mine=False, q='', status=None, priority=None, pr
             ('verifying', '验证修复'), ('pending', '挂起'), ('resolved', '已解决'))])
         columns = [display, Ticket.title, Ticket.ticket_no, Ticket.source_number, Ticket.source,
                    Customer.company_name, Customer.country_name, Product.model, Project.number,
-                   Ticket.legacy_ticket_no, Ticket.description, Ticket.next_plan, Ticket.notes,
+                   Ticket.description, Ticket.next_plan, Ticket.notes,
                    Ticket.status_note, cast(Ticket.priority, String), status_label]
         query = query.where(or_(*(c.icontains(q.strip(), autoescape=True) for c in columns),
                                Ticket.assignee.has(or_(User.name.icontains(q.strip(), autoescape=True),

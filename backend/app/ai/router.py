@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from sqlalchemy import select
@@ -27,7 +27,6 @@ class Provider:
     base_url: str
     model: str
     api_key_encrypted: str | None
-    use_env_key: bool
     enabled: bool
     timeout_seconds: int
     max_output_tokens: int
@@ -36,6 +35,10 @@ class Provider:
     structured_output: str = "auto"
     temperature: float | None = None
     retry_count: int = 1
+    vendor: str = "other"
+    auth_required: bool = True
+    token_parameter: str = "max_tokens"
+    capability_checks: dict = field(default_factory=dict)
 
     @classmethod
     def snapshot(cls, row):
@@ -48,14 +51,14 @@ async def resolve(task):
         default = routes.get("default")
         route = routes.get(task)
         if not default or not route:
-            raise AIError("AI 路由未初始化，请执行 v8 数据库迁移")
+            raise AIError("AI 路由未初始化，请使用当前版本初始化数据库")
         primary = route.provider_id or default.provider_id
         # Explicit task routes own their fallback. Following default also follows its fallback.
         fallback = route.fallback_provider_id or (default.fallback_provider_id if not route.provider_id else None)
         ids = list(dict.fromkeys(i for i in (primary, fallback) if i))
         rows = {p.id: p for p in (await db.scalars(select(AIProvider).where(AIProvider.id.in_(ids)))).all()}
         if primary not in rows:
-            raise AIError("未配置默认 AI 服务")
+            raise AIError("未配置 AI 服务，请管理员在管理后台添加服务并完成任务分配")
         providers = [Provider.snapshot(rows[i]) for i in ids if i in rows]
         return providers, route.timeout_seconds or default.timeout_seconds, route.max_output_tokens or default.max_output_tokens
 
@@ -76,23 +79,13 @@ def validate_result(task, raw):
         ):
             raise AIError("TODO 输出结构无效", retryable=True, kind="invalid_output")
         return json.dumps(data, ensure_ascii=False)
+    if task == "test_conversation" and raw.strip() != "FAE742":
+        raise AIError("多轮对话测试未正确读取历史消息", kind="invalid_output")
     if task == "test_json":
         data = parse_json(raw)
         if not isinstance(data, dict) or set(data) != {"ok"} or data["ok"] is not True:
             raise AIError("JSON 测试未返回预期结构", retryable=True, kind="invalid_output")
         return json.dumps(data)
-    if task == "email_analysis":
-        data = parse_json(raw)
-        if not isinstance(data, dict) or any(type(data.get(k)) is not bool for k in ("is_customer_email", "is_defect_report")) or not isinstance(data.get("summary"), str):
-            raise AIError("邮件分析输出结构无效", retryable=True, kind="invalid_output")
-        ticket = data.get("ticket")
-        if data["is_defect_report"] and (
-            not isinstance(ticket, dict) or not isinstance(ticket.get("title"), str) or not ticket["title"].strip()
-            or ticket.get("priority") not in ("critical", "high", "medium", "low")
-            or any(ticket.get(k) is not None and not isinstance(ticket[k], str) for k in ("description", "customer_name", "customer_contact", "product_name", "firmware_version"))
-        ):
-            raise AIError("邮件工单输出结构无效", retryable=True, kind="invalid_output")
-        return json.dumps(data, ensure_ascii=False)
     return raw
 
 
@@ -119,8 +112,8 @@ async def stream(task, prompt, *, streaming=True, plan=None, report=None, histor
     providers, timeout, max_tokens = plan or await resolve(task)
     for index, provider in enumerate(providers):
         deadline = time.monotonic() + (timeout or provider.timeout_seconds)
-        # Only implicit limits are capped. Explicit task/default overrides remain authoritative.
-        limit = max_tokens or min(provider.max_output_tokens, {"todo": 768, "email_analysis": 1024, "ticket_analysis": 1536}.get(task, 2048))
+        # Task/default overrides win; otherwise honor the provider's configured budget.
+        limit = max_tokens or provider.max_output_tokens
         retry, repaired, attempt, current_prompt = 0, False, 0, prompt
         while True:
             started, usage, emitted = time.monotonic(), {"diagnostics": {"attempt": attempt + 1, "repair": repaired}}, False
@@ -128,6 +121,11 @@ async def stream(task, prompt, *, streaming=True, plan=None, report=None, histor
             try:
                 if not provider.enabled:
                     raise AIError("分配的 AI 服务已禁用", retryable=True, kind="disabled")
+                if not task.startswith("test_"):
+                    from app.ai.capabilities import missing_capabilities
+                    missing = missing_capabilities(provider, task)
+                    if missing:
+                        raise AIError("模型能力不满足任务要求：" + "、".join(missing), retryable=True, kind="capability")
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise AIError("AI 请求总预算已用尽", retryable=True, kind="timeout")
@@ -154,7 +152,7 @@ async def stream(task, prompt, *, streaming=True, plan=None, report=None, histor
                 remaining = deadline - time.monotonic()
                 if exc.kind in ("invalid_json", "invalid_output", "reasoning_only") and schema_for(task) and not repaired and remaining > 2:
                     repaired = True
-                    shape = '{"todos":[{"task":"简短任务","priority":"major"}]}' if task == "todo" else '{"ok":true}' if task == "test_json" else "原要求的邮件分析字段"
+                    shape = '{"todos":[{"task":"简短任务","priority":"major"}]}' if task == "todo" else '{"ok":true}' if task == "test_json" else "原要求的输出字段"
                     current_prompt = prompt + '\n上次未得到所需 JSON。请直接给出最终 JSON 对象，不要思考、解释或 Markdown。输出结构：' + shape
                     log_event(logging.WARNING, "结构化输出校验失败，准备重试一次", task=task, provider=provider.name, error_kind=exc.kind, remaining_seconds=round(remaining, 2))
                     continue
