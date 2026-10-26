@@ -1,8 +1,4 @@
 "use client";
-import { useLocale } from "next-intl";
-
-import { useUiTranslations, translateLabels } from "@/i18n/client";
-import { systemMessage } from "@/i18n/system-messages";
 
 import { isAxiosError } from "axios";
 import {
@@ -16,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { useLocale } from "next-intl";
 import {
   type ReactElement,
   cloneElement,
@@ -59,6 +56,8 @@ import {
 } from "@/components/ui/base/tabs";
 import { Textarea } from "@/components/ui/base/textarea";
 import { toast } from "@/components/ui/base/toast";
+import { translateLabels, useUiTranslations } from "@/i18n/client";
+import { systemMessage } from "@/i18n/system-messages";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -117,7 +116,7 @@ export default function TicketModal({
   const locale = useLocale();
 
   const t = useUiTranslations();
-  const uiLabels_TICKET_STATUS_CONFIG = translateLabels(
+  const localizedTICKET_STATUS_CONFIG = translateLabels(
     TICKET_STATUS_CONFIG,
     t,
   );
@@ -607,7 +606,7 @@ export default function TicketModal({
                     {select(
                       "status",
                       t("ui.currentStatus"),
-                      uiLabels_TICKET_STATUS_CONFIG,
+                      localizedTICKET_STATUS_CONFIG,
                     )}
                   </div>
                   {!editing && form.tapd_created && form.tapd_url && (

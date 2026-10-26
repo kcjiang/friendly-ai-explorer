@@ -1,15 +1,20 @@
+from typing import Literal
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import AwareDatetime
-from uuid import UUID
-from typing import Literal
-from app.models.ticket import TicketStatus, TicketPriority
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.middleware.rbac import AnyUser
+from app.models.ticket import TicketPriority, TicketStatus
 from app.schemas.ticket import (
-    CreateTicketRequest, UpdateTicketRequest, AddCommentRequest,
-    TicketListOut, TicketOut, TicketCommentOut,
+    AddCommentRequest,
+    CreateTicketRequest,
+    TicketCommentOut,
+    TicketListOut,
+    TicketOut,
+    UpdateTicketRequest,
 )
 from app.services import ticket_service
 
@@ -23,14 +28,38 @@ async def get_stats(current_user: AnyUser, db: AsyncSession = Depends(get_db)):
 
 @router.get("", response_model=list[TicketListOut], include_in_schema=False)
 @router.get("/", response_model=list[TicketListOut], summary="获取工单列表")
-async def list_tickets(current_user: AnyUser, db: AsyncSession = Depends(get_db),
-                       mine: bool = False, q: str = Query('', max_length=200),
-                       status: TicketStatus | None = None, priority: TicketPriority | None = None,
-                       project_id: UUID | None = None, source: str = Query('', max_length=100),
-                       sort: str = 'updated_at', direction: Literal['asc', 'desc'] = 'desc', assignee_id: UUID | None = None,
-                       state: Literal['all', 'open', 'closed'] = 'all',
-                       created_from: AwareDatetime | None = None, created_before: AwareDatetime | None = None):
-    return await ticket_service.get_tickets(db, current_user, mine, q, status, priority, project_id, source, sort, direction, assignee_id, state=state, created_from=created_from, created_before=created_before)
+async def list_tickets(
+    current_user: AnyUser,
+    db: AsyncSession = Depends(get_db),
+    mine: bool = False,
+    q: str = Query("", max_length=200),
+    status: TicketStatus | None = None,
+    priority: TicketPriority | None = None,
+    project_id: UUID | None = None,
+    source: str = Query("", max_length=100),
+    sort: str = "updated_at",
+    direction: Literal["asc", "desc"] = "desc",
+    assignee_id: UUID | None = None,
+    state: Literal["all", "open", "closed"] = "all",
+    created_from: AwareDatetime | None = None,
+    created_before: AwareDatetime | None = None,
+):
+    return await ticket_service.get_tickets(
+        db,
+        current_user,
+        mine,
+        q,
+        status,
+        priority,
+        project_id,
+        source,
+        sort,
+        direction,
+        assignee_id,
+        state=state,
+        created_from=created_from,
+        created_before=created_before,
+    )
 
 
 @router.post("", response_model=TicketOut, status_code=201, include_in_schema=False)
@@ -72,7 +101,12 @@ async def delete_ticket(
     return await ticket_service.delete_ticket(ticket_id, db, current_user, revision)
 
 
-@router.post("/{ticket_id}/comments", response_model=TicketCommentOut, status_code=201, summary="添加评论")
+@router.post(
+    "/{ticket_id}/comments",
+    response_model=TicketCommentOut,
+    status_code=201,
+    summary="添加评论",
+)
 async def add_comment(
     ticket_id: UUID,
     body: AddCommentRequest,

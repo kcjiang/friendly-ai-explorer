@@ -1,4 +1,5 @@
 """Collection requests must reach auth instead of redirecting to an internal host."""
+
 import unittest
 
 from fastapi.testclient import TestClient
@@ -24,7 +25,9 @@ class CollectionRoutesTest(unittest.TestCase):
             ):
                 for suffix in ("", "/"):
                     with self.subTest(method=method, path=path + suffix):
-                        response = client.request(method, path + suffix, follow_redirects=False)
+                        response = client.request(
+                            method, path + suffix, follow_redirects=False
+                        )
                         self.assertIn(response.status_code, (401, 403))
                         self.assertNotIn("location", response.headers)
 

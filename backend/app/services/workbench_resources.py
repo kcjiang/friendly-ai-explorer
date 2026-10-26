@@ -1,9 +1,10 @@
 """Host validation and canonical resource payloads."""
-from app.i18n import message as system_message
 
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException
+
+from app.i18n import message as system_message
 
 
 def validate_source_url(url):
@@ -18,7 +19,10 @@ def validate_source_url(url):
         or parts.fragment
     ):
         raise HTTPException(
-            422, system_message("errors.enterAValidHttpsPlatformRootUrlWithoutCredentialsQueryParametersOr")
+            422,
+            system_message(
+                "errors.enterAValidHttpsPlatformRootUrlWithoutCredentialsQueryParametersOr"
+            ),
         )
 
 

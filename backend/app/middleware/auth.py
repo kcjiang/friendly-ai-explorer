@@ -1,22 +1,23 @@
-from app.i18n import message as system_message
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.security import derive_key
 from app.database import get_db
+from app.i18n import message as system_message
 from app.models.user import User
+from app.security import derive_key
 
 bearer_scheme = HTTPBearer()
 
 
 # ── Token 签发 ───────────────────────────────────────────────
+
 
 def create_access_token(payload: dict) -> str:
     """生成 JWT AccessToken"""
@@ -27,6 +28,7 @@ def create_access_token(payload: dict) -> str:
 
 
 # ── Token 解析 & 用户提取 ────────────────────────────────────
+
 
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],

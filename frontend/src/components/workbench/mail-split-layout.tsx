@@ -1,5 +1,4 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
@@ -7,6 +6,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/base/resizable";
+import { useUiTranslations } from "@/i18n/client";
 
 export function MailSplitLayout({
   sidebar,

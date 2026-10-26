@@ -1,27 +1,25 @@
 "use client";
-import { getBrowserUiLocale } from "@/i18n/browser";
 
-import { useUiTranslations } from "@/i18n/client";
-
-import { errorMessage } from "@/lib/errors";
-
-import { useEffect, useRef, useState } from "react";
 import {
-  Cable,
-  Send,
-  Trash2,
-  Download,
-  Settings,
-  Play,
-  Square,
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  Download,
   FileText,
+  Play,
+  Send,
+  Settings,
+  Square,
+  Trash2,
 } from "lucide-react";
-import { checkWebSerialSupport } from "@/lib/adb-webusb";
-import PresetPanel from "@/components/debug/preset-panel";
+import { useEffect, useRef, useState } from "react";
 import LogPanel from "@/components/debug/log-panel";
+import PresetPanel from "@/components/debug/preset-panel";
+import { useWindowEvent } from "@/hooks/use-window-event";
+import { getBrowserUiLocale } from "@/i18n/browser";
+import { useUiTranslations } from "@/i18n/client";
+import { checkWebSerialSupport } from "@/lib/adb-webusb";
+import { errorMessage } from "@/lib/errors";
 
 interface SerialConfig {
   baudRate: number;
@@ -92,15 +90,10 @@ export default function SerialPage() {
     if (autoScroll) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [lines, autoScroll]);
 
-  // 监听预制命令事件
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const cmd = (e as CustomEvent).detail as string;
-      if (cmd) sendRaw(cmd);
-    };
-    window.addEventListener("serial-preset-run", handler);
-    return () => window.removeEventListener("serial-preset-run", handler);
-  }, [connected]);
+  useWindowEvent("serial-preset-run", (event) => {
+    const command = (event as CustomEvent<string>).detail;
+    if (command) void sendRaw(command);
+  });
 
   function push(text: string, type: LineType) {
     const line: Line = { text, type, ts: now() };
@@ -282,14 +275,14 @@ export default function SerialPage() {
 
   if (wsError) {
     return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl p-8 max-w-md text-center space-y-3">
-          <AlertTriangle size={32} className="text-amber-500 mx-auto" />
-          <h2 className="font-bold text-base">
+      <div className="flex h-full items-center justify-center p-8">
+        <div className="max-w-md space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center dark:border-amber-800 dark:bg-amber-950/30">
+          <AlertTriangle size={32} className="mx-auto text-amber-500" />
+          <h2 className="text-base font-bold">
             {t("ui.webSerialIsNotSupportedByThisBrowser")}
           </h2>
-          <p className="text-sm text-muted-foreground">{wsError}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-sm">{wsError}</p>
+          <p className="text-muted-foreground text-xs">
             {t("ui.useChromeOrEdge89OverHttpsOrLocalhost")}
           </p>
         </div>
@@ -298,14 +291,14 @@ export default function SerialPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       {/* 顶部工具栏 */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border flex-wrap bg-muted/10">
+      <div className="border-border bg-muted/10 flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
         <span
           className={`flex items-center gap-1.5 text-xs font-medium ${connected ? "text-green-500" : "text-muted-foreground"}`}
         >
           <span
-            className={`w-2 h-2 rounded-full ${connected ? "bg-green-500 animate-pulse" : "bg-slate-400"}`}
+            className={`h-2 w-2 rounded-full ${connected ? "animate-pulse bg-green-500" : "bg-slate-400"}`}
           />
           {connected
             ? t("dynamic.connectedBpsmessage13", { p0: config.baudRate })
@@ -313,7 +306,7 @@ export default function SerialPage() {
         </span>
         <button
           onClick={() => setShowConfig((s) => !s)}
-          className="flex items-center gap-1 text-xs px-2.5 py-1.5 border border-border rounded-lg hover:bg-muted/50 text-muted-foreground"
+          className="border-border hover:bg-muted/50 text-muted-foreground flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs"
         >
           <Settings size={12} />
           {t("ui.configuration")}
@@ -322,7 +315,7 @@ export default function SerialPage() {
         {!connected ? (
           <button
             onClick={connect}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm"
           >
             <Play size={13} />
             {t("ui.connectSerialPort")}
@@ -330,14 +323,14 @@ export default function SerialPage() {
         ) : (
           <button
             onClick={disconnect}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600"
+            className="flex items-center gap-1.5 rounded-lg bg-red-500 px-4 py-1.5 text-sm text-white hover:bg-red-600"
           >
             <Square size={13} />
             {t("ui.disconnect")}
           </button>
         )}
-        <div className="flex items-center gap-3 ml-auto">
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+        <div className="ml-auto flex items-center gap-3">
+          <label className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs">
             <input
               type="checkbox"
               checked={hexMode}
@@ -346,7 +339,7 @@ export default function SerialPage() {
             />
             HEX
           </label>
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+          <label className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs">
             <input
               type="checkbox"
               checked={autoScroll}
@@ -358,7 +351,7 @@ export default function SerialPage() {
           <button
             onClick={downloadLog}
             title={t("ui.downloadLogs")}
-            className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground"
+            className="hover:bg-muted/50 text-muted-foreground rounded-lg p-1.5"
           >
             <Download size={14} />
           </button>
@@ -369,7 +362,7 @@ export default function SerialPage() {
               setLogLines([]);
             }}
             title={t("ui.clear")}
-            className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground"
+            className="hover:bg-muted/50 text-muted-foreground rounded-lg p-1.5"
           >
             <Trash2 size={14} />
           </button>
@@ -378,7 +371,7 @@ export default function SerialPage() {
 
       {/* 串口配置展开 */}
       {showConfig && (
-        <div className="flex flex-wrap items-end gap-4 px-4 py-3 bg-muted/20 border-b border-border text-sm">
+        <div className="bg-muted/20 border-border flex flex-wrap items-end gap-4 border-b px-4 py-3 text-sm">
           {[
             {
               label: t("ui.baudRate"),
@@ -420,7 +413,7 @@ export default function SerialPage() {
             },
           ].map((f) => (
             <div key={f.key}>
-              <label className="block text-xs text-muted-foreground mb-1">
+              <label className="text-muted-foreground mb-1 block text-xs">
                 {f.label}
               </label>
               <select
@@ -434,7 +427,7 @@ export default function SerialPage() {
                       : Number(e.target.value),
                   }))
                 }
-                className="px-2 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none disabled:opacity-50"
+                className="border-border bg-background rounded-lg border px-2 py-1.5 text-sm focus:outline-none disabled:opacity-50"
               >
                 {f.opts.map((o) => (
                   <option key={String(o.v)} value={o.v}>
@@ -445,7 +438,7 @@ export default function SerialPage() {
             </div>
           ))}
           <div>
-            <label className="block text-xs text-muted-foreground mb-1">
+            <label className="text-muted-foreground mb-1 block text-xs">
               {t("ui.lineEnding")}
             </label>
             <select
@@ -453,7 +446,7 @@ export default function SerialPage() {
               onChange={(e) =>
                 setLineEnding(e.target.value as typeof lineEnding)
               }
-              className="px-2 py-1.5 rounded-lg border border-border bg-background text-sm focus:outline-none"
+              className="border-border bg-background rounded-lg border px-2 py-1.5 text-sm focus:outline-none"
             >
               <option value="none">{t("ui.additionalNone")}</option>
               <option value="cr">CR (\r)</option>
@@ -467,11 +460,11 @@ export default function SerialPage() {
       {/* 三栏：终端 | 日志管理 | 预制命令 */}
       <div className="flex flex-1 overflow-hidden">
         {/* 终端 */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-slate-950 min-w-0">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-slate-950">
           <div className="flex-1 overflow-y-auto p-4 font-mono text-xs leading-relaxed">
             {lines.map((l, i) => (
               <div key={i} className={`flex gap-2 ${lc(l.type)}`}>
-                <span className="text-slate-600 flex-shrink-0 select-none">
+                <span className="flex-shrink-0 text-slate-600 select-none">
                   [{l.ts}]
                 </span>
                 <span className="break-all whitespace-pre-wrap">
@@ -481,8 +474,8 @@ export default function SerialPage() {
             ))}
             <div ref={bottomRef} />
           </div>
-          <div className="flex items-center gap-2 px-3 py-2 border-t border-slate-800 bg-slate-900">
-            <span className="text-cyan-400 font-mono text-sm flex-shrink-0">
+          <div className="flex items-center gap-2 border-t border-slate-800 bg-slate-900 px-3 py-2">
+            <span className="flex-shrink-0 font-mono text-sm text-cyan-400">
               TX
             </span>
             <input
@@ -498,12 +491,12 @@ export default function SerialPage() {
                     ? t("ui.enterHexadecimalBytesEG0d0a")
                     : t("ui.enterTextEnterToSend")
               }
-              className="flex-1 bg-transparent text-green-300 font-mono text-sm outline-none placeholder:text-slate-600 disabled:opacity-30"
+              className="flex-1 bg-transparent font-mono text-sm text-green-300 outline-none placeholder:text-slate-600 disabled:opacity-30"
             />
             <button
               onClick={() => send()}
               disabled={!connected || !input.trim()}
-              className="p-1.5 rounded-lg bg-primary/20 hover:bg-primary/40 text-primary disabled:opacity-30"
+              className="bg-primary/20 hover:bg-primary/40 text-primary rounded-lg p-1.5 disabled:opacity-30"
             >
               <Send size={14} />
             </button>
@@ -514,7 +507,7 @@ export default function SerialPage() {
         <LogSidePanel deviceType="serial" lines={logLines} />
 
         {/* 预制命令面板（右侧） */}
-        <div className="w-52 flex-shrink-0 border-l border-border overflow-hidden flex flex-col">
+        <div className="border-border flex w-52 flex-shrink-0 flex-col overflow-hidden border-l">
           <PresetPanel
             deviceType="serial"
             onRun={(cmd) =>
@@ -543,26 +536,21 @@ function LogSidePanel({
   const [open, setOpen] = useState(false);
   return (
     <div
-      className={`flex-shrink-0 border-l border-border bg-background transition-all duration-200 ${open ? "w-64" : "w-9"}`}
+      className={`border-border bg-background flex-shrink-0 border-l transition-all duration-200 ${open ? "w-64" : "w-9"}`}
     >
       {!open ? (
         <button
           onClick={() => setOpen(true)}
-          className="w-full h-full flex flex-col items-center justify-start pt-3 gap-2
-                     text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted/30 flex h-full w-full flex-col items-center justify-start gap-2 pt-3 transition-colors"
         >
           <FileText size={15} />
-          <span className="text-xs [writing-mode:vertical-rl] mt-2">
+          <span className="mt-2 text-xs [writing-mode:vertical-rl]">
             {t("ui.logManagement")}
           </span>
         </button>
       ) : (
-        <div className="flex flex-col h-full overflow-hidden">
-          <LogPanel
-            deviceType={deviceType}
-            lines={lines}
-            onClose={() => setOpen(false)}
-          />
+        <div className="flex h-full flex-col overflow-hidden">
+          <LogPanel deviceType={deviceType} lines={lines} />
         </div>
       )}
     </div>

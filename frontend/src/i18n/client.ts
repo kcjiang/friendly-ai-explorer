@@ -3,6 +3,18 @@
 import { useTranslations } from "next-intl";
 import labelKeys from "./label-keys.json";
 
+const identifierKeys = new Set([
+  "id",
+  "key",
+  "value",
+  "href",
+  "icon",
+  "accessible",
+  "platform",
+  "thinking_mode",
+  "structured_output",
+]);
+
 export type UiTranslator = (
   key: string,
   values?: Record<string, string | number>,
@@ -20,21 +32,10 @@ export function translateLabels<T>(value: T, t: UiTranslator): T {
   }
   if (Array.isArray(value)) return value.map((v) => translateLabels(v, t)) as T;
   if (value && typeof value === "object") {
-    const identifiers = new Set([
-      "id",
-      "key",
-      "value",
-      "href",
-      "icon",
-      "accessible",
-      "platform",
-      "thinking_mode",
-      "structured_output",
-    ]);
     return Object.fromEntries(
       Object.entries(value).map(([key, v]) => [
         key,
-        identifiers.has(key) ? v : translateLabels(v, t),
+        identifierKeys.has(key) ? v : translateLabels(v, t),
       ]),
     ) as T;
   }

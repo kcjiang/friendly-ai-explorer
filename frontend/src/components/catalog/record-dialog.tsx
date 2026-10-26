@@ -1,12 +1,4 @@
 "use client";
-import { useLocale } from "next-intl";
-
-import {
-  useUiTranslations,
-  translateLabels,
-  type UiTranslator,
-} from "@/i18n/client";
-import { errorMessage } from "@/lib/errors";
 
 import axios from "axios";
 import {
@@ -18,6 +10,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { useLocale } from "next-intl";
 import {
   type ReactElement,
   type ReactNode,
@@ -69,7 +62,13 @@ import {
 } from "@/components/ui/base/select";
 import { Textarea } from "@/components/ui/base/textarea";
 import { toast } from "@/components/ui/base/toast";
+import {
+  type UiTranslator,
+  translateLabels,
+  useUiTranslations,
+} from "@/i18n/client";
 import api from "@/lib/api";
+import { errorMessage } from "@/lib/errors";
 import {
   type CatalogRecord,
   type Contact,
@@ -85,8 +84,8 @@ import {
 } from "./catalog-ui";
 import { ManagedSelect } from "./managed-select";
 import {
-  requiredErrors,
   fieldLabels,
+  requiredErrors,
   requiredMessage,
   serverFieldErrors,
 } from "./record-validation";
@@ -113,10 +112,10 @@ function GenderSelect({
   "aria-describedby"?: string;
 }) {
   const t = useUiTranslations();
-  const uiLabels_genderOptions = translateLabels(genderOptions, t);
+  const localizedGenderOptions = translateLabels(genderOptions, t);
   return (
     <Select
-      items={uiLabels_genderOptions}
+      items={localizedGenderOptions}
       value={value}
       onValueChange={(next) => {
         if (next) onChange(next as Contact["gender"]);
@@ -128,7 +127,7 @@ function GenderSelect({
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>
-          {uiLabels_genderOptions.map((item) => (
+          {localizedGenderOptions.map((item) => (
             <SelectItem key={item.value} value={item.value}>
               {item.label}
             </SelectItem>
@@ -348,8 +347,8 @@ export function RecordDialog({
   const locale = useLocale();
 
   const t = useUiTranslations();
-  const uiLabels_requiredMessage = translateLabels(requiredMessage, t);
-  const uiLabels_labels = translateLabels(labels, t);
+  const localizedRequiredMessage = translateLabels(requiredMessage, t);
+  const localizedLabels = translateLabels(labels, t);
 
   const [original, setOriginal] = useState(record);
   const [draft, setDraft] = useState<Partial<CatalogRecord>>(
@@ -375,13 +374,13 @@ export function RecordDialog({
     setFieldErrors((current) => {
       const entries = Object.entries(current).filter(
         ([key, message]) =>
-          message !== uiLabels_requiredMessage || key in missing,
+          message !== localizedRequiredMessage || key in missing,
       );
       return entries.length === Object.keys(current).length
         ? current
         : Object.fromEntries(entries);
     });
-  }, [draft, kind, uiLabels_requiredMessage]);
+  }, [draft, kind, localizedRequiredMessage]);
   const [confirmClose, setConfirmClose] = useState(false);
   const [businessOptions, setBusinessOptions] = useState<string[]>([]);
   const [faeOptions, setFaeOptions] = useState<Option[]>([]);
@@ -465,7 +464,7 @@ export function RecordDialog({
           control.closest<HTMLElement>("[data-field-key]")?.dataset.fieldKey;
         if (key && !errors[key])
           errors[key] = control.validity.valueMissing
-            ? uiLabels_requiredMessage
+            ? localizedRequiredMessage
             : t("ui.checkThisField");
       });
     if (Object.keys(errors).length) {
@@ -558,7 +557,7 @@ export function RecordDialog({
                   ? t("ui.editRecord")
                   : t("ui.recordPreview")
                 : t("ui.newRecord")}{" "}
-              · {uiLabels_labels[kind]}
+              · {localizedLabels[kind]}
             </DialogTitle>
             <DialogDescription className="break-words">
               {original?.display_name ??

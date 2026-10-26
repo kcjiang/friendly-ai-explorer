@@ -1,21 +1,19 @@
 "use client";
-import { useLocale } from "next-intl";
 
-import { useUiTranslations } from "@/i18n/client";
-
-import { errorMessage } from "@/lib/errors";
-
-import { useEffect, useState } from "react";
 import {
   Download,
-  Trash2,
-  RefreshCw,
-  Loader2,
-  FileText,
   Eye,
+  FileText,
+  Loader2,
+  RefreshCw,
+  Trash2,
   X,
 } from "lucide-react";
+import { useLocale } from "next-intl";
+import { useCallback, useEffect, useState } from "react";
+import { useUiTranslations } from "@/i18n/client";
 import apiClient from "@/lib/api";
+import { errorMessage } from "@/lib/errors";
 
 interface LogEntry {
   id: string;
@@ -30,7 +28,6 @@ interface LogEntry {
 interface Props {
   deviceType: "adb" | "serial";
   lines: string[]; // 当前终端内容
-  onClose: () => void;
 }
 
 function fmtSize(n: number) {
@@ -39,7 +36,7 @@ function fmtSize(n: number) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export default function LogPanel({ deviceType, lines, onClose }: Props) {
+export default function LogPanel({ deviceType, lines }: Props) {
   const locale = useLocale();
 
   const t = useUiTranslations();
@@ -52,7 +49,7 @@ export default function LogPanel({ deviceType, lines, onClose }: Props) {
   const [viewContent, setViewContent] = useState("");
   const [viewLoading, setViewLoading] = useState(false);
 
-  async function loadLogs() {
+  const loadLogs = useCallback(async () => {
     setLoading(true);
     try {
       const r = await apiClient.get("/api/v1/debug/logs", {
@@ -64,11 +61,11 @@ export default function LogPanel({ deviceType, lines, onClose }: Props) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [deviceType]);
 
   useEffect(() => {
     loadLogs();
-  }, []);
+  }, [loadLogs]);
 
   async function handleUpload() {
     if (lines.length === 0) {
@@ -119,25 +116,22 @@ export default function LogPanel({ deviceType, lines, onClose }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       {/* 顶部：保存当前日志 */}
-      <div className="px-3 py-2.5 border-b border-border space-y-2 flex-shrink-0">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+      <div className="border-border flex-shrink-0 space-y-2 border-b px-3 py-2.5">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
           {t("ui.saveLogsToServer")}
         </p>
         <input
           value={description}
           onChange={(e) => setDesc(e.target.value)}
           placeholder={t("ui.descriptionOptional")}
-          className="w-full px-2 py-1.5 text-xs rounded-lg border border-border bg-muted/30
-                     focus:outline-none focus:ring-1 focus:ring-primary/30"
+          className="border-border bg-muted/30 focus:ring-primary/30 w-full rounded-lg border px-2 py-1.5 text-xs focus:ring-1 focus:outline-none"
         />
         <button
           onClick={handleUpload}
           disabled={uploading || lines.length === 0}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs
-                     bg-primary text-primary-foreground rounded-lg hover:bg-primary/90
-                     disabled:opacity-50 transition-colors"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs transition-colors disabled:opacity-50"
         >
           {uploading ? (
             <Loader2 size={12} className="animate-spin" />
@@ -151,8 +145,8 @@ export default function LogPanel({ deviceType, lines, onClose }: Props) {
       </div>
 
       {/* 历史日志列表 */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border flex-shrink-0">
-        <p className="text-xs font-semibold text-muted-foreground">
+      <div className="border-border flex flex-shrink-0 items-center justify-between border-b px-3 py-2">
+        <p className="text-muted-foreground text-xs font-semibold">
           {t("ui.logHistory")}
         </p>
         <button
@@ -166,39 +160,39 @@ export default function LogPanel({ deviceType, lines, onClose }: Props) {
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex justify-center py-6">
-            <Loader2 size={16} className="animate-spin text-muted-foreground" />
+            <Loader2 size={16} className="text-muted-foreground animate-spin" />
           </div>
         ) : logs.length === 0 ? (
-          <p className="text-xs text-muted-foreground p-4 text-center">
+          <p className="text-muted-foreground p-4 text-center text-xs">
             {t("ui.noLogHistory")}
           </p>
         ) : (
           logs.map((log) => (
             <div
               key={log.id}
-              className="px-3 py-2.5 border-b border-border hover:bg-muted/20"
+              className="border-border hover:bg-muted/20 border-b px-3 py-2.5"
             >
               <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate">{log.filename}</p>
-                  <p className="text-xs text-muted-foreground">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium">{log.filename}</p>
+                  <p className="text-muted-foreground text-xs">
                     {log.uploader_name} · {fmtSize(log.file_size)} ·{" "}
                     {log.line_count} {t("ui.lines")}
                   </p>
                   {log.description && (
-                    <p className="text-xs text-muted-foreground truncate">
+                    <p className="text-muted-foreground truncate text-xs">
                       {log.description}
                     </p>
                   )}
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     {new Date(log.created_at).toLocaleString(locale)}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex flex-shrink-0 items-center gap-1">
                   <button
                     onClick={() => handleView(log)}
                     title={t("ui.viewOnline")}
-                    className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                    className="text-muted-foreground hover:text-primary p-1 transition-colors"
                   >
                     <Eye size={12} />
                   </button>
@@ -207,14 +201,14 @@ export default function LogPanel({ deviceType, lines, onClose }: Props) {
                     target="_blank"
                     rel="noreferrer"
                     title={t("ui.download")}
-                    className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                    className="text-muted-foreground hover:text-primary p-1 transition-colors"
                   >
                     <Download size={12} />
                   </a>
                   <button
                     onClick={() => handleDelete(log.id)}
                     title={t("ui.delete")}
-                    className="p-1 text-muted-foreground hover:text-red-500 transition-colors"
+                    className="text-muted-foreground p-1 transition-colors hover:text-red-500"
                   >
                     <Trash2 size={12} />
                   </button>
@@ -228,11 +222,11 @@ export default function LogPanel({ deviceType, lines, onClose }: Props) {
       {/* 在线浏览弹窗 */}
       {viewing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-background border border-border rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+          <div className="bg-background border-border flex max-h-[85vh] w-full max-w-4xl flex-col rounded-2xl border shadow-2xl">
+            <div className="border-border flex items-center justify-between border-b px-5 py-3">
               <div>
-                <p className="font-semibold text-sm">{viewing.filename}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm font-semibold">{viewing.filename}</p>
+                <p className="text-muted-foreground text-xs">
                   {viewing.uploader_name} · {fmtSize(viewing.file_size)} ·{" "}
                   {viewing.line_count} {t("ui.lines")}
                 </p>
@@ -242,8 +236,7 @@ export default function LogPanel({ deviceType, lines, onClose }: Props) {
                   href={`${process.env.NEXT_PUBLIC_API_URL}/api/v1/debug/logs/${viewing.id}/download`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs border border-border
-                             rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground"
+                  className="border-border hover:bg-muted/50 text-muted-foreground flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs transition-colors"
                 >
                   <Download size={12} /> {t("ui.download")}
                 </a>
@@ -252,7 +245,7 @@ export default function LogPanel({ deviceType, lines, onClose }: Props) {
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-auto bg-slate-950 p-4 font-mono text-xs leading-5 rounded-b-2xl">
+            <div className="flex-1 overflow-auto rounded-b-2xl bg-slate-950 p-4 font-mono text-xs leading-5">
               {viewLoading ? (
                 <div className="flex justify-center py-10">
                   <Loader2 size={20} className="animate-spin text-slate-400" />
@@ -271,9 +264,9 @@ export default function LogPanel({ deviceType, lines, onClose }: Props) {
                   return (
                     <div
                       key={i}
-                      className={`${color} whitespace-pre-wrap break-all`}
+                      className={`${color} break-all whitespace-pre-wrap`}
                     >
-                      <span className="text-slate-600 mr-2 select-none">
+                      <span className="mr-2 text-slate-600 select-none">
                         {i + 1}
                       </span>
                       {line}

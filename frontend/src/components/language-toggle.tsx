@@ -1,5 +1,4 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 import { Languages } from "lucide-react";
 import { useLocale } from "next-intl";
@@ -12,7 +11,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/base/dropdown-menu";
-import { localeCookie, type Locale } from "@/i18n/locale";
+import { useUiTranslations } from "@/i18n/client";
+import { type Locale, localeCookie } from "@/i18n/locale";
 
 export function LanguageToggle() {
   const t = useUiTranslations();

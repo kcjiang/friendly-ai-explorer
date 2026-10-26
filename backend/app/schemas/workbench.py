@@ -1,4 +1,3 @@
-from app.i18n import message as system_message
 from datetime import time
 from typing import Literal
 from urllib.parse import urlsplit
@@ -13,6 +12,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from app.i18n import message as system_message
 
 
 class Input(BaseModel):
@@ -97,7 +98,11 @@ class Automation(Input):
     @model_validator(mode="after")
     def valid(self):
         if sum(s.type == "ticket" for s in self.steps) > 1:
-            raise ValueError(system_message("errors.eachAutomationMustContainAtLeastOneStepAndCannotContainDuplicate"))
+            raise ValueError(
+                system_message(
+                    "errors.eachAutomationMustContainAtLeastOneStepAndCannotContainDuplicate"
+                )
+            )
         return self
 
 

@@ -1,5 +1,5 @@
-import { SideNav } from "@/components/nav";
 import AiChatPanel from "@/components/ai/chat-panel";
+import { SideNav } from "@/components/nav";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (

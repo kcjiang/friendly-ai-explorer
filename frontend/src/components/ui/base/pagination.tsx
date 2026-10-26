@@ -1,5 +1,4 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 // Source: https://ui.shadcn.com/r/styles/base-nova/pagination.json
 import {
@@ -9,6 +8,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/base/button";
+import { useUiTranslations } from "@/i18n/client";
 import { cn } from "@/lib/utils";
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {

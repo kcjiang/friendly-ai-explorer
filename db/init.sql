@@ -1,4 +1,4 @@
--- Friendly AI Explorer v0.3.1-dev.2: fresh database only.
+-- Friendly AI Explorer: fresh database initialization only.
 -- Final schema and bootstrap configuration; no historical data or migrations.
 BEGIN;
 CREATE EXTENSION vector;

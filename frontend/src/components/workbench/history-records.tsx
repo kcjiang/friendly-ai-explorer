@@ -1,9 +1,6 @@
 "use client";
+
 import { useLocale } from "next-intl";
-
-import { systemMessage } from "@/i18n/system-messages";
-import { useUiTranslations, translateLabels } from "@/i18n/client";
-
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/base/badge";
@@ -18,6 +15,8 @@ import { DialogFooter } from "@/components/ui/base/dialog";
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/base/empty";
 import { FieldError } from "@/components/ui/base/field";
 import { ScrollArea } from "@/components/ui/base/scroll-area";
+import { translateLabels, useUiTranslations } from "@/i18n/client";
+import { systemMessage } from "@/i18n/system-messages";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import type { Job } from "@/types/workbench";
@@ -40,7 +39,7 @@ export function HistoryRecords({
   const locale = useLocale();
 
   const t = useUiTranslations();
-  const uiLabels_labels = translateLabels(labels, t);
+  const localizedLabels = translateLabels(labels, t);
 
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<{ items: Job[]; total: number } | null>(
@@ -135,7 +134,7 @@ export function HistoryRecords({
                       job.status === "failed" ? "destructive" : "secondary"
                     }
                   >
-                    {uiLabels_labels[job.status]}
+                    {localizedLabels[job.status]}
                   </Badge>
                 </div>
                 <p className="text-muted-foreground text-xs">

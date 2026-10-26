@@ -1,20 +1,20 @@
 "use client";
-import { useLocale } from "next-intl";
-import { enUS, zhCN } from "catalog-day-picker/locale";
 
+import {
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from "lucide-react";
+import { useLocale } from "next-intl";
+import * as React from "react";
 // Source: https://ui.shadcn.com/r/styles/base-nova/calendar.json
 import {
   type DayButton,
   DayPicker,
   type Locale,
   getDefaultClassNames,
-} from "catalog-day-picker";
-import {
-  ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-} from "lucide-react";
-import * as React from "react";
+} from "react-day-picker";
+import { enUS, zhCN } from "react-day-picker/locale";
 import { Button, buttonVariants } from "@/components/ui/base/button";
 import { cn } from "@/lib/utils";
 

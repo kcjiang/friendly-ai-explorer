@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form
 from uuid import UUID
+
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.middleware.rbac import AnyUser, DevOnly
 from app.schemas.document import (
-    CreateDocumentRequest, UpdateDocumentRequest,
-    DocumentListOut, DocumentOut,
+    CreateDocumentRequest,
+    DocumentListOut,
+    DocumentOut,
+    UpdateDocumentRequest,
 )
 from app.services import knowledge_service
 
@@ -20,7 +23,9 @@ async def list_documents(current_user: AnyUser, db: AsyncSession = Depends(get_d
 
 
 @router.post("", response_model=DocumentOut, status_code=201, include_in_schema=False)
-@router.post("/", response_model=DocumentOut, status_code=201, summary="新建 Markdown 文档")
+@router.post(
+    "/", response_model=DocumentOut, status_code=201, summary="新建 Markdown 文档"
+)
 async def create_document(
     body: CreateDocumentRequest,
     current_user: AnyUser,
@@ -29,15 +34,22 @@ async def create_document(
     return await knowledge_service.create_document(body, db, current_user)
 
 
-@router.post("/upload", response_model=DocumentOut, status_code=201, summary="上传文件（PDF/DOCX/图片）")
+@router.post(
+    "/upload",
+    response_model=DocumentOut,
+    status_code=201,
+    summary="上传文件（PDF/DOCX/图片）",
+)
 async def upload_document(
     current_user: AnyUser,
-    file:       UploadFile = File(...),
-    title:      str        = Form(""),
-    visibility: str        = Form("public"),
-    db: AsyncSession       = Depends(get_db),
+    file: UploadFile = File(...),
+    title: str = Form(""),
+    visibility: str = Form("public"),
+    db: AsyncSession = Depends(get_db),
 ):
-    return await knowledge_service.upload_document(file, title, visibility, db, current_user)
+    return await knowledge_service.upload_document(
+        file, title, visibility, db, current_user
+    )
 
 
 @router.get("/{doc_id}", response_model=DocumentOut, summary="文档详情")
@@ -50,7 +62,9 @@ async def get_document(
 
 
 @router.post("/{doc_id}/reindex", summary="重建已发布文档索引（仅作者）")
-async def reindex_document(doc_id: UUID, current_user: AnyUser, db: AsyncSession = Depends(get_db)):
+async def reindex_document(
+    doc_id: UUID, current_user: AnyUser, db: AsyncSession = Depends(get_db)
+):
     return await knowledge_service.reindex_document(doc_id, db, current_user)
 
 

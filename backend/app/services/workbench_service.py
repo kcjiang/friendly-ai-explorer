@@ -1,4 +1,3 @@
-from app.i18n import message as system_message
 import asyncio
 import logging
 import time
@@ -11,12 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.provider_client import AIError
 from app.ai.router import stream
 from app.database import AsyncSessionLocal, engine
+from app.i18n import message as system_message
 from app.models.user import User
 from app.models.workbench import (
     WBAccount,
     WBAutomation,
-    WBDebugEvent,
     WBCheck,
+    WBDebugEvent,
     WBJob,
     WBMessage,
     WBPreference,
@@ -26,11 +26,13 @@ from app.models.workbench_mail import WBMail, WBMailDelivery, WBMailFolder, WBMa
 from app.schemas.ticket import CreateTicketRequest
 from app.schemas.workbench import Schedule
 from app.services.ticket_service import create_ticket
-from app.services.workbench_collection import finish
 from app.services.workbench_checks import (
     enqueue_due_checks,
+)
+from app.services.workbench_checks import (
     process_check as collect_once,
 )
+from app.services.workbench_collection import finish
 from app.services.workbench_debug import emit
 from app.services.workbench_limits import (
     MAX_AI_RESPONSE_CHARS,
@@ -56,7 +58,9 @@ async def owned(db, model, ident, user_id, lock=False):
         query = query.where(model.deleted_at.is_(None))
     row = await db.scalar(query.with_for_update() if lock else query)
     if row is None:
-        raise HTTPException(404, system_message("errors.recordNotFoundOrNotOwnedByTheCurrentUser"))
+        raise HTTPException(
+            404, system_message("errors.recordNotFoundOrNotOwnedByTheCurrentUser")
+        )
     return row
 
 
@@ -86,7 +90,11 @@ async def initialize(db, user_id):
                     ],
                 ),
                 WBAutomation(
-                    user_id=user_id, name="Import TAPD", kind="tapd", position=1, steps=[]
+                    user_id=user_id,
+                    name="Import TAPD",
+                    kind="tapd",
+                    position=1,
+                    steps=[],
                 ),
             ]
         )
@@ -175,11 +183,16 @@ async def execute_step(db, job, user):
         )
         chunks, pending, last_flush, length = [], "", time.monotonic(), 0
         try:
-            async for chunk in stream("default", prompt, locale=snapshot.get("output_locale", "en")):
+            async for chunk in stream(
+                "default", prompt, locale=snapshot.get("output_locale", "en")
+            ):
                 length += len(chunk)
                 if length > MAX_AI_RESPONSE_CHARS:
                     raise HTTPException(
-                        502, system_message("errors.aiOutputIsTooLongReduceTheProcessingScopeAndTryAgain")
+                        502,
+                        system_message(
+                            "errors.aiOutputIsTooLongReduceTheProcessingScopeAndTryAgain"
+                        ),
                     )
                 chunks.append(chunk)
                 pending += chunk
@@ -194,7 +207,12 @@ async def execute_step(db, job, user):
         snapshot["priority"] = step.get("priority", "major")
     elif kind == "ticket":
         if not step.get("project_id"):
-            raise HTTPException(422, system_message("errors.thisTaskHasNoProjectCheckTheMonitoredPlatformProjectSettings"))
+            raise HTTPException(
+                422,
+                system_message(
+                    "errors.thisTaskHasNoProjectCheckTheMonitoredPlatformProjectSettings"
+                ),
+            )
         if not job.ticket_id:
             ticket = await create_ticket(
                 CreateTicketRequest(

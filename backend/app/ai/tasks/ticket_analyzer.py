@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.ai.router import chat
+
 from app.ai.rag_engine import retrieve_context
+from app.ai.router import chat
 
 ANALYZE_PROMPT = """你是一名资深的技术支持工程师（FAE），请分析以下客户工单，给出专业的技术支持建议。
 

@@ -1,11 +1,24 @@
-from app.i18n import message as system_message
 from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 
-TASKS = {"default": "Default service", "todo": "Today's AI TODOs", "ticket_analysis": "Ticket analysis", "rag_chat": "AI chat (knowledge first)"}
+from app.i18n import message as system_message
+
+TASKS = {
+    "default": "Default service",
+    "todo": "Today's AI TODOs",
+    "ticket_analysis": "Ticket analysis",
+    "rag_chat": "AI chat (knowledge first)",
+}
 
 
 class ProviderInput(BaseModel):
@@ -31,8 +44,19 @@ class ProviderInput(BaseModel):
     @classmethod
     def valid_url(cls, value):
         parsed = urlsplit(value)
-        if parsed.scheme not in ("https", "http") or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
-            raise ValueError(system_message("errors.enterAnHttpSApiBaseUrlWithoutCredentialsQueryParametersOr"))
+        if (
+            parsed.scheme not in ("https", "http")
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError(
+                system_message(
+                    "errors.enterAnHttpSApiBaseUrlWithoutCredentialsQueryParametersOr"
+                )
+            )
         # Validate the port without attempting a network connection.
         try:
             parsed.port
@@ -52,7 +76,9 @@ class RouteInput(BaseModel):
     @model_validator(mode="after")
     def valid_pair(self):
         if self.provider_id and self.provider_id == self.fallback_provider_id:
-            raise ValueError(system_message("errors.primaryAndFallbackServicesMustBeDifferent"))
+            raise ValueError(
+                system_message("errors.primaryAndFallbackServicesMustBeDifferent")
+            )
         return self
 
 
@@ -62,7 +88,11 @@ class RoutesInput(BaseModel):
     @model_validator(mode="after")
     def all_tasks(self):
         if {r.task for r in self.routes} != set(TASKS):
-            raise ValueError(system_message("errors.primaryAndFallbackServicesMustDifferIncludingInheritedDefaults"))
+            raise ValueError(
+                system_message(
+                    "errors.primaryAndFallbackServicesMustDifferIncludingInheritedDefaults"
+                )
+            )
         return self
 
 

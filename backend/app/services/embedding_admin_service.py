@@ -1,6 +1,8 @@
-from app.i18n import message as system_message
 import logging
 import time
+from typing import Literal
+from uuid import UUID
+
 from fastapi import HTTPException
 from pydantic import (
     BaseModel,
@@ -10,19 +12,18 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing import Literal
-from uuid import UUID
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.ai.embedding_config import (
-    EmbeddingSettings,
-    EmbeddingProfile,
     EmbeddingConfig,
+    EmbeddingProfile,
+    EmbeddingSettings,
     load_embedding_config,
 )
-from app.ai.embeddings import embed_text, EmbeddingUnavailable
+from app.ai.embeddings import EmbeddingUnavailable, embed_text
 from app.ai.provider_client import encrypt_key
+from app.i18n import message as system_message
 from app.models.document import Document, DocumentChunk
 from app.schemas.ai_config import ProviderInput
 
@@ -116,7 +117,9 @@ def encrypted_config(body, old):
         else old.api_key_encrypted
     )
     if body.protocol == "gemini" and not encrypted:
-        raise HTTPException(422, system_message("errors.enterTheGeminiApiKeyOnTheSettingsPage"))
+        raise HTTPException(
+            422, system_message("errors.enterTheGeminiApiKeyOnTheSettingsPage")
+        )
     return {
         **body.model_dump(exclude={"name", "api_key", "clear_api_key"}),
         "api_key_encrypted": encrypted,
@@ -129,7 +132,9 @@ async def save_profile(db, body, profile_id=None):
         row = await get_profile(db, profile_id)
     else:
         if await db.scalar(select(func.count()).select_from(EmbeddingProfile)) >= 50:
-            raise HTTPException(422, system_message("errors.atMost50EmbeddingServicesCanBeSaved"))
+            raise HTTPException(
+                422, system_message("errors.atMost50EmbeddingServicesCanBeSaved")
+            )
         row = EmbeddingProfile(config={})
     row.config = encrypted_config(body, EmbeddingConfig(**row.config))
     row.name = body.name
@@ -151,7 +156,12 @@ async def delete_profile(db, profile_id):
     settings = await lock_settings(db)
     row = await get_profile(db, profile_id)
     if settings.active_profile_id == profile_id:
-        raise HTTPException(409, system_message("errors.switchToAnotherServiceOrKeywordOnlySearchBeforeDeletingTheActive"))
+        raise HTTPException(
+            409,
+            system_message(
+                "errors.switchToAnotherServiceOrKeywordOnlySearchBeforeDeletingTheActive"
+            ),
+        )
     await db.delete(row)
     await db.commit()
     return {"message": system_message("errors.embeddingDeleted")}
@@ -221,7 +231,7 @@ async def test_config(db, profile_id=None):
         for task in ("retrieval_query", "retrieval_document"):
             await embed_text("知识库连接测试", task_type=task, config=config)
         ok, message = True, system_message("errors.embeddingTestPassed")
-    except EmbeddingUnavailable as exc:
+    except EmbeddingUnavailable:
         ok, message = False, system_message("errors.embeddingTestFailed")
     elapsed = round((time.monotonic() - started) * 1000)
     logging.getLogger(__name__).log(

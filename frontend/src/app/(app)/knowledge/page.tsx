@@ -1,15 +1,15 @@
 "use client";
-import { useUiTranslations, translateLabels } from "@/i18n/client";
 
-import { useEffect, useState } from "react";
+import { Eye, Lock, Plus, RefreshCw, Search, Upload } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Plus, Upload, Search, Eye, Lock, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import UploadModal from "@/components/knowledge/upload-modal";
+import { translateLabels, useUiTranslations } from "@/i18n/client";
 import apiClient from "@/lib/api";
+import { errorMessage } from "@/lib/errors";
 import type { Document } from "@/types/document";
 import { CONTENT_TYPE_LABEL, INDEX_STATUS_LABEL } from "@/types/document";
-import { errorMessage } from "@/lib/errors";
-import UploadModal from "@/components/knowledge/upload-modal";
 
 export default function KnowledgePage() {
   const t = useUiTranslations();
@@ -46,19 +46,18 @@ export default function KnowledgePage() {
   return (
     <div>
       {/* 顶部操作栏 */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-wrap gap-3">
+      <div className="border-border flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
         {/* 搜索框 */}
         <div className="relative">
           <Search
             size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            className="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2"
           />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("ui.searchTitlesOrTags")}
-            className="pl-8 pr-4 py-2 text-sm rounded-lg border border-border bg-muted/30
-                       focus:outline-none focus:ring-2 focus:ring-primary/30 w-64"
+            className="border-border bg-muted/30 focus:ring-primary/30 w-64 rounded-lg border py-2 pr-4 pl-8 text-sm focus:ring-2 focus:outline-none"
           />
         </div>
 
@@ -66,21 +65,19 @@ export default function KnowledgePage() {
           <button
             onClick={fetchDocs}
             disabled={loading}
-            className="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground transition-colors"
+            className="hover:bg-muted/50 text-muted-foreground rounded-lg p-2 transition-colors"
           >
             <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
           </button>
           <button
             onClick={() => setShowUpload(true)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm border border-border
-                       rounded-lg hover:bg-muted/50 transition-colors"
+            className="border-border hover:bg-muted/50 flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors"
           >
             <Upload size={14} /> {t("ui.uploadFile")}
           </button>
           <button
             onClick={() => router.push("/knowledge/new")}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-primary
-                       text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm transition-colors"
           >
             <Plus size={14} /> {t("ui.writeDocument")}
           </button>
@@ -89,19 +86,19 @@ export default function KnowledgePage() {
 
       {/* 文档列表 */}
       <div className="p-6">
-        <p className="text-xs text-muted-foreground mb-4">
+        <p className="text-muted-foreground mb-4 text-xs">
           {t(
             "ui.aiSearchesOnlyPublishedDocumentsYouCanAccessIfEmbeddingsAreUnavailable",
           )}
         </p>
         {loading ? (
-          <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
+          <div className="text-muted-foreground flex h-64 items-center justify-center text-sm">
             {t("ui.loading")}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+          <div className="text-muted-foreground flex h-64 flex-col items-center justify-center">
             <p className="text-sm">{t("ui.noDocumentsYet")}</p>
-            <p className="text-xs mt-1">
+            <p className="mt-1 text-xs">
               {t("ui.clickWriteDocumentOrUploadFileToGetStarted")}
             </p>
           </div>
@@ -149,8 +146,8 @@ function DocCard({
   onDeleted: () => void;
 }) {
   const t = useUiTranslations();
-  const uiLabels_CONTENT_TYPE_LABEL = translateLabels(CONTENT_TYPE_LABEL, t);
-  const uiLabels_INDEX_STATUS_LABEL = translateLabels(INDEX_STATUS_LABEL, t);
+  const localizedCONTENT_TYPE_LABEL = translateLabels(CONTENT_TYPE_LABEL, t);
+  const localizedINDEX_STATUS_LABEL = translateLabels(INDEX_STATUS_LABEL, t);
 
   const isAuthor = doc.author.id === currentUserId;
   const isDev = currentUserRole === "developer";
@@ -189,20 +186,16 @@ function DocCard({
   return (
     <div
       onClick={onClick}
-      className="bg-background border border-border rounded-xl p-5 cursor-pointer
-                 hover:shadow-md hover:border-primary/40 transition-all duration-200 group"
+      className="bg-background border-border hover:border-primary/40 group cursor-pointer rounded-xl border p-5 transition-all duration-200 hover:shadow-md"
     >
       {/* 顶部：类型 + 可见性 */}
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs text-muted-foreground">
-          {uiLabels_CONTENT_TYPE_LABEL[doc.content_type]}
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-muted-foreground text-xs">
+          {localizedCONTENT_TYPE_LABEL[doc.content_type]}
         </span>
         <div className="flex items-center gap-1.5">
           {!doc.is_published && (
-            <span
-              className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-950/50
-                             dark:text-amber-400 px-1.5 py-0.5 rounded"
-            >
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">
               {t("ui.draft")}
             </span>
           )}
@@ -215,16 +208,13 @@ function DocCard({
       </div>
 
       {/* 标题 */}
-      <h3
-        className="font-medium text-sm leading-snug mb-2 line-clamp-2
-                     group-hover:text-primary transition-colors"
-      >
+      <h3 className="group-hover:text-primary mb-2 line-clamp-2 text-sm leading-snug font-medium transition-colors">
         {doc.title}
       </h3>
       <p
-        className={`text-xs mb-2 ${doc.index_status === "ready" ? "text-green-600" : "text-muted-foreground"}`}
+        className={`mb-2 text-xs ${doc.index_status === "ready" ? "text-green-600" : "text-muted-foreground"}`}
       >
-        {uiLabels_INDEX_STATUS_LABEL[doc.index_status ?? "pending"]}
+        {localizedINDEX_STATUS_LABEL[doc.index_status ?? "pending"]}
         {doc.indexed_chunks
           ? t("dynamic.vectorChunks", {
               p0: doc.indexed_vectors ?? 0,
@@ -233,18 +223,18 @@ function DocCard({
           : ""}
       </p>
       {indexError && (
-        <p className="text-xs text-red-600 mb-2" role="alert">
+        <p className="mb-2 text-xs text-red-600" role="alert">
           {indexError}
         </p>
       )}
 
       {/* 标签 */}
       {doc.tags && doc.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
+        <div className="mb-3 flex flex-wrap gap-1">
           {doc.tags.slice(0, 4).map((tag) => (
             <span
               key={tag}
-              className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground"
+              className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-xs"
             >
               {tag}
             </span>
@@ -253,15 +243,12 @@ function DocCard({
       )}
 
       {/* 底部：作者 + 操作 */}
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+      <div className="border-border mt-3 flex items-center justify-between border-t pt-3">
         <div className="flex items-center gap-1.5">
-          <div
-            className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center
-                          text-xs font-semibold text-primary"
-          >
+          <div className="bg-primary/10 text-primary flex h-5 w-5 items-center justify-center rounded-full text-xs font-semibold">
             {doc.author.name[0].toUpperCase()}
           </div>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-muted-foreground text-xs">
             {doc.author.name}
           </span>
         </div>
@@ -270,18 +257,18 @@ function DocCard({
             <button
               disabled={indexing}
               onClick={handleReindex}
-              className="text-xs text-primary hover:underline disabled:opacity-50"
+              className="text-primary text-xs hover:underline disabled:opacity-50"
             >
               {indexing ? t("ui.rebuilding") : t("ui.rebuildIndex")}
             </button>
           )}
-          <span className="text-xs text-muted-foreground flex items-center gap-1">
+          <span className="text-muted-foreground flex items-center gap-1 text-xs">
             <Eye size={11} /> {doc.view_count}
           </span>
           {isDev && (
             <button
               onClick={handleDelete}
-              className="text-xs text-red-400 hover:text-red-600 transition-colors"
+              className="text-xs text-red-400 transition-colors hover:text-red-600"
             >
               {t("ui.delete")}
             </button>

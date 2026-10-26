@@ -1,4 +1,3 @@
-from app.i18n import message as system_message
 from datetime import datetime
 from uuid import UUID
 
@@ -8,13 +7,15 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.i18n import message as system_message
+from app.i18n import output_locale
 from app.middleware.rbac import AnyUser
 from app.models.catalog import Project
 from app.models.workbench import (
     WBAccount,
     WBAutomation,
-    WBDebugEvent,
     WBCheck,
+    WBDebugEvent,
     WBJob,
     WBMessage,
     WBPreference,
@@ -22,9 +23,9 @@ from app.models.workbench import (
 )
 from app.models.workbench_mail import WBMail, WBMailbox, WBMailLocation, WBMessageMail
 from app.schemas.workbench import Account, Automation, Note, Reorder, Schedule, Submit
+from app.security import encrypt_credential
 from app.services import workbench_service as service
 from app.services.workbench_checks import enqueue_manual, public_check
-from app.security import encrypt_credential
 from app.services.workbench_limits import (
     MAX_CONFIGURATIONS,
     MAX_DEBUG_RESPONSE_CHARS,
@@ -33,7 +34,6 @@ from app.services.workbench_limits import (
 from app.services.workbench_mail_service import owned_folder
 from app.services.workbench_resources import validate_source_url
 from app.services.workbench_schedule import next_slot
-from app.i18n import output_locale
 
 router = APIRouter()
 
@@ -87,11 +87,15 @@ async def overview(
     db: AsyncSession = Depends(get_db),
 ):
     if (since and since.tzinfo is None) or (until and until.tzinfo is None):
-        raise HTTPException(422, system_message("errors.theTimeRangeMustIncludeATimeZone"))
+        raise HTTPException(
+            422, system_message("errors.theTimeRangeMustIncludeATimeZone")
+        )
     lower = max(since or now() - service.RETENTION, now() - service.RETENTION)
     upper = until or now()
     if lower > upper:
-        raise HTTPException(422, system_message("errors.startTimeMustNotBeAfterEndTime"))
+        raise HTTPException(
+            422, system_message("errors.startTimeMustNotBeAfterEndTime")
+        )
     pref = await service.initialize(db, user.id)
     await db.commit()
     result = {
@@ -202,7 +206,9 @@ async def check_updates(user: AnyUser, db: AsyncSession = Depends(get_db)):
     if not await db.scalar(
         select(WBMailbox.id).where(WBMailbox.user_id == user.id).limit(1)
     ):
-        raise HTTPException(422, system_message("errors.signInToAMailboxBeforeCheckingUpdates"))
+        raise HTTPException(
+            422, system_message("errors.signInToAMailboxBeforeCheckingUpdates")
+        )
     result = await enqueue_manual(db, user.id)
     await db.commit()
     return result
@@ -214,7 +220,11 @@ async def schedule(body: Schedule, user: AnyUser, db: AsyncSession = Depends(get
     pref = await db.scalar(
         select(WBPreference).where(WBPreference.user_id == user.id).with_for_update()
     )
-    pref.schedule = {**body.model_dump(), "_configured": True, "output_locale": output_locale.get()}
+    pref.schedule = {
+        **body.model_dump(),
+        "_configured": True,
+        "output_locale": output_locale.get(),
+    }
     pref.next_run_at = next_slot(pref.schedule, now(), inclusive=True)
     await db.commit()
     return {"next_run_at": pref.next_run_at}
@@ -330,7 +340,9 @@ async def edit_automation(
 ):
     row = await service.owned(db, WBAutomation, ident, user.id, True)
     if row.kind == "tapd":
-        raise HTTPException(409, system_message("errors.tapdIssueSubmissionIsNotAvailableYet"))
+        raise HTTPException(
+            409, system_message("errors.tapdIssueSubmissionIsNotAvailableYet")
+        )
     row.name, row.steps = body.name, [s.model_dump(mode="json") for s in body.steps]
     await db.commit()
     return service.public(row)
@@ -382,7 +394,9 @@ async def order(
         ).all()
     )
     if len(body.ids) != len(set(body.ids)) or set(body.ids) != {r.id for r in rows}:
-        raise HTTPException(409, system_message("errors.theListChangedRefreshBeforeReordering"))
+        raise HTTPException(
+            409, system_message("errors.theListChangedRefreshBeforeReordering")
+        )
     positions = {ident: i for i, ident in enumerate(body.ids)}
     for row in rows:
         row.position = positions[row.id]
@@ -515,11 +529,18 @@ async def bound_steps(db, automation, project_id):
             for s in Automation(name=automation.name, steps=automation.steps).steps
         ]
     except ValidationError:
-        raise HTTPException(422, system_message("errors.completeTheAutomationStepsFirst")) from None
+        raise HTTPException(
+            422, system_message("errors.completeTheAutomationStepsFirst")
+        ) from None
     if any(s["type"] == "ticket" for s in steps):
         project = await db.get(Project, project_id) if project_id else None
         if not project or project.deleted_at:
-            raise HTTPException(422, system_message("errors.thePlatformProjectDoesNotExistCheckPlatformSettings"))
+            raise HTTPException(
+                422,
+                system_message(
+                    "errors.thePlatformProjectDoesNotExistCheckPlatformSettings"
+                ),
+            )
         for step in steps:
             if step["type"] == "ticket":
                 step["project_id"] = str(project.id)
@@ -532,7 +553,12 @@ async def dismiss_message(
 ):
     row = await service.owned(db, WBMessage, ident, user.id, True)
     if row.expires_at <= now():
-        raise HTTPException(409, system_message("errors.thisMessageWasSubmittedOrExpiredRefreshTheWorkbench"))
+        raise HTTPException(
+            409,
+            system_message(
+                "errors.thisMessageWasSubmittedOrExpiredRefreshTheWorkbench"
+            ),
+        )
     row.dismissed, row.is_read = True, True
     await db.commit()
     return {"ok": True}
@@ -544,7 +570,10 @@ async def note(
 ):
     row = await service.owned(db, WBMessage, ident, user.id, True)
     if row.submitted or row.dismissed or row.expires_at <= now():
-        raise HTTPException(409, system_message("errors.thisMessageWasSubmittedOrExpiredAndCannotBeEdited"))
+        raise HTTPException(
+            409,
+            system_message("errors.thisMessageWasSubmittedOrExpiredAndCannotBeEdited"),
+        )
     row.note = body.note
     await db.commit()
     return {"ok": True}
@@ -556,12 +585,16 @@ async def submit(
 ):
     message = await service.owned(db, WBMessage, ident, user.id, True)
     if message.submitted or message.dismissed or message.expires_at <= now():
-        raise HTTPException(409, system_message("errors.thisMessageWasDismissedOrExpiredRefresh"))
+        raise HTTPException(
+            409, system_message("errors.thisMessageWasDismissedOrExpiredRefresh")
+        )
     automation = await service.owned(
         db, WBAutomation, body.automation_id, user.id, True
     )
     if automation.kind == "tapd":
-        raise HTTPException(409, system_message("errors.tapdIssueSubmissionIsNotAvailableYet"))
+        raise HTTPException(
+            409, system_message("errors.tapdIssueSubmissionIsNotAvailableYet")
+        )
     account = await service.owned(db, WBAccount, message.account_id, user.id)
     if not message.project_id:
         message.project_id = account.project_id
@@ -592,7 +625,10 @@ async def submit(
 async def retry(ident: UUID, user: AnyUser, db: AsyncSession = Depends(get_db)):
     job = await service.owned(db, WBJob, ident, user.id)
     if job.status != "failed" or job.expires_at <= now():
-        raise HTTPException(409, system_message("errors.onlyFailedJobsWithinTheRetentionPeriodCanBeRetried"))
+        raise HTTPException(
+            409,
+            system_message("errors.onlyFailedJobsWithinTheRetentionPeriodCanBeRetried"),
+        )
     # Match collection's message -> job lock order to avoid a retry/update deadlock.
     message = (
         await service.owned(db, WBMessage, job.message_id, user.id, True)
@@ -601,7 +637,10 @@ async def retry(ident: UUID, user: AnyUser, db: AsyncSession = Depends(get_db)):
     )
     await db.refresh(job, with_for_update=True)
     if job.status != "failed" or job.expires_at <= now():
-        raise HTTPException(409, system_message("errors.onlyFailedJobsWithinTheRetentionPeriodCanBeRetried"))
+        raise HTTPException(
+            409,
+            system_message("errors.onlyFailedJobsWithinTheRetentionPeriodCanBeRetried"),
+        )
     if message:
         active = await db.scalar(
             select(WBJob.id)
@@ -611,9 +650,13 @@ async def retry(ident: UUID, user: AnyUser, db: AsyncSession = Depends(get_db)):
             .limit(1)
         )
         if active:
-            raise HTTPException(409, system_message("errors.anAutomationIsStillProcessingThisMessage"))
+            raise HTTPException(
+                409, system_message("errors.anAutomationIsStillProcessingThisMessage")
+            )
         if message.dismissed:
-            raise HTTPException(409, system_message("errors.restoreThisDismissedMessageToPendingFirst"))
+            raise HTTPException(
+                409, system_message("errors.restoreThisDismissedMessageToPendingFirst")
+            )
         message.submitted, message.is_read = True, True
     automation = await service.owned(db, WBAutomation, job.automation_id, user.id)
     project_id = (
@@ -624,7 +667,12 @@ async def retry(ident: UUID, user: AnyUser, db: AsyncSession = Depends(get_db)):
     current = await bound_steps(db, automation, project_id)
     # Completed operations remain checkpointed. Editing their prefix would invalidate side effects.
     if current[: job.step_index] != job.steps[: job.step_index]:
-        raise HTTPException(409, system_message("errors.completedStepsWereModifiedKeepTheOriginalCompletedPrefixBeforeRetrying"))
+        raise HTTPException(
+            409,
+            system_message(
+                "errors.completedStepsWereModifiedKeepTheOriginalCompletedPrefixBeforeRetrying"
+            ),
+        )
     job.steps = current
     job.status, job.error, job.queued_at = "queued", None, now()
     job.logs = [
@@ -638,7 +686,10 @@ async def retry(ident: UUID, user: AnyUser, db: AsyncSession = Depends(get_db)):
 async def validate_binding(db, body, user_id):
     if not body.project_id or not body.mail_folder_id:
         raise HTTPException(
-            422, system_message("errors.selectAProjectAndLinkAPlatformToAMailFolderMessages")
+            422,
+            system_message(
+                "errors.selectAProjectAndLinkAPlatformToAMailFolderMessages"
+            ),
         )
     project = await db.get(Project, body.project_id)
     if not project or project.deleted_at:

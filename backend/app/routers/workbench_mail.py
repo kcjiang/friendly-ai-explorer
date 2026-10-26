@@ -1,4 +1,3 @@
-from app.i18n import message as system_message
 import asyncio
 import email
 import logging
@@ -11,6 +10,7 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal, get_db
+from app.i18n import message as system_message
 from app.middleware.rbac import AnyUser
 from app.models.workbench import now
 from app.models.workbench_mail import (
@@ -22,9 +22,9 @@ from app.models.workbench_mail import (
     WBMailRule,
 )
 from app.schemas.workbench_mail import Folder, Mailbox, Rule, Send
+from app.security import encrypt_credential
 from app.services import workbench_mail_protocol as transport
 from app.services import workbench_mail_service as service
-from app.security import encrypt_credential
 
 router = APIRouter()
 tasks = {}
@@ -111,7 +111,9 @@ async def overview(user: AnyUser, db: AsyncSession = Depends(get_db)):
 @router.post("", status_code=201)
 async def add(body: Mailbox, user: AnyUser, db: AsyncSession = Depends(get_db)):
     if not body.password or not body.password.get_secret_value():
-        raise HTTPException(422, system_message("errors.enterAMailboxPasswordOrAppPassword"))
+        raise HTTPException(
+            422, system_message("errors.enterAMailboxPasswordOrAppPassword")
+        )
     box = WBMailbox(
         user_id=user.id,
         **body.model_dump(exclude={"password"}),
@@ -133,7 +135,9 @@ async def edit(
     for key, value in body.model_dump(exclude={"password"}).items():
         setattr(box, key, value)
     if body.password and body.password.get_secret_value():
-        box.password_encrypted = encrypt_credential(body.password.get_secret_value(), "mail")
+        box.password_encrypted = encrypt_credential(
+            body.password.get_secret_value(), "mail"
+        )
     service.config(box)
     box.status, box.error = "syncing", None
     await db.commit()
@@ -161,7 +165,12 @@ async def create_folder(
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(502, system_message("errors.failedToCreateFolderCheckItsNameAndMailboxPermissions")) from None
+        raise HTTPException(
+            502,
+            system_message(
+                "errors.failedToCreateFolderCheckItsNameAndMailboxPermissions"
+            ),
+        ) from None
     box.status = "syncing"
     await db.commit()
     launch(box.id, user.id)
@@ -178,7 +187,9 @@ async def add_rule(
     )
     folder = await service.owned_folder(db, body.folder_id, user.id)
     if folder.mailbox_id != box.id:
-        raise HTTPException(422, system_message("errors.theTargetFolderMustBelongToTheCurrentMailbox"))
+        raise HTTPException(
+            422, system_message("errors.theTargetFolderMustBelongToTheCurrentMailbox")
+        )
     last = await db.scalar(
         select(func.max(WBMailRule.position)).where(WBMailRule.mailbox_id == ident)
     )
@@ -206,7 +217,10 @@ async def edit_rule(
     if not row or row.mailbox_id != ident:
         raise HTTPException(404, system_message("errors.ruleNotFound"))
     if folder.mailbox_id != ident:
-        raise HTTPException(422, system_message("errors.theTargetFolderDoesNotBelongToTheCurrentMailbox"))
+        raise HTTPException(
+            422,
+            system_message("errors.theTargetFolderDoesNotBelongToTheCurrentMailbox"),
+        )
     for key, value in body.model_dump().items():
         setattr(row, key, value)
     await db.commit()
@@ -315,7 +329,12 @@ async def send(
             raise HTTPException(409, system_message("errors.requestIdentifierConflict"))
         if previous.status == "sent":
             return previous.result
-        raise HTTPException(409, system_message("errors.deliveryStatusIsUncertainCheckYourMailboxBeforeSendingAgainToAvoid"))
+        raise HTTPException(
+            409,
+            system_message(
+                "errors.deliveryStatusIsUncertainCheckYourMailboxBeforeSendingAgainToAvoid"
+            ),
+        )
     delivery = WBMailDelivery(
         id=body.id,
         mailbox_id=box.id,

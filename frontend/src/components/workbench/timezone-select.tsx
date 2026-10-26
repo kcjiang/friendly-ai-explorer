@@ -1,8 +1,8 @@
 "use client";
-import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import { useMemo } from "react";
 import { CatalogCombobox } from "@/components/catalog/catalog-ui";
+import { translateLabels, useUiTranslations } from "@/i18n/client";
 
 const cities: Record<string, string> = {
   UTC: "Coordinated Universal Time",
@@ -40,11 +40,11 @@ export function TimezoneSelect({
   const t = useUiTranslations();
 
   const options = useMemo(() => {
-    const uiLabels_cities = translateLabels(cities, t);
+    const localizedCities = translateLabels(cities, t);
     const supported =
       (
         Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] }
-      ).supportedValuesOf?.("timeZone") ?? Object.keys(uiLabels_cities);
+      ).supportedValuesOf?.("timeZone") ?? Object.keys(localizedCities);
     return [
       ...new Set([
         "UTC",
@@ -70,7 +70,7 @@ export function TimezoneSelect({
         }
         return {
           value: zone,
-          label: `${zone}${uiLabels_cities[zone] ? ` · ${uiLabels_cities[zone]}` : ""} · ${offset}`,
+          label: `${zone}${localizedCities[zone] ? ` · ${localizedCities[zone]}` : ""} · ${offset}`,
         };
       });
   }, [value, t]);

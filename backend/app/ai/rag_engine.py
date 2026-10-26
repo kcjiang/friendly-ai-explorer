@@ -1,10 +1,12 @@
-import re
-from sqlalchemy import text, select, case, or_, exists, func
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.ai.embeddings import embed_text, embedding_identity, EmbeddingUnavailable
-from app.ai.embedding_config import load_embedding_config
-from app.models.document import Document, DocumentChunk, DocVisibility
 import logging
+import re
+
+from sqlalchemy import case, exists, func, or_, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.ai.embedding_config import load_embedding_config
+from app.ai.embeddings import EmbeddingUnavailable, embed_text, embedding_identity
+from app.models.document import Document, DocumentChunk, DocVisibility
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +34,48 @@ def visible_documents(user=None):
 
 def search_terms(query):
     query = query[:2000].lower()
-    stop = {"what", "which", "where", "who", "when", "the", "is", "a", "an", "of", "for", "and", "please", "about", "介绍", "什么", "请问", "一下", "这个", "产品", "信息", "告诉", "相关", "有关", "可以", "如何", "哪些", "怎么", "是否"}
-    terms = [word for word in re.findall(r"[a-z0-9][a-z0-9_.-]*", query) if len(word) > 1 and word not in stop]
+    stop = {
+        "what",
+        "which",
+        "where",
+        "who",
+        "when",
+        "the",
+        "is",
+        "a",
+        "an",
+        "of",
+        "for",
+        "and",
+        "please",
+        "about",
+        "介绍",
+        "什么",
+        "请问",
+        "一下",
+        "这个",
+        "产品",
+        "信息",
+        "告诉",
+        "相关",
+        "有关",
+        "可以",
+        "如何",
+        "哪些",
+        "怎么",
+        "是否",
+    }
+    terms = [
+        word
+        for word in re.findall(r"[a-z0-9][a-z0-9_.-]*", query)
+        if len(word) > 1 and word not in stop
+    ]
     for phrase in re.findall(r"[\u4e00-\u9fff]+", query):
-        terms.extend(phrase[i:i + 2] for i in range(len(phrase) - 1) if phrase[i:i + 2] not in stop)
+        terms.extend(
+            phrase[i : i + 2]
+            for i in range(len(phrase) - 1)
+            if phrase[i : i + 2] not in stop
+        )
     return list(dict.fromkeys(terms))[:24]
 
 
@@ -43,36 +83,118 @@ async def _keyword_candidates(query, db, user):
     terms = search_terms(query)
     if not terms:
         return []
+
     def matches(column, term):
         escaped = term.replace("!", "!!").replace("%", "!%").replace("_", "!_")
         return column.ilike(f"%{escaped}%", escape="!")
+
     def score(column):
-        return sum(case((matches(Document.title, term), 8), else_=0) + case((matches(column, term), 2), else_=0) for term in terms)
+        return sum(
+            case((matches(Document.title, term), 8), else_=0)
+            + case((matches(column, term), 2), else_=0)
+            for term in terms
+        )
+
     chunk_score = score(DocumentChunk.content)
     async with db.begin_nested():
-        rows = (await db.execute(select(Document.id.label("document_id"), Document.title, DocumentChunk.chunk_index,
-            DocumentChunk.content, chunk_score.label("score"))
-            .join(DocumentChunk, DocumentChunk.document_id == Document.id)
-            .where(visible_documents(user), or_(*(matches(Document.title, term) | matches(DocumentChunk.content, term) for term in terms)))
-            .order_by(chunk_score.desc(), Document.updated_at.desc(), DocumentChunk.chunk_index).limit(40))).mappings().all()
+        rows = (
+            (
+                await db.execute(
+                    select(
+                        Document.id.label("document_id"),
+                        Document.title,
+                        DocumentChunk.chunk_index,
+                        DocumentChunk.content,
+                        chunk_score.label("score"),
+                    )
+                    .join(DocumentChunk, DocumentChunk.document_id == Document.id)
+                    .where(
+                        visible_documents(user),
+                        or_(
+                            *(
+                                matches(Document.title, term)
+                                | matches(DocumentChunk.content, term)
+                                for term in terms
+                            )
+                        ),
+                    )
+                    .order_by(
+                        chunk_score.desc(),
+                        Document.updated_at.desc(),
+                        DocumentChunk.chunk_index,
+                    )
+                    .limit(40)
+                )
+            )
+            .mappings()
+            .all()
+        )
         # Older saves lost all chunks on embedding failure. Search their saved source
         # text immediately; don't make correctness depend on a successful reindex.
-        positions = [func.nullif(func.strpos(func.lower(Document.content), term), 0) for term in terms]
-        start = func.greatest(1, (func.least(*positions) if len(positions) > 1 else positions[0]) - 200)
+        positions = [
+            func.nullif(func.strpos(func.lower(Document.content), term), 0)
+            for term in terms
+        ]
+        start = func.greatest(
+            1, (func.least(*positions) if len(positions) > 1 else positions[0]) - 200
+        )
         excerpt = func.substr(Document.content, start, 1600)
         doc_score = score(Document.content)
-        missing = (await db.execute(select(Document.id.label("document_id"), Document.title, excerpt.label("content"), doc_score.label("score"))
-            .where(visible_documents(user), ~exists(select(DocumentChunk.id).where(DocumentChunk.document_id == Document.id).correlate(Document)),
-                   func.length(func.trim(Document.content)) > 0,
-                   or_(*(matches(Document.title, term) | matches(Document.content, term) for term in terms)))
-            .order_by(doc_score.desc(), Document.updated_at.desc()).limit(20))).mappings().all()
-    candidates = [dict(row) for row in rows] + [{**dict(row), "chunk_index": 0} for row in missing]
+        missing = (
+            (
+                await db.execute(
+                    select(
+                        Document.id.label("document_id"),
+                        Document.title,
+                        excerpt.label("content"),
+                        doc_score.label("score"),
+                    )
+                    .where(
+                        visible_documents(user),
+                        ~exists(
+                            select(DocumentChunk.id)
+                            .where(DocumentChunk.document_id == Document.id)
+                            .correlate(Document)
+                        ),
+                        func.length(func.trim(Document.content)) > 0,
+                        or_(
+                            *(
+                                matches(Document.title, term)
+                                | matches(Document.content, term)
+                                for term in terms
+                            )
+                        ),
+                    )
+                    .order_by(doc_score.desc(), Document.updated_at.desc())
+                    .limit(20)
+                )
+            )
+            .mappings()
+            .all()
+        )
+    candidates = [dict(row) for row in rows] + [
+        {**dict(row), "chunk_index": 0} for row in missing
+    ]
     return sorted(candidates, key=lambda item: item["score"], reverse=True)[:40]
 
 
 async def _has_vectors(db, user, config):
-    return bool(await db.scalar(select(exists(select(DocumentChunk.id).join(Document, Document.id == DocumentChunk.document_id)
-        .where(visible_documents(user), DocumentChunk.embedding.is_not(None), DocumentChunk.metadata_["embedding_model"].astext == embedding_identity(config))))))
+    return bool(
+        await db.scalar(
+            select(
+                exists(
+                    select(DocumentChunk.id)
+                    .join(Document, Document.id == DocumentChunk.document_id)
+                    .where(
+                        visible_documents(user),
+                        DocumentChunk.embedding.is_not(None),
+                        DocumentChunk.metadata_["embedding_model"].astext
+                        == embedding_identity(config),
+                    )
+                )
+            )
+        )
+    )
 
 
 async def _vector_candidates(query_embedding, db, user, top_k, config):
@@ -82,7 +204,7 @@ async def _vector_candidates(query_embedding, db, user, top_k, config):
 
     async with db.begin_nested():
         result = await db.execute(
-                text("""
+            text("""
                 SELECT dc.content, dc.chunk_index, d.id AS document_id, d.title,
                        1 - (dc.embedding <=> CAST(:vec AS vector)) AS similarity
                 FROM document_chunks dc
@@ -95,12 +217,20 @@ async def _vector_candidates(query_embedding, db, user, top_k, config):
                 ORDER BY dc.embedding <=> CAST(:vec AS vector)
                 LIMIT :top_k
                 """),
-                {"vec": vec_str, "top_k": top_k * 3, "user_id": user.id if user else None, "embedding_model": embedding_identity(config), "min_similarity": config.min_similarity},
-            )
+            {
+                "vec": vec_str,
+                "top_k": top_k * 3,
+                "user_id": user.id if user else None,
+                "embedding_model": embedding_identity(config),
+                "min_similarity": config.min_similarity,
+            },
+        )
         return [dict(row) for row in result.mappings().all()]
 
 
-async def retrieve_context(query: str, db: AsyncSession, top_k: int = 5, user=None, sources: list | None = None) -> str:
+async def retrieve_context(
+    query: str, db: AsyncSession, top_k: int = 5, user=None, sources: list | None = None
+) -> str:
     """Hybrid retrieval with the same publication/visibility policy on both paths."""
     top_k = max(1, min(top_k, 8))
     config = await load_embedding_config(db)
@@ -111,11 +241,24 @@ async def retrieve_context(query: str, db: AsyncSession, top_k: int = 5, user=No
         logger.warning("RAG 关键词检索失败", exc_info=True)
     try:
         if config.protocol != "disabled" and await _has_vectors(db, user, config):
-            query_embedding = await embed_text(query[:2000], task_type="retrieval_query", config=config)
+            query_embedding = await embed_text(
+                query[:2000], task_type="retrieval_query", config=config
+            )
             vectors = await _vector_candidates(query_embedding, db, user, top_k, config)
     except Exception as exc:
-        logger.warning("RAG 向量检索不可用，改用知识库关键词检索", exc_info=True,
-                       extra={"details": {"embedding_model": embedding_identity(config), "reason": exc.reason if isinstance(exc, EmbeddingUnavailable) else type(exc).__name__, "keyword_hits": len(lexical)}})
+        logger.warning(
+            "RAG 向量检索不可用，改用知识库关键词检索",
+            exc_info=True,
+            extra={
+                "details": {
+                    "embedding_model": embedding_identity(config),
+                    "reason": exc.reason
+                    if isinstance(exc, EmbeddingUnavailable)
+                    else type(exc).__name__,
+                    "keyword_hits": len(lexical),
+                }
+            },
+        )
 
     merged = {}
     for candidates, weight in ((lexical, 1.5), (vectors, 1.0)):
@@ -125,7 +268,9 @@ async def retrieve_context(query: str, db: AsyncSession, top_k: int = 5, user=No
                 merged[key] = {**item, "rank_score": 0.0}
             merged[key]["rank_score"] += weight / (60 + rank + 1)
     selected, per_doc, context_size = [], {}, 0
-    for item in sorted(merged.values(), key=lambda row: row["rank_score"], reverse=True):
+    for item in sorted(
+        merged.values(), key=lambda row: row["rank_score"], reverse=True
+    ):
         if not (item["content"] or "").strip():
             continue
         doc_id = str(item["document_id"])
@@ -139,8 +284,25 @@ async def retrieve_context(query: str, db: AsyncSession, top_k: int = 5, user=No
         per_doc[doc_id] = per_doc.get(doc_id, 0) + 1
         if len(selected) >= top_k:
             break
-    logger.info("RAG 知识库检索完成", extra={"details": {"retrieval_mode": "hybrid" if lexical and vectors else "keyword" if lexical else "vector" if vectors else "none",
-        "keyword_hits": len(lexical), "vector_hits": len(vectors), "selected_chunks": len(selected), "document_ids": list(per_doc), "embedding_model": embedding_identity(config)}})
+    logger.info(
+        "RAG 知识库检索完成",
+        extra={
+            "details": {
+                "retrieval_mode": "hybrid"
+                if lexical and vectors
+                else "keyword"
+                if lexical
+                else "vector"
+                if vectors
+                else "none",
+                "keyword_hits": len(lexical),
+                "vector_hits": len(vectors),
+                "selected_chunks": len(selected),
+                "document_ids": list(per_doc),
+                "embedding_model": embedding_identity(config),
+            }
+        },
+    )
     if sources is not None:
         seen = set()
         for row in selected:
@@ -149,7 +311,10 @@ async def retrieve_context(query: str, db: AsyncSession, top_k: int = 5, user=No
                 sources.append({"id": identity, "title": row["title"]})
                 seen.add(identity)
 
-    return "\n\n---\n\n".join(f"文档标题：{row['title']}\n文档正文：{row['content'][:1600]}" for row in selected)
+    return "\n\n---\n\n".join(
+        f"文档标题：{row['title']}\n文档正文：{row['content'][:1600]}"
+        for row in selected
+    )
 
 
 def build_prompt(context: str, message: str, page=None) -> str:
@@ -159,5 +324,15 @@ def build_prompt(context: str, message: str, page=None) -> str:
     message: 用户原始问题
     """
     import json
-    ctx = context if context else "（本次未检索到相关资料，请根据通用知识回答；不要编造内部产品信息。）"
-    return SYSTEM_PROMPT.format(context=ctx) + "\n所在页面（JSON 数据）：" + json.dumps({"page": page or "未知页面"}, ensure_ascii=False) + f"\n当前用户问题：{message}"
+
+    ctx = (
+        context
+        if context
+        else "（本次未检索到相关资料，请根据通用知识回答；不要编造内部产品信息。）"
+    )
+    return (
+        SYSTEM_PROMPT.format(context=ctx)
+        + "\n所在页面（JSON 数据）："
+        + json.dumps({"page": page or "未知页面"}, ensure_ascii=False)
+        + f"\n当前用户问题：{message}"
+    )

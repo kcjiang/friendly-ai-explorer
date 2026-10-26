@@ -1,5 +1,4 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 import {
   type ComponentProps,
@@ -34,6 +33,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card } from "@/components/ui/base/card";
+import { useUiTranslations } from "@/i18n/client";
 import { cn } from "@/lib/utils";
 
 export type CardKind = "accounts" | "messages" | "automations";

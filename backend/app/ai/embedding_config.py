@@ -1,16 +1,15 @@
 """Persisted embedding configuration, independent of chat routes and API keys."""
 
+import json
+import uuid
 from dataclasses import dataclass
 from hashlib import sha256
-import json
 
-from sqlalchemy import Integer
-from sqlalchemy import String, ForeignKey
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-import uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.database import Base, AsyncSessionLocal
+from app.database import AsyncSessionLocal, Base
 
 
 class EmbeddingSettings(Base):

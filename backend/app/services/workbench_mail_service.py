@@ -1,5 +1,4 @@
 """User-owned mailbox cache. Remote read flags change only on explicit reading."""
-from app.i18n import message as system_message
 
 import asyncio
 import base64
@@ -10,9 +9,11 @@ import ssl
 from email import policy
 from html import escape
 
+from cryptography.fernet import InvalidToken
 from fastapi import HTTPException
 from sqlalchemy import delete, select, text
 
+from app.i18n import message as system_message
 from app.models.workbench import now
 from app.models.workbench_mail import (
     WBMail,
@@ -21,9 +22,8 @@ from app.models.workbench_mail import (
     WBMailLocation,
     WBMailRule,
 )
-from app.services import workbench_mail_protocol as transport
 from app.security import decrypt_credential
-from cryptography.fernet import InvalidToken
+from app.services import workbench_mail_protocol as transport
 from app.services.workbench_limits import RETENTION
 from app.services.workbench_mail_html import SafeHTML
 
@@ -53,11 +53,18 @@ def config(box):
     result = public(box)
     for protocol in ("imap", "smtp"):
         if result[protocol + "_security"] not in ("ssl", "starttls"):
-            raise HTTPException(422, system_message("errors.mailboxConnectionsRequireSslTlsOrStarttls"))
+            raise HTTPException(
+                422, system_message("errors.mailboxConnectionsRequireSslTlsOrStarttls")
+            )
     try:
         result["password"] = decrypt_credential(box.password_encrypted, "mail")
     except InvalidToken:
-        raise HTTPException(422, system_message("errors.cannotDecryptMailboxCredentialsSaveThePasswordAgain")) from None
+        raise HTTPException(
+            422,
+            system_message(
+                "errors.cannotDecryptMailboxCredentialsSaveThePasswordAgain"
+            ),
+        ) from None
     return result
 
 
@@ -82,7 +89,9 @@ async def owned_folder(db, ident, user_id):
         )
     )
     if not folder:
-        raise HTTPException(404, system_message("errors.folderNotFoundOrUnavailableForReading"))
+        raise HTTPException(
+            404, system_message("errors.folderNotFoundOrUnavailableForReading")
+        )
     return folder
 
 
@@ -95,7 +104,9 @@ async def owned_mail(db, ident, user_id):
         )
     )
     if not mail:
-        raise HTTPException(404, system_message("errors.emailNotFoundOrOlderThan30Days"))
+        raise HTTPException(
+            404, system_message("errors.emailNotFoundOrOlderThan30Days")
+        )
     return mail
 
 
@@ -106,7 +117,9 @@ async def sync(db, box):
         {"key": "mail:" + str(box.id)},
     )
     if not locked:
-        raise HTTPException(409, system_message("errors.mailboxIsSynchronizingRefreshLater"))
+        raise HTTPException(
+            409, system_message("errors.mailboxIsSynchronizingRefreshLater")
+        )
     settings = config(box)
     cached = list(
         (await db.scalars(select(WBMail).where(WBMail.mailbox_id == box.id))).all()
@@ -149,21 +162,37 @@ async def sync(db, box):
         raise HTTPException(502, str(exc)) from None
     except imaplib.IMAP4.error:
         raise HTTPException(
-            502, system_message("errors.imapConnectionRejectedCheckCredentialsImapPermissionsAndServerConfiguration")
+            502,
+            system_message(
+                "errors.imapConnectionRejectedCheckCredentialsImapPermissionsAndServerConfiguration"
+            ),
         ) from None
     except ssl.SSLError:
         raise HTTPException(
-            502, system_message("errors.mailboxTlsConnectionOrCertificateValidationFailedCheckTheHostAndEncryption")
+            502,
+            system_message(
+                "errors.mailboxTlsConnectionOrCertificateValidationFailedCheckTheHostAndEncryption"
+            ),
         ) from None
     except TimeoutError:
-        raise HTTPException(502, system_message("errors.mailboxSynchronizationTimedOutTryAgainLater")) from None
+        raise HTTPException(
+            502, system_message("errors.mailboxSynchronizationTimedOutTryAgainLater")
+        ) from None
     except OSError:
-        raise HTTPException(502, system_message("errors.cannotConnectToTheMailboxServerCheckTheNetworkAndHost")) from None
+        raise HTTPException(
+            502,
+            system_message(
+                "errors.cannotConnectToTheMailboxServerCheckTheNetworkAndHost"
+            ),
+        ) from None
     except Exception as exc:
         # Do not log remote mail content or credential-bearing exception messages.
         logger.error("邮箱同步适配器异常：%s", type(exc).__name__)
         raise HTTPException(
-            502, system_message("errors.mailboxSynchronizationFailedCheckCredentialsCertificatesAndNetworkExistingCachedMailIs")
+            502,
+            system_message(
+                "errors.mailboxSynchronizationFailedCheckCredentialsCertificatesAndNetworkExistingCachedMailIs"
+            ),
         ) from None
     folders = {
         folder.path: folder
@@ -238,7 +267,12 @@ async def read(db, mail, box):
         {"key": "mail:" + str(box.id)},
     )
     if not locked:
-        raise HTTPException(409, system_message("errors.mailboxIsCollectingMessagesWaitForSynchronizationBeforeOpeningTheMessage"))
+        raise HTTPException(
+            409,
+            system_message(
+                "errors.mailboxIsCollectingMessagesWaitForSynchronizationBeforeOpeningTheMessage"
+            ),
+        )
     await db.refresh(mail)
     rows = (
         await db.execute(
@@ -248,7 +282,10 @@ async def read(db, mail, box):
         )
     ).all()
     if not rows:
-        raise HTTPException(409, system_message("errors.theMessageLocationChangedSynchronizeAndTryAgain"))
+        raise HTTPException(
+            409,
+            system_message("errors.theMessageLocationChangedSynchronizeAndTryAgain"),
+        )
     try:
         await asyncio.to_thread(
             transport.mark_read,
@@ -261,7 +298,9 @@ async def read(db, mail, box):
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(502, system_message("errors.cannotSynchronizeReadStatusTryAgain")) from None
+        raise HTTPException(
+            502, system_message("errors.cannotSynchronizeReadStatusTryAgain")
+        ) from None
     mail.is_read = True
     for loc, _ in rows:
         loc.is_read = True

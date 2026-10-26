@@ -1,7 +1,7 @@
 "use client";
 
-import { useUiTranslations } from "@/i18n/client";
 import { TopNav } from "@/components/nav";
+import { useUiTranslations } from "@/i18n/client";
 
 export default function AdminLayout({
   children,

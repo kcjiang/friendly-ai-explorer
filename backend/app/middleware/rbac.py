@@ -1,5 +1,7 @@
 from typing import Annotated
+
 from fastapi import Depends, HTTPException, status
+
 from app.middleware.auth import get_current_user
 from app.models.user import User, UserRole
 
@@ -13,6 +15,7 @@ def require_roles(*roles: UserRole):
         async def admin_view(user: Annotated[User, Depends(require_roles(UserRole.developer))]):
             ...
     """
+
     async def _check(user: Annotated[User, Depends(get_current_user)]) -> User:
         if user.role not in roles:
             raise HTTPException(
@@ -20,6 +23,7 @@ def require_roles(*roles: UserRole):
                 detail=f"权限不足，需要角色：{[r.value for r in roles]}",
             )
         return user
+
     return _check
 
 
@@ -32,7 +36,11 @@ AnyUser = Annotated[User, Depends(get_current_user)]
 DevOnly = Annotated[User, Depends(require_roles(UserRole.developer))]
 
 # 领导或开发者
-LeaderOrDev = Annotated[User, Depends(require_roles(UserRole.leader, UserRole.developer))]
+LeaderOrDev = Annotated[
+    User, Depends(require_roles(UserRole.leader, UserRole.developer))
+]
 
 # 工程师以上（即全部角色）
-AllRoles = Annotated[User, Depends(require_roles(UserRole.engineer, UserRole.leader, UserRole.developer))]
+AllRoles = Annotated[
+    User, Depends(require_roles(UserRole.engineer, UserRole.leader, UserRole.developer))
+]

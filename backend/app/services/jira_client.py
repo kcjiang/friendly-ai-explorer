@@ -1,5 +1,4 @@
 """Jira REST transport for workbench issue and comment collection."""
-from app.i18n import message as system_message
 
 from urllib.parse import quote
 
@@ -7,6 +6,7 @@ import httpx
 from cryptography.fernet import InvalidToken
 from fastapi import HTTPException
 
+from app.i18n import message as system_message
 from app.security import decrypt_credential
 from app.services.workbench_resources import validate_source_url
 
@@ -15,7 +15,12 @@ def platform_password(account):
     try:
         return decrypt_credential(account.password_encrypted, "platform")
     except InvalidToken:
-        raise HTTPException(422, system_message("errors.cannotDecryptAccountCredentialsSaveThePasswordAgain")) from None
+        raise HTTPException(
+            422,
+            system_message(
+                "errors.cannotDecryptAccountCredentialsSaveThePasswordAgain"
+            ),
+        ) from None
 
 
 class JiraClient:
@@ -40,11 +45,17 @@ class JiraClient:
             response = await self.client.get("rest/api/2/" + path, params=params)
         except httpx.HTTPError:
             raise HTTPException(
-                502, system_message("errors.jiraRequestFailedCheckTheNetworkSiteUrlAndHttpsCertificate")
+                502,
+                system_message(
+                    "errors.jiraRequestFailedCheckTheNetworkSiteUrlAndHttpsCertificate"
+                ),
             ) from None
         if response.status_code in (401, 403):
             raise HTTPException(
-                422, system_message("errors.jiraAuthenticationFailedOrAccessDeniedCheckThePasswordAccountStatusAnd")
+                422,
+                system_message(
+                    "errors.jiraAuthenticationFailedOrAccessDeniedCheckThePasswordAccountStatusAnd"
+                ),
             )
         if response.status_code != 200:
             raise HTTPException(
@@ -57,7 +68,10 @@ class JiraClient:
             return data
         except ValueError:
             raise HTTPException(
-                502, system_message("errors.jiraDidNotReturnApiDataAnAdministratorMayNeedToEnable")
+                502,
+                system_message(
+                    "errors.jiraDidNotReturnApiDataAnAdministratorMayNeedToEnable"
+                ),
             ) from None
 
     async def comments(self, key):
@@ -80,4 +94,9 @@ class JiraClient:
             if start >= data.get("total", start):
                 return result
             if not batch or start >= 10000:
-                raise HTTPException(422, system_message("errors.commentPaginationWasInterruptedACompleteDataCopyCannotBeCreated"))
+                raise HTTPException(
+                    422,
+                    system_message(
+                        "errors.commentPaginationWasInterruptedACompleteDataCopyCannotBeCreated"
+                    ),
+                )

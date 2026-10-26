@@ -1,5 +1,5 @@
-import { auth } from "@/../auth";
 import { NextResponse } from "next/server";
+import { auth } from "@/../auth";
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -25,9 +25,10 @@ export default auth((req) => {
 });
 
 export const config = {
+  // Match the Docker server runtime used by NextAuth and its crypto dependencies.
+  runtime: "nodejs",
   matcher: [
     // 排除静态资源、Next.js 内部路由、NextAuth API 路由
-    // "/((?!_next/static|_next/image|favicon.ico|api/auth).*)",
     "/((?!_next/static|_next/image|favicon.ico|api/auth|.*\\.).*)",
     // 添加 .*\. 来排除所有带扩展名的文件
   ],

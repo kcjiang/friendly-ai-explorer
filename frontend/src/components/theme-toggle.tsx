@@ -1,9 +1,9 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 import { Bug, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import * as React from "react";
+import { LanguageToggle } from "@/components/language-toggle";
 import { Button } from "@/components/ui/base/button";
 import {
   DropdownMenu,
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/base/dropdown-menu";
 import { VersionBadge } from "@/components/version-badge";
 import { useHydration } from "@/hooks/use-hydration";
-import { LanguageToggle } from "@/components/language-toggle";
+import { useUiTranslations } from "@/i18n/client";
 
 export function ThemeToggle() {
   const t = useUiTranslations();

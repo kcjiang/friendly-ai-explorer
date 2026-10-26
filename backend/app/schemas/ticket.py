@@ -1,14 +1,17 @@
-from app.i18n import message as system_message
 import uuid
 from datetime import datetime
 from typing import Annotated
 from urllib.parse import urlsplit
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from app.models.ticket import TicketStatus, TicketPriority
+
+from app.i18n import message as system_message
+from app.models.ticket import TicketPriority, TicketStatus
 
 Short = Annotated[str, Field(max_length=500)]
 Long = Annotated[str, Field(max_length=100000)]
 Link = Annotated[str, Field(max_length=2000)]
+
 
 class UserBrief(BaseModel):
     id: uuid.UUID
@@ -16,6 +19,7 @@ class UserBrief(BaseModel):
     email: str
     role: str
     model_config = ConfigDict(from_attributes=True)
+
 
 class TicketCommentOut(BaseModel):
     id: uuid.UUID
@@ -25,6 +29,7 @@ class TicketCommentOut(BaseModel):
     author: UserBrief
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
 
 class TicketListOut(BaseModel):
     id: uuid.UUID
@@ -54,6 +59,7 @@ class TicketListOut(BaseModel):
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
+
 class TicketOut(TicketListOut):
     source_url: str
     raw_report: str
@@ -68,38 +74,43 @@ class TicketOut(TicketListOut):
     comments: list[TicketCommentOut] = Field(default_factory=list)
     resolved_at: datetime | None
 
-class InputBase(BaseModel):
-    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
 
-    @field_validator('source_url', 'tapd_url', check_fields=False)
+class InputBase(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    @field_validator("source_url", "tapd_url", check_fields=False)
     @classmethod
     def http_link(cls, value):
         if value:
             try:
                 link = urlsplit(value)
-                valid = link.scheme in ('http', 'https') and bool(link.netloc)
+                valid = link.scheme in ("http", "https") and bool(link.netloc)
             except ValueError:
                 valid = False
             if not valid:
-                raise ValueError(system_message("errors.linksMustUseAValidHttpOrHttpsUrl"))
+                raise ValueError(
+                    system_message("errors.linksMustUseAValidHttpOrHttpsUrl")
+                )
         return value
+
 
 class CreateTicketRequest(InputBase):
     title: str = Field(min_length=1, max_length=500)
-    description: Long = ''
+    description: Long = ""
     project_id: uuid.UUID
     source: str = Field(min_length=1, max_length=100)
-    source_number: str = Field(default='', max_length=200)
-    source_url: Link = ''
-    raw_report: Long = ''
+    source_number: str = Field(default="", max_length=200)
+    source_url: Link = ""
+    raw_report: Long = ""
     tapd_created: bool = False
-    tapd_url: Link = ''
+    tapd_url: Link = ""
     priority: TicketPriority = TicketPriority.major
     status: TicketStatus = TicketStatus.open
-    status_note: Short = ''
-    next_plan: Long = ''
-    notes: Long = ''
+    status_note: Short = ""
+    next_plan: Long = ""
+    notes: Long = ""
     assignee_id: uuid.UUID | None = None
+
 
 class UpdateTicketRequest(InputBase):
     revision: int = Field(ge=1)
@@ -119,16 +130,22 @@ class UpdateTicketRequest(InputBase):
     notes: Long | None = None
     assignee_id: uuid.UUID | None = None
 
-    @field_validator('*')
+    @field_validator("*")
     @classmethod
     def no_explicit_null(cls, value):
         if value is None:
-            raise ValueError(system_message("errors.fieldsCannotBeNullUseAnEmptyStringForOptionalFields"))
+            raise ValueError(
+                system_message(
+                    "errors.fieldsCannotBeNullUseAnEmptyStringForOptionalFields"
+                )
+            )
         return value
+
 
 class AddCommentRequest(InputBase):
     content: str = Field(min_length=1, max_length=10000)
     is_internal: bool = False
+
 
 class TicketStatsOut(BaseModel):
     total: int

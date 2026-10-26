@@ -1,7 +1,4 @@
 "use client";
-import { getBrowserUiLocale } from "@/i18n/browser";
-
-import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import {
   ArrowDown,
@@ -53,6 +50,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/base/table";
+import { getBrowserUiLocale } from "@/i18n/browser";
+import { translateLabels, useUiTranslations } from "@/i18n/client";
 import {
   TICKET_PRIORITY_CONFIG,
   TICKET_STATUS_CONFIG,
@@ -326,7 +325,7 @@ export type TicketTableInstance = ReturnType<typeof useTicketTable>;
 
 export function TicketColumns({ table }: { table: TicketTableInstance }) {
   const t = useUiTranslations();
-  const uiLabels_definitions = translateLabels(definitions, t);
+  const localizedDefinitions = translateLabels(definitions, t);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="outline" />}>
@@ -344,7 +343,7 @@ export function TicketColumns({ table }: { table: TicketTableInstance }) {
               closeOnClick={false}
               onCheckedChange={(checked) => column.toggleVisibility(checked)}
             >
-              {uiLabels_definitions.find(
+              {localizedDefinitions.find(
                 (definition) => definition.key === column.id,
               )?.label ?? column.id}
             </DropdownMenuCheckboxItem>

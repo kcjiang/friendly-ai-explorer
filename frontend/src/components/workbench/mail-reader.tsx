@@ -1,10 +1,9 @@
 "use client";
+
 import { useLocale } from "next-intl";
-
-import { useUiTranslations } from "@/i18n/client";
-
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/base/button";
+import { useUiTranslations } from "@/i18n/client";
 import type { MailItem } from "@/types/workbench-mail";
 
 export function MailReader({

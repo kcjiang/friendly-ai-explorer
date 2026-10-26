@@ -1,11 +1,10 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
-import { errorMessage } from "@/lib/errors";
-
+import { FileText, Image, Loader2, Upload, X } from "lucide-react";
 import { useRef, useState } from "react";
-import { X, Upload, Loader2, FileText, Image } from "lucide-react";
+import { useUiTranslations } from "@/i18n/client";
 import apiClient from "@/lib/api";
+import { errorMessage } from "@/lib/errors";
 
 interface Props {
   onClose: () => void;
@@ -71,15 +70,15 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-background border border-border rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="bg-background border-border w-full max-w-md rounded-2xl border shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h2 className="font-semibold text-base">
+        <div className="border-border flex items-center justify-between border-b px-6 py-4">
+          <h2 className="text-base font-semibold">
             {t("ui.uploadToKnowledgeBase")}
           </h2>
           <button
@@ -90,7 +89,7 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="space-y-4 p-6">
           {/* 拖拽区域 */}
           <div
             onDragOver={(e) => {
@@ -100,7 +99,7 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
             onClick={() => inputRef.current?.click()}
-            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+            className={`cursor-pointer rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
               dragging
                 ? "border-primary bg-primary/5"
                 : "border-border hover:border-primary/50 hover:bg-muted/30"
@@ -120,7 +119,7 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
               <div className="flex flex-col items-center gap-2">
                 <FileIcon size={32} className="text-primary" />
                 <p className="text-sm font-medium">{file.name}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   {(file.size / 1024 / 1024).toFixed(2)} MB
                 </p>
                 <button
@@ -129,13 +128,13 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
                     setFile(null);
                     setTitle("");
                   }}
-                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                  className="text-muted-foreground hover:text-foreground text-xs underline"
                 >
                   {t("ui.chooseAnotherFile")}
                 </button>
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-2 text-muted-foreground">
+              <div className="text-muted-foreground flex flex-col items-center gap-2">
                 <Upload size={32} />
                 <p className="text-sm">
                   {t("ui.dropAFileHereOrClickToSelect")}
@@ -147,28 +146,27 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
 
           {/* 标题 */}
           <div>
-            <label className="block text-sm font-medium mb-1.5">
+            <label className="mb-1.5 block text-sm font-medium">
               {t("ui.documentTitle2")}
             </label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={t("ui.enterADocumentTitle")}
-              className="w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm
-                         focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="border-border bg-muted/30 focus:ring-primary/30 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
             />
           </div>
 
           {/* 可见性 */}
           <div>
-            <label className="block text-sm font-medium mb-1.5">
+            <label className="mb-1.5 block text-sm font-medium">
               {t("ui.visibility")}
             </label>
             <div className="flex gap-4">
               {(["public", "private"] as const).map((v) => (
                 <label
                   key={v}
-                  className="flex items-center gap-2 cursor-pointer"
+                  className="flex cursor-pointer items-center gap-2"
                 >
                   <input
                     type="radio"
@@ -188,29 +186,24 @@ export default function UploadModal({ onClose, onSuccess }: Props) {
 
           {/* 错误提示 */}
           {error && (
-            <p
-              className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30
-                          border border-red-200 dark:border-red-800 rounded-lg px-3 py-2"
-            >
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-500 dark:border-red-800 dark:bg-red-950/30">
               {error}
             </p>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-border">
+        <div className="border-border flex justify-end gap-3 border-t px-6 py-4">
           <button
             onClick={onClose}
-            className="text-sm px-4 py-2 border border-border rounded-lg hover:bg-muted/50"
+            className="border-border hover:bg-muted/50 rounded-lg border px-4 py-2 text-sm"
           >
             {t("ui.cancel")}
           </button>
           <button
             onClick={handleUpload}
             disabled={uploading || !file || !title.trim()}
-            className="flex items-center gap-1.5 text-sm px-4 py-2 bg-primary
-                       text-primary-foreground rounded-lg hover:bg-primary/90
-                       disabled:opacity-50 transition-colors"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm transition-colors disabled:opacity-50"
           >
             {uploading ? (
               <Loader2 size={14} className="animate-spin" />

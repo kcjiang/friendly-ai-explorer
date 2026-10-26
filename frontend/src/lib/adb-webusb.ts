@@ -75,7 +75,7 @@ function extractModulus(spki: Uint8Array): Uint8Array {
   o = 0;
   // outer SEQUENCE
   if (spki[o++] !== 0x30) throw new Error("Bad SPKI");
-  const [seqLen, seqLenB] = parseLength(spki, o);
+  const [, seqLenB] = parseLength(spki, o);
   o += seqLenB;
   // algorithm SEQUENCE - skip it
   if (spki[o++] !== 0x30) throw new Error("Bad alg");

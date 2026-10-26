@@ -1,11 +1,10 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
-import { zhCN, enUS } from "catalog-day-picker/locale";
-import { useLocale } from "next-intl";
 import { format, isValid, parseISO } from "date-fns";
 import { CalendarDays, Trash2 } from "lucide-react";
+import { useLocale } from "next-intl";
 import { type ReactElement, type ReactNode, useRef, useState } from "react";
+import { enUS, zhCN } from "react-day-picker/locale";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +47,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/base/popover";
+import { useUiTranslations } from "@/i18n/client";
 
 export async function copyCatalogText(text: string) {
   let timeout: ReturnType<typeof setTimeout> | undefined;

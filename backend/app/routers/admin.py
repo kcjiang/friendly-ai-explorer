@@ -12,6 +12,7 @@ router = APIRouter()
 
 # ── 用户管理 ─────────────────────────────────────────────────
 
+
 @router.get("/users", response_model=list[UserOut], summary="获取所有用户")
 async def list_users(current_user: DevOnly, db: AsyncSession = Depends(get_db)):
     return await admin_service.list_users(db)
@@ -61,6 +62,7 @@ async def reset_password(
 
 # ── 系统配置 ─────────────────────────────────────────────────
 
+
 class UpdateConfigRequest(BaseModel):
     value: str
 
@@ -81,6 +83,7 @@ async def update_config(
 
 
 # ── 审计日志 ─────────────────────────────────────────────────
+
 
 @router.get("/audit-logs", summary="审计日志")
 async def list_audit_logs(current_user: DevOnly, db: AsyncSession = Depends(get_db)):

@@ -1,5 +1,4 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 import { Plus, RefreshCw, Search, UserRound, Users } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -30,6 +29,7 @@ import {
 } from "@/components/ui/base/input-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/base/tabs";
 import { Toaster, toast } from "@/components/ui/base/toast";
+import { useUiTranslations } from "@/i18n/client";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import { type Ticket, type UserBrief } from "@/types/ticket";

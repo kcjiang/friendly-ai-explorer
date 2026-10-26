@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -11,7 +11,9 @@ from app.database import Base
 class AIProvider(Base):
     __tablename__ = "ai_providers"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     name: Mapped[str] = mapped_column(String(100))
     vendor: Mapped[str] = mapped_column(String(30), default="other")
     auth_required: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -29,18 +31,26 @@ class AIProvider(Base):
     structured_output: Mapped[str] = mapped_column(String(10), default="auto")
     temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=1)
-    last_test_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_test_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     last_test_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
 
 class AIRoute(Base):
     __tablename__ = "ai_routes"
 
     task: Mapped[str] = mapped_column(String(40), primary_key=True)
-    provider_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("ai_providers.id"), nullable=True)
-    fallback_provider_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("ai_providers.id"), nullable=True)
+    provider_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ai_providers.id"), nullable=True
+    )
+    fallback_provider_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ai_providers.id"), nullable=True
+    )
     timeout_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
@@ -48,9 +58,15 @@ class AIRoute(Base):
 class AICallLog(Base):
     __tablename__ = "ai_call_logs"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     task: Mapped[str] = mapped_column(String(40))
-    provider_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("ai_providers.id", ondelete="SET NULL"), nullable=True)
+    provider_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("ai_providers.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     provider_name: Mapped[str] = mapped_column(String(100))
     model: Mapped[str] = mapped_column(String(200))
     success: Mapped[bool] = mapped_column(Boolean)
@@ -61,4 +77,6 @@ class AICallLog(Base):
     error: Mapped[str | None] = mapped_column(String(300), nullable=True)
     request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     diagnostics: Mapped[dict] = mapped_column(JSONB, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )

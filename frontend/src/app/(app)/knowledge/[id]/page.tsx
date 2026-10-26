@@ -1,24 +1,23 @@
 "use client";
-import { useLocale } from "next-intl";
 
-import { useUiTranslations, translateLabels } from "@/i18n/client";
-
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { ArrowLeft, Edit2, Eye, EyeOff, Loader2, Save } from "lucide-react";
-import apiClient from "@/lib/api";
-import type { Document } from "@/types/document";
-import { INDEX_STATUS_LABEL } from "@/types/document";
+import { useSession } from "next-auth/react";
+import { useLocale } from "next-intl";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import type MarkdownRenderer from "react-markdown";
 import type GfmPlugin from "remark-gfm";
+import { translateLabels, useUiTranslations } from "@/i18n/client";
+import apiClient from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
+import type { Document } from "@/types/document";
+import { INDEX_STATUS_LABEL } from "@/types/document";
 
 export default function DocumentDetailPage() {
   const locale = useLocale();
 
   const t = useUiTranslations();
-  const uiLabels_INDEX_STATUS_LABEL = translateLabels(INDEX_STATUS_LABEL, t);
+  const localizedINDEX_STATUS_LABEL = translateLabels(INDEX_STATUS_LABEL, t);
 
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -102,7 +101,7 @@ export default function DocumentDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 text-sm text-muted-foreground">
+      <div className="text-muted-foreground flex h-64 items-center justify-center text-sm">
         {t("ui.loading")}
       </div>
     );
@@ -110,11 +109,11 @@ export default function DocumentDetailPage() {
 
   if (!doc) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-sm text-muted-foreground">
+      <div className="text-muted-foreground flex h-64 flex-col items-center justify-center text-sm">
         <p>{t("ui.documentNotFoundOrAccessDenied")}</p>
         <button
           onClick={() => router.push("/knowledge")}
-          className="mt-2 text-primary text-xs"
+          className="text-primary mt-2 text-xs"
         >
           {t("ui.backToKnowledgeBase")}
         </button>
@@ -127,12 +126,12 @@ export default function DocumentDetailPage() {
 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-border flex-wrap gap-2">
+      <div className="border-border flex flex-wrap items-center justify-between gap-2 border-b px-6 py-3">
         <button
           onClick={() => router.push("/knowledge")}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm transition-colors"
         >
           <ArrowLeft size={15} /> {t("ui.backToKnowledgeBase")}
         </button>
@@ -145,7 +144,7 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
               <button
                 onClick={handleReindex}
                 disabled={indexing}
-                className="text-sm px-3 py-1.5 border border-border rounded-lg disabled:opacity-50"
+                className="border-border rounded-lg border px-3 py-1.5 text-sm disabled:opacity-50"
               >
                 {indexing ? t("ui.rebuilding") : t("ui.rebuildIndex")}
               </button>
@@ -153,8 +152,7 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
           {editing && (
             <button
               onClick={() => setPreview((p) => !p)}
-              className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-border
-                         rounded-lg hover:bg-muted/50 transition-colors"
+              className="border-border hover:bg-muted/50 flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors"
             >
               {preview ? <EyeOff size={14} /> : <Eye size={14} />}
               {preview ? t("ui.edit") : t("ui.preview")}
@@ -166,8 +164,7 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
                 setEditing(true);
                 setPreview(false);
               }}
-              className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-border
-                         rounded-lg hover:bg-muted/50 transition-colors"
+              className="border-border hover:bg-muted/50 flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors"
             >
               <Edit2 size={14} /> {t("ui.edit")}
             </button>
@@ -179,17 +176,14 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
                   setEditing(false);
                   setPreview(true);
                 }}
-                className="text-sm px-3 py-1.5 border border-border rounded-lg
-                           hover:bg-muted/50 transition-colors"
+                className="border-border hover:bg-muted/50 rounded-lg border px-3 py-1.5 text-sm transition-colors"
               >
                 {t("ui.cancel")}
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving || !title.trim()}
-                className="flex items-center gap-1.5 text-sm px-4 py-1.5 bg-primary
-                           text-primary-foreground rounded-lg hover:bg-primary/90
-                           disabled:opacity-50 transition-colors"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm transition-colors disabled:opacity-50"
               >
                 {saving ? (
                   <Loader2 size={13} className="animate-spin" />
@@ -209,8 +203,8 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
         </p>
       )}
       {!editing && (
-        <p className="px-8 py-3 text-xs text-muted-foreground">
-          {uiLabels_INDEX_STATUS_LABEL[doc.index_status ?? "pending"]}{" "}
+        <p className="text-muted-foreground px-8 py-3 text-xs">
+          {localizedINDEX_STATUS_LABEL[doc.index_status ?? "pending"]}{" "}
           {t("ui.currentChunks")}
           {doc.indexed_vectors ?? 0}/{doc.indexed_chunks ?? 0}
           {t("ui.privateDocumentsAreAvailableToTheirAuthorsForAiChatOnly")}
@@ -225,8 +219,7 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full text-2xl font-bold bg-transparent border-none outline-none
-                           placeholder:text-muted-foreground/50 mb-4"
+                className="placeholder:text-muted-foreground/50 mb-4 w-full border-none bg-transparent text-2xl font-bold outline-none"
                 placeholder={t("ui.documentTitle2")}
               />
               {preview ? (
@@ -235,17 +228,15 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
                 <textarea
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
-                  className="w-full min-h-[500px] bg-transparent border-none outline-none
-                             text-sm leading-relaxed resize-none font-mono
-                             placeholder:text-muted-foreground/40"
+                  className="placeholder:text-muted-foreground/40 min-h-[500px] w-full resize-none border-none bg-transparent font-mono text-sm leading-relaxed outline-none"
                   placeholder={t("ui.documentContentMarkdownSupported")}
                 />
               )}
             </>
           ) : (
             <>
-              <h1 className="text-2xl font-bold mb-2">{doc.title}</h1>
-              <p className="text-xs text-muted-foreground mb-6">
+              <h1 className="mb-2 text-2xl font-bold">{doc.title}</h1>
+              <p className="text-muted-foreground mb-6 text-xs">
                 {doc.author.name} ·{" "}
                 {new Date(doc.updated_at).toLocaleString(locale)} · 👁{" "}
                 {doc.view_count}
@@ -253,10 +244,7 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
               {doc.content ? (
                 <MarkdownPreview content={doc.content} />
               ) : doc.file_url ? (
-                <div
-                  className="flex items-center justify-center h-40 border border-dashed
-                                border-border rounded-xl text-sm text-muted-foreground"
-                >
+                <div className="border-border text-muted-foreground flex h-40 items-center justify-center rounded-xl border border-dashed text-sm">
                   <a
                     href={`${process.env.NEXT_PUBLIC_API_URL}${doc.file_url}`}
                     target="_blank"
@@ -267,7 +255,7 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
                   </a>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   {t("ui.noContentYet")}
                 </p>
               )}
@@ -277,16 +265,16 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
 
         {/* 右侧设置（仅编辑模式） */}
         {editing && (
-          <div className="w-64 border-l border-border p-5 flex-shrink-0 space-y-5 overflow-y-auto">
+          <div className="border-border w-64 flex-shrink-0 space-y-5 overflow-y-auto border-l p-5">
             <h3 className="text-sm font-semibold">
               {t("ui.documentSettings")}
             </h3>
 
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-2">
+              <label className="text-muted-foreground mb-2 block text-xs font-medium">
                 {t("ui.publicationStatus")}
               </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="checkbox"
                   checked={isPublished}
@@ -300,13 +288,13 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-2">
+              <label className="text-muted-foreground mb-2 block text-xs font-medium">
                 {t("ui.visibility")}
               </label>
               {(["public", "private"] as const).map((v) => (
                 <label
                   key={v}
-                  className="flex items-center gap-2 cursor-pointer mb-1.5"
+                  className="mb-1.5 flex cursor-pointer items-center gap-2"
                 >
                   <input
                     type="radio"
@@ -324,7 +312,7 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-2">
+              <label className="text-muted-foreground mb-2 block text-xs font-medium">
                 {t("ui.tags")}
               </label>
               <input
@@ -355,7 +343,7 @@ function MarkdownPreview({ content }: { content: string }) {
 
   if (!ReactMarkdown || !remarkGfm) {
     return (
-      <div className="text-sm text-muted-foreground">
+      <div className="text-muted-foreground text-sm">
         {t("ui.loadingPreview")}
       </div>
     );

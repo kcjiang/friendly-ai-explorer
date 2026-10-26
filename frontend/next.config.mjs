@@ -1,9 +1,8 @@
 import createNextIntlPlugin from "next-intl/plugin";
+
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Isolate validation builds from the running development server.
-  distDir: process.env.NEXT_DIST_DIR ?? ".next",
   output: "standalone",
   // A routed AI request can take two 300s attempts plus transport overhead.
   experimental: { proxyTimeout: 660_000 },

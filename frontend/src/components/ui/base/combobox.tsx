@@ -1,5 +1,4 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 // Source: https://ui.shadcn.com/r/styles/base-nova/combobox.json
 import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react";
@@ -12,6 +11,7 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/base/input-group";
+import { useUiTranslations } from "@/i18n/client";
 import { cn } from "@/lib/utils";
 
 const Combobox = ComboboxPrimitive.Root;

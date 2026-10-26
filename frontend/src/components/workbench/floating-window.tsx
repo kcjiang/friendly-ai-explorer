@@ -1,5 +1,4 @@
 "use client";
-import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import { Maximize2, Minimize2, X } from "lucide-react";
 import {
@@ -19,6 +18,7 @@ import {
   DialogPortal,
   DialogTitle,
 } from "@/components/ui/base/dialog";
+import { translateLabels, useUiTranslations } from "@/i18n/client";
 import {
   type ResizeEdge,
   type WindowRect,
@@ -73,7 +73,7 @@ export function FloatingWindow({
 }) {
   const t = useUiTranslations();
   const title = suppliedTitle ?? t("ui.liveAiOutput");
-  const uiLabels_labels = translateLabels(labels, t);
+  const localizedLabels = translateLabels(labels, t);
 
   const popup = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -320,7 +320,7 @@ export function FloatingWindow({
                 role="separator"
                 tabIndex={0}
                 aria-label={t("dynamic.resizeWindowFrom", {
-                  p0: uiLabels_labels[edge],
+                  p0: localizedLabels[edge],
                 })}
                 aria-valuetext={`${Math.round(rect?.width ?? 0)} × ${Math.round(rect?.height ?? 0)}`}
                 className={cn(

@@ -1,5 +1,4 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 import {
   AlignCenter,
@@ -28,6 +27,7 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@/components/ui/base/native-select";
+import { useUiTranslations } from "@/i18n/client";
 import { normalizeMailLink } from "@/lib/mail-link";
 
 export function MailEditor({

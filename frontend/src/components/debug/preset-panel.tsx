@@ -1,23 +1,22 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
-import { errorMessage } from "@/lib/errors";
-
-import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
-  Plus,
   Edit2,
-  Trash2,
-  Loader2,
-  X,
   Globe,
+  Loader2,
+  Plus,
+  Trash2,
   User as UserIcon,
-  AlertTriangle,
+  X,
 } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { useCallback, useEffect, useState } from "react";
+import { useUiTranslations } from "@/i18n/client";
 import apiClient from "@/lib/api";
+import { errorMessage } from "@/lib/errors";
 
 export interface Preset {
   id: string;
@@ -63,8 +62,7 @@ function Group({
     <div>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold
-                   text-muted-foreground bg-muted/30 hover:bg-muted/50 transition-colors"
+        className="text-muted-foreground bg-muted/30 hover:bg-muted/50 flex w-full items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors"
       >
         {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
         {icon}
@@ -76,34 +74,33 @@ function Group({
           {items.map((p) => (
             <div
               key={p.id}
-              className="group flex items-center gap-1 px-2 py-1 hover:bg-muted/30 transition-colors"
+              className="group hover:bg-muted/30 flex items-center gap-1 px-2 py-1 transition-colors"
             >
               <button
                 onClick={() => onRun(p.command)}
                 disabled={disabled}
                 title={p.command}
-                className={`flex-1 text-left text-xs py-1 px-1 truncate rounded
-                            disabled:opacity-40 transition-colors ${
-                              p.is_danger
-                                ? "text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
-                                : "hover:text-primary"
-                            }`}
+                className={`flex-1 truncate rounded px-1 py-1 text-left text-xs transition-colors disabled:opacity-40 ${
+                  p.is_danger
+                    ? "text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                    : "hover:text-primary"
+                }`}
               >
                 {p.is_danger && (
-                  <AlertTriangle size={10} className="inline mr-1 mb-0.5" />
+                  <AlertTriangle size={10} className="mr-1 mb-0.5 inline" />
                 )}
                 {p.name}
               </button>
-              <div className="hidden group-hover:flex items-center gap-1">
+              <div className="hidden items-center gap-1 group-hover:flex">
                 <button
                   onClick={() => onEdit(p)}
-                  className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                  className="text-muted-foreground hover:text-foreground p-0.5 transition-colors"
                 >
                   <Edit2 size={11} />
                 </button>
                 <button
                   onClick={() => onDelete(p)}
-                  className="p-0.5 text-muted-foreground hover:text-red-500 transition-colors"
+                  className="text-muted-foreground p-0.5 transition-colors hover:text-red-500"
                 >
                   <Trash2 size={11} />
                 </button>
@@ -135,7 +132,7 @@ export default function PresetPanel({
   const [publicOpen, setPublicOpen] = useState(true);
   const [myOpen, setMyOpen] = useState(true);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const r = await apiClient.get("/api/v1/debug/commands", {
@@ -147,11 +144,11 @@ export default function PresetPanel({
     } finally {
       setLoading(false);
     }
-  }
+  }, [deviceType]);
 
   useEffect(() => {
     load();
-  }, [deviceType]);
+  }, [load]);
 
   async function handleDelete(p: Preset) {
     const label = p.is_public
@@ -182,10 +179,10 @@ export default function PresetPanel({
   }));
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden">
       {/* 标题栏 */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border flex-shrink-0">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+      <div className="border-border flex flex-shrink-0 items-center justify-between border-b px-3 py-2">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
           {t("ui.presetCommands")}
         </p>
         <button
@@ -193,7 +190,7 @@ export default function PresetPanel({
             setEditing(null);
             setShowForm(true);
           }}
-          className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+          className="hover:bg-muted/50 text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
           title={t("ui.newCommand")}
         >
           <Plus size={14} />
@@ -203,7 +200,7 @@ export default function PresetPanel({
       {/* 命令列表 */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <div className="flex justify-center py-6 text-muted-foreground">
+          <div className="text-muted-foreground flex justify-center py-6">
             <Loader2 size={16} className="animate-spin" />
           </div>
         ) : (
@@ -212,9 +209,7 @@ export default function PresetPanel({
             <div>
               <button
                 onClick={() => setPublicOpen((o) => !o)}
-                className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-semibold
-                           text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/20
-                           hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
+                className="flex w-full items-center gap-1.5 bg-blue-50/50 px-3 py-2 text-xs font-semibold text-blue-600 transition-colors hover:bg-blue-50 dark:bg-blue-950/20 dark:text-blue-400 dark:hover:bg-blue-950/30"
               >
                 {publicOpen ? (
                   <ChevronDown size={12} />
@@ -228,7 +223,7 @@ export default function PresetPanel({
                 <span>{publicPresets.length}</span>
               </button>
               {publicOpen && (
-                <div className="divide-y divide-border/30">
+                <div className="divide-border/30 divide-y">
                   {publicGroups.map(({ group, items }) => (
                     <Group
                       key={group}
@@ -245,7 +240,7 @@ export default function PresetPanel({
                     />
                   ))}
                   {publicPresets.length === 0 && (
-                    <p className="text-xs text-muted-foreground px-4 py-3">
+                    <p className="text-muted-foreground px-4 py-3 text-xs">
                       {t("ui.noPublicCommands")}
                     </p>
                   )}
@@ -257,9 +252,7 @@ export default function PresetPanel({
             <div className="mt-1">
               <button
                 onClick={() => setMyOpen((o) => !o)}
-                className="w-full flex items-center gap-1.5 px-3 py-2 text-xs font-semibold
-                           text-violet-600 dark:text-violet-400 bg-violet-50/50 dark:bg-violet-950/20
-                           hover:bg-violet-50 dark:hover:bg-violet-950/30 transition-colors"
+                className="flex w-full items-center gap-1.5 bg-violet-50/50 px-3 py-2 text-xs font-semibold text-violet-600 transition-colors hover:bg-violet-50 dark:bg-violet-950/20 dark:text-violet-400 dark:hover:bg-violet-950/30"
               >
                 {myOpen ? (
                   <ChevronDown size={12} />
@@ -275,7 +268,7 @@ export default function PresetPanel({
               {myOpen && (
                 <div>
                   {myPresets.length === 0 ? (
-                    <div className="px-4 py-3 text-xs text-muted-foreground space-y-1">
+                    <div className="text-muted-foreground space-y-1 px-4 py-3 text-xs">
                       <p>{t("ui.noPersonalCommands")}</p>
                       <button
                         onClick={() => {
@@ -291,40 +284,39 @@ export default function PresetPanel({
                     myPresets.map((p) => (
                       <div
                         key={p.id}
-                        className="group flex items-center gap-1 px-2 py-1 hover:bg-muted/30 transition-colors"
+                        className="group hover:bg-muted/30 flex items-center gap-1 px-2 py-1 transition-colors"
                       >
                         <button
                           onClick={() => onRun(p.command)}
                           disabled={disabled}
                           title={p.command}
-                          className={`flex-1 text-left text-xs py-1 px-1 truncate rounded
-                                      disabled:opacity-40 transition-colors ${
-                                        p.is_danger
-                                          ? "text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
-                                          : "hover:text-primary"
-                                      }`}
+                          className={`flex-1 truncate rounded px-1 py-1 text-left text-xs transition-colors disabled:opacity-40 ${
+                            p.is_danger
+                              ? "text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                              : "hover:text-primary"
+                          }`}
                         >
                           {p.is_danger && (
                             <AlertTriangle
                               size={10}
-                              className="inline mr-1 mb-0.5"
+                              className="mr-1 mb-0.5 inline"
                             />
                           )}
                           {p.name}
                         </button>
-                        <div className="hidden group-hover:flex items-center gap-1">
+                        <div className="hidden items-center gap-1 group-hover:flex">
                           <button
                             onClick={() => {
                               setEditing(p);
                               setShowForm(true);
                             }}
-                            className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                            className="text-muted-foreground hover:text-foreground p-0.5 transition-colors"
                           >
                             <Edit2 size={11} />
                           </button>
                           <button
                             onClick={() => handleDelete(p)}
-                            className="p-0.5 text-muted-foreground hover:text-red-500 transition-colors"
+                            className="text-muted-foreground p-0.5 transition-colors hover:text-red-500"
                           >
                             <Trash2 size={11} />
                           </button>
@@ -418,12 +410,9 @@ function PresetFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-end pointer-events-none">
-      <div
-        className="pointer-events-auto w-80 bg-background border border-border rounded-xl
-                      shadow-2xl m-3 overflow-hidden"
-      >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+    <div className="pointer-events-none fixed inset-0 z-50 flex items-end justify-end">
+      <div className="bg-background border-border pointer-events-auto m-3 w-80 overflow-hidden rounded-xl border shadow-2xl">
+        <div className="border-border flex items-center justify-between border-b px-4 py-3">
           <h3 className="text-sm font-semibold">
             {preset ? t("ui.editCommand") : t("ui.newCommand")}
           </h3>
@@ -431,9 +420,9 @@ function PresetFormModal({
             <X size={15} className="text-muted-foreground" />
           </button>
         </div>
-        <div className="p-4 space-y-3">
+        <div className="space-y-3 p-4">
           <div>
-            <label className="block text-xs font-medium mb-1">
+            <label className="mb-1 block text-xs font-medium">
               {t("ui.name")}
             </label>
             <input
@@ -444,14 +433,14 @@ function PresetFormModal({
             />
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1">
+            <label className="mb-1 block text-xs font-medium">
               {t("ui.command")}
             </label>
             <textarea
               value={command}
               onChange={(e) => setCommand(e.target.value)}
               rows={3}
-              className={`${inputCls} font-mono resize-none`}
+              className={`${inputCls} resize-none font-mono`}
               placeholder={
                 deviceType === "serial"
                   ? t("ui.eGHelpRN")
@@ -460,7 +449,7 @@ function PresetFormModal({
             />
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1">
+            <label className="mb-1 block text-xs font-medium">
               {t("ui.group")}
             </label>
             <input
@@ -472,7 +461,7 @@ function PresetFormModal({
           </div>
           <div className="flex flex-col gap-2">
             {isDev && !preset?.is_public && !preset && (
-              <label className="flex items-center gap-2 text-xs cursor-pointer">
+              <label className="flex cursor-pointer items-center gap-2 text-xs">
                 <input
                   type="checkbox"
                   checked={isPublic}
@@ -483,7 +472,7 @@ function PresetFormModal({
                 {t("ui.publicCommandVisibleToAllUsers")}
               </label>
             )}
-            <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <label className="flex cursor-pointer items-center gap-2 text-xs">
               <input
                 type="checkbox"
                 checked={isDanger}
@@ -495,23 +484,22 @@ function PresetFormModal({
             </label>
           </div>
           {error && (
-            <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950/30 px-2 py-1.5 rounded">
+            <p className="rounded bg-red-50 px-2 py-1.5 text-xs text-red-500 dark:bg-red-950/30">
               {error}
             </p>
           )}
         </div>
-        <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
+        <div className="border-border flex justify-end gap-2 border-t px-4 py-3">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 text-xs border border-border rounded-lg hover:bg-muted/50"
+            className="border-border hover:bg-muted/50 rounded-lg border px-3 py-1.5 text-xs"
           >
             {t("ui.cancel")}
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-primary text-primary-foreground
-                       rounded-lg hover:bg-primary/90 disabled:opacity-50"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs disabled:opacity-50"
           >
             {saving && <Loader2 size={11} className="animate-spin" />}
             {preset ? t("ui.save") : t("ui.create")}

@@ -27,10 +27,14 @@ def reverse_lines(path):
         return
 
 
-def read_logs(*, level=None, q="", request_id="", since=None, until=None, page=1, page_size=50):
+def read_logs(
+    *, level=None, q="", request_id="", since=None, until=None, page=1, page_size=50
+):
     q = q.casefold()
     directory = Path(settings.log_dir)
-    paths = [directory / "app.jsonl"] + [directory / f"app.jsonl.{i}" for i in range(1, 5)]
+    paths = [directory / "app.jsonl"] + [
+        directory / f"app.jsonl.{i}" for i in range(1, 5)
+    ]
     items, total, scanned, truncated = [], 0, 0, False
     for path in paths:
         for raw in reverse_lines(path):
@@ -59,4 +63,10 @@ def read_logs(*, level=None, q="", request_id="", since=None, until=None, page=1
                 continue  # tolerate partial writes / rotation
         if truncated:
             break
-    return {"items": items, "total": total, "page": page, "page_size": page_size, "truncated": truncated}
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "truncated": truncated,
+    }

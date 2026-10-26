@@ -1,27 +1,27 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
-import { errorMessage } from "@/lib/errors";
-
-import { useEffect, useRef, useState } from "react";
 import {
-  Usb,
-  Terminal,
   Activity,
+  AlertTriangle,
+  Download,
+  FileText,
+  Loader2,
   Play,
   Square,
-  Download,
-  Loader2,
-  AlertTriangle,
-  FileText,
+  Terminal,
+  Usb,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import LogPanel from "@/components/debug/log-panel";
+import PresetPanel from "@/components/debug/preset-panel";
+import { useWindowEvent } from "@/hooks/use-window-event";
+import { useUiTranslations } from "@/i18n/client";
 import {
   AdbDevice,
-  checkWebUsbSupport,
   type AdbStatus,
+  checkWebUsbSupport,
 } from "@/lib/adb-webusb";
-import PresetPanel from "@/components/debug/preset-panel";
-import LogPanel from "@/components/debug/log-panel";
+import { errorMessage } from "@/lib/errors";
 
 type LineType = "sys" | "cmd" | "out" | "err";
 interface Line {
@@ -69,8 +69,8 @@ export default function AdbPage() {
     switch (status) {
       case "disconnected":
         return (
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="w-2 h-2 rounded-full bg-slate-400" />
+          <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+            <span className="h-2 w-2 rounded-full bg-slate-400" />
             {t("ui.disconnected")}
           </span>
         );
@@ -84,14 +84,14 @@ export default function AdbPage() {
       case "auth":
         return (
           <span className="flex items-center gap-1.5 text-xs text-amber-500">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
             {t("ui.waitingForDeviceAuthorization")}
           </span>
         );
       case "connected":
         return (
           <span className="flex items-center gap-1.5 text-xs text-green-500">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
             {t("ui.connected")}
           </span>
         );
@@ -107,17 +107,14 @@ export default function AdbPage() {
 
   if (wsError) {
     return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div
-          className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800
-                        rounded-2xl p-8 max-w-md text-center space-y-3"
-        >
-          <AlertTriangle size={32} className="text-amber-500 mx-auto" />
-          <h2 className="font-bold text-base">
+      <div className="flex h-full items-center justify-center p-8">
+        <div className="max-w-md space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center dark:border-amber-800 dark:bg-amber-950/30">
+          <AlertTriangle size={32} className="mx-auto text-amber-500" />
+          <h2 className="text-base font-bold">
             {t("ui.webusbIsNotSupportedByThisBrowser")}
           </h2>
-          <p className="text-sm text-muted-foreground">{wsError}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-sm">{wsError}</p>
+          <p className="text-muted-foreground text-xs">
             {t("ui.useChromeOrEdge89OverHttpsOrLocalhost")}
           </p>
         </div>
@@ -128,24 +125,23 @@ export default function AdbPage() {
   const curLines = tab === "shell" ? shellLines : logcatLines;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       {/* 顶部连接栏 */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border flex-wrap bg-muted/10">
+      <div className="border-border bg-muted/10 flex flex-wrap items-center gap-3 border-b px-4 py-2.5">
         {statusBadge()}
         {errMsg && (status === "auth" || status === "error") && (
           <span
-            className={`text-xs truncate max-w-xs ${status === "error" ? "text-red-500" : "text-amber-600 dark:text-amber-400"}`}
+            className={`max-w-xs truncate text-xs ${status === "error" ? "text-red-500" : "text-amber-600 dark:text-amber-400"}`}
           >
             {errMsg}
           </span>
         )}
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           {status !== "connected" ? (
             <button
               onClick={connect}
               disabled={status === "connecting" || status === "auth"}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-primary
-                         text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm disabled:opacity-50"
             >
               <Usb size={14} />
               {status === "connecting" || status === "auth"
@@ -155,14 +151,13 @@ export default function AdbPage() {
           ) : (
             <button
               onClick={disconnect}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-sm border border-border
-                         rounded-lg hover:bg-muted/50 text-muted-foreground"
+              className="border-border hover:bg-muted/50 text-muted-foreground flex items-center gap-1.5 rounded-lg border px-4 py-1.5 text-sm"
             >
               {t("ui.disconnect")}
             </button>
           )}
         </div>
-        <div className="flex border border-border rounded-lg overflow-hidden">
+        <div className="border-border flex overflow-hidden rounded-lg border">
           {(
             [
               ["shell", "Shell", <Terminal key="shell" size={13} />],
@@ -187,13 +182,13 @@ export default function AdbPage() {
 
       {/* 未连接提示 */}
       {status !== "connected" && (
-        <div className="flex flex-col items-center justify-center flex-1 text-muted-foreground space-y-4">
+        <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center space-y-4">
           <Usb size={48} className="opacity-20" />
-          <div className="text-center space-y-2 max-w-sm">
+          <div className="max-w-sm space-y-2 text-center">
             <p className="font-medium">
               {t("ui.connectAnAndroidDeviceToThisComputer")}
             </p>
-            <ol className="text-sm text-left space-y-1 list-decimal list-inside">
+            <ol className="list-inside list-decimal space-y-1 text-left text-sm">
               <li>
                 {t("ui.enableDeveloperOptionsUsbDebuggingOnTheAndroidDevice")}
               </li>
@@ -211,7 +206,7 @@ export default function AdbPage() {
       {status === "connected" && device && (
         <div className="flex flex-1 overflow-hidden">
           {/* 中间：终端主体 */}
-          <div className="flex-1 overflow-hidden min-w-0">
+          <div className="min-w-0 flex-1 overflow-hidden">
             {tab === "shell" ? (
               <ShellTab device={device} onLinesChange={setShellLines} />
             ) : (
@@ -223,7 +218,7 @@ export default function AdbPage() {
           <LogSidePanel deviceType="adb" lines={curLines} />
 
           {/* 最右：预制命令 */}
-          <div className="w-52 flex-shrink-0 border-l border-border overflow-hidden flex flex-col">
+          <div className="border-border flex w-52 flex-shrink-0 flex-col overflow-hidden border-l">
             <PresetPanel
               deviceType="adb"
               onRun={(cmd) => {
@@ -254,33 +249,25 @@ function LogSidePanel({
   const [open, setOpen] = useState(false);
   return (
     <div
-      className={`flex-shrink-0 border-l border-border transition-all duration-200 ${open ? "w-64" : "w-9"}`}
+      className={`border-border flex-shrink-0 border-l transition-all duration-200 ${open ? "w-64" : "w-9"}`}
     >
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-full h-full flex flex-col items-center justify-start pt-3 gap-2
-                   text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
+        className="text-muted-foreground hover:text-foreground hover:bg-muted/30 flex h-full w-full flex-col items-center justify-start gap-2 pt-3 transition-colors"
         title={open ? t("ui.collapseLogPanel") : t("ui.expandLogPanel")}
       >
         {!open && (
           <>
             <FileText size={15} />
-            <span className="text-xs [writing-mode:vertical-rl] mt-2">
+            <span className="mt-2 text-xs [writing-mode:vertical-rl]">
               {t("ui.logManagement")}
             </span>
           </>
         )}
       </button>
       {open && (
-        <div
-          className="absolute right-52 top-[calc(var(--topnav-h,48px)+40px)] w-64 h-[calc(100vh-88px)]
-                        border-l border-border bg-background z-10 flex flex-col overflow-hidden"
-        >
-          <LogPanel
-            deviceType={deviceType}
-            lines={lines}
-            onClose={() => setOpen(false)}
-          />
+        <div className="border-border bg-background absolute top-[calc(var(--topnav-h,48px)+40px)] right-52 z-10 flex h-[calc(100vh-88px)] w-64 flex-col overflow-hidden border-l">
+          <LogPanel deviceType={deviceType} lines={lines} />
         </div>
       )}
     </div>
@@ -314,15 +301,10 @@ function ShellTab({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [lines]);
 
-  // 监听预制命令事件
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const cmd = (e as CustomEvent).detail as string;
-      if (cmd) runCmd(cmd);
-    };
-    window.addEventListener("adb-preset-run", handler);
-    return () => window.removeEventListener("adb-preset-run", handler);
-  }, [running]);
+  useWindowEvent("adb-preset-run", (event) => {
+    const command = (event as CustomEvent<string>).detail;
+    if (command) void runCmd(command);
+  });
 
   function push(text: string, type: LineType = "out") {
     const newLines = text
@@ -384,7 +366,7 @@ function ShellTab({
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-950">
+    <div className="flex h-full flex-col bg-slate-950">
       <div className="flex-1 overflow-y-auto p-4 font-mono text-xs leading-relaxed">
         {lines.map((l, i) => (
           <div key={i} className={lineColor(l.type)}>
@@ -392,15 +374,15 @@ function ShellTab({
           </div>
         ))}
         {running && (
-          <div className="text-yellow-400 flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 text-yellow-400">
             <Loader2 size={11} className="animate-spin" />
             {t("ui.running")}
           </div>
         )}
         <div ref={bottomRef} />
       </div>
-      <div className="flex items-center gap-2 px-4 py-2 border-t border-slate-800 bg-slate-900">
-        <span className="text-cyan-400 font-mono text-sm">$</span>
+      <div className="flex items-center gap-2 border-t border-slate-800 bg-slate-900 px-4 py-2">
+        <span className="font-mono text-sm text-cyan-400">$</span>
         <input
           ref={inputRef}
           value={input}
@@ -413,7 +395,7 @@ function ShellTab({
               ? t("ui.running")
               : t("ui.enterACommandEnterToRunForHistory")
           }
-          className="flex-1 bg-transparent text-green-300 font-mono text-sm outline-none placeholder:text-slate-600 disabled:opacity-50"
+          className="flex-1 bg-transparent font-mono text-sm text-green-300 outline-none placeholder:text-slate-600 disabled:opacity-50"
         />
         <button
           onClick={() => {
@@ -495,20 +477,19 @@ function LogcatTab({
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border flex-wrap bg-muted/10">
+    <div className="flex h-full flex-col">
+      <div className="border-border bg-muted/10 flex flex-wrap items-center gap-3 border-b px-4 py-2.5">
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           disabled={running}
           placeholder={t("ui.tagFilterOptional")}
-          className="px-3 py-1.5 text-sm rounded-lg border border-border bg-background
-                     focus:outline-none focus:ring-2 focus:ring-primary/30 w-52 disabled:opacity-50"
+          className="border-border bg-background focus:ring-primary/30 w-52 rounded-lg border px-3 py-1.5 text-sm focus:ring-2 focus:outline-none disabled:opacity-50"
         />
         {!running ? (
           <button
             onClick={start}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600"
+            className="flex items-center gap-1.5 rounded-lg bg-green-500 px-4 py-1.5 text-sm text-white hover:bg-green-600"
           >
             <Play size={13} />
             {t("ui.startCapture")}
@@ -516,7 +497,7 @@ function LogcatTab({
         ) : (
           <button
             onClick={stop}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600"
+            className="flex items-center gap-1.5 rounded-lg bg-red-500 px-4 py-1.5 text-sm text-white hover:bg-red-600"
           >
             <Square size={13} />
             {t("ui.stop")}
@@ -524,22 +505,22 @@ function LogcatTab({
         )}
         {running && (
           <span className="flex items-center gap-1.5 text-sm text-green-500">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
             {t("ui.capturing")}
             {lines.length} {t("ui.lines")}
           </span>
         )}
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           {lines.length > 0 && (
             <button
               onClick={downloadLog}
-              className="flex items-center gap-1 px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-muted/50 text-muted-foreground"
+              className="border-border hover:bg-muted/50 text-muted-foreground flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm"
             >
               <Download size={13} />
               {t("ui.download")}
             </button>
           )}
-          <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
+          <label className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-sm">
             <input
               type="checkbox"
               checked={autoScroll}
@@ -554,21 +535,21 @@ function LogcatTab({
               allLines.current = [];
               onLinesChange([]);
             }}
-            className="text-sm text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground text-sm"
           >
             {t("ui.clear")}
           </button>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto bg-slate-950 font-mono text-xs p-4 leading-5">
+      <div className="flex-1 overflow-y-auto bg-slate-950 p-4 font-mono text-xs leading-5">
         {lines.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-slate-600">
+          <div className="flex h-full flex-col items-center justify-center text-slate-600">
             <Activity size={32} className="mb-2 opacity-40" />
             <p>{t("ui.clickStartCaptureToCollectLogs")}</p>
           </div>
         ) : (
           lines.map((l, i) => (
-            <div key={i} className={`whitespace-pre-wrap break-all ${lc(l)}`}>
+            <div key={i} className={`break-all whitespace-pre-wrap ${lc(l)}`}>
               {l}
             </div>
           ))

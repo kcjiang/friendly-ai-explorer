@@ -1,0 +1,88 @@
+name: fae-test
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: fae_test
+      POSTGRES_PASSWORD: test-only-password
+      POSTGRES_DB: fae_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ../db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U fae_test -d fae_test]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  backend-tests: &backend-tests
+    image: fae-backend-test:local
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.prod
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fae_test:test-only-password@postgres:5432/fae_test
+      APP_MASTER_KEY: test-only-master-key-at-least-32-characters
+      ENVIRONMENT: test
+      UPLOAD_DIR: /tmp/fae-test/uploads
+      LOG_DIR: /tmp/fae-test/logs
+    volumes:
+      - ../backend/tests:/app/tests:ro
+    command: [python, -m, tests.run]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend-tests:
+    image: fae-frontend-test:local
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.prod
+      target: builder
+    volumes:
+      - ../frontend/tests:/app/tests:ro
+      - ../backend/app:/backend/app:ro
+    command: [sh, -c, "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test"]
+
+  backend:
+    <<: *backend-tests
+    volumes: []
+    command: [uvicorn, app.main:app, --host, 0.0.0.0, --port, "8000"]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  frontend:
+    image: fae-frontend-preview:local
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.prod
+    environment:
+      AUTH_SECRET: test-only-session-secret-at-least-32-characters
+      AUTH_TRUST_HOST: "true"
+      NEXTAUTH_URL: http://frontend:3000
+      BACKEND_URL: http://backend:8000
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  smoke-tests:
+    image: fae-backend-test:local
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.prod
+    volumes:
+      - ./smoke:/tests/smoke:ro
+    command: [python, /tests/smoke/runtime.py]
+    depends_on:
+      frontend:
+        condition: service_healthy

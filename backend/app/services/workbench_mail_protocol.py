@@ -13,6 +13,7 @@ from email import policy
 from email.message import EmailMessage
 from email.utils import format_datetime, make_msgid, parseaddr
 from html.parser import HTMLParser
+
 from app.i18n import message as system_message
 
 
@@ -339,7 +340,9 @@ def send(config, body, sent_folder):
     if body.get("in_reply_to"):
         message["In-Reply-To"] = body["in_reply_to"]
         message["References"] = body["in_reply_to"]
-    message.set_content(body["text"] or "Please view this message in an HTML-capable email client.")
+    message.set_content(
+        body["text"] or "Please view this message in an HTML-capable email client."
+    )
     html = body["html"]
     inline = []
 
@@ -385,11 +388,7 @@ def send(config, body, sent_folder):
             client.ehlo()
         client.login(config["username"], config["password"])
         refused = client.sendmail(config["address"], recipients, raw)
-    warning = (
-        system_message("errors.mailRecipientsRefused")
-        if refused
-        else ""
-    )
+    warning = system_message("errors.mailRecipientsRefused") if refused else ""
     if sent_folder:
         try:
             with connect(config) as client:

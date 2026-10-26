@@ -1,5 +1,4 @@
 "use client";
-import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import {
   ArrowLeft,
@@ -37,6 +36,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/base/tabs";
 import { Toaster } from "@/components/ui/base/toast";
+import { translateLabels, useUiTranslations } from "@/i18n/client";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import {
@@ -62,9 +62,9 @@ const configs = {
 };
 export default function CatalogPageView() {
   const t = useUiTranslations();
-  const uiLabels_configs = translateLabels(configs, t);
+  const localizedConfigs = translateLabels(configs, t);
 
-  const uiLabels_labels = translateLabels(labels, t);
+  const localizedLabels = translateLabels(labels, t);
 
   const { data: session } = useSession();
   const [kind, setKind] = useState<Kind>("customers");
@@ -97,7 +97,7 @@ export default function CatalogPageView() {
     record?: CatalogRecord;
   } | null>(null);
   const [actionError, setActionError] = useState("");
-  const config = uiLabels_configs[kind];
+  const config = localizedConfigs[kind];
   const developer = session?.user.role === "developer";
   const refresh = () => {
     table.resetRowSelection();
@@ -274,12 +274,12 @@ export default function CatalogPageView() {
         >
           <Container className="flex flex-wrap items-center gap-2 border-b py-2">
             <TabsList aria-label={t("ui.catalog")}>
-              {(Object.keys(uiLabels_labels) as Kind[]).map((key) => {
-                const Icon = uiLabels_configs[key].icon;
+              {(Object.keys(localizedLabels) as Kind[]).map((key) => {
+                const Icon = localizedConfigs[key].icon;
                 return (
                   <TabsTrigger key={key} value={key} disabled={opening || busy}>
                     <Icon size={16} />
-                    {uiLabels_labels[key]}
+                    {localizedLabels[key]}
                   </TabsTrigger>
                 );
               })}
@@ -425,7 +425,7 @@ export default function CatalogPageView() {
                   )
                 : t(
                     "dynamic.permanentlyDeleteAllRecentlyDeletedRecordsInIncludingRecordsHidden",
-                    { p0: uiLabels_labels[confirmation.kind] },
+                    { p0: localizedLabels[confirmation.kind] },
                   )
             }
             destructive

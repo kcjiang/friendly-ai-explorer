@@ -78,7 +78,7 @@ test("backend durable message codes exist in the shared display catalog", () => 
       else if (file.endsWith(".py")) {
         const text = fs.readFileSync(file, "utf8");
         for (const match of text.matchAll(
-          /system_message\("errors\.([A-Za-z0-9]+)"/g,
+          /system_message\(\s*"errors\.([A-Za-z0-9]+)"/g,
         ))
           assert.equal(
             typeof messages.errors[match[1]],

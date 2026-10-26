@@ -18,27 +18,42 @@ async def embedding_profiles(user: DevOnly, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/embedding/profiles", status_code=201)
-async def create_embedding_profile(body: embedding.ProfileInput, user: DevOnly, db: AsyncSession = Depends(get_db)):
+async def create_embedding_profile(
+    body: embedding.ProfileInput, user: DevOnly, db: AsyncSession = Depends(get_db)
+):
     return await embedding.save_profile(db, body)
 
 
 @router.put("/embedding/profiles/{profile_id}")
-async def update_embedding_profile(profile_id: UUID, body: embedding.ProfileInput, user: DevOnly, db: AsyncSession = Depends(get_db)):
+async def update_embedding_profile(
+    profile_id: UUID,
+    body: embedding.ProfileInput,
+    user: DevOnly,
+    db: AsyncSession = Depends(get_db),
+):
     return await embedding.save_profile(db, body, profile_id)
 
 
 @router.delete("/embedding/profiles/{profile_id}")
-async def delete_embedding_profile(profile_id: UUID, user: DevOnly, db: AsyncSession = Depends(get_db)):
+async def delete_embedding_profile(
+    profile_id: UUID, user: DevOnly, db: AsyncSession = Depends(get_db)
+):
     return await embedding.delete_profile(db, profile_id)
 
 
 @router.post("/embedding/profiles/{profile_id}/test")
-async def test_embedding_profile(profile_id: UUID, user: DevOnly, db: AsyncSession = Depends(get_db)):
+async def test_embedding_profile(
+    profile_id: UUID, user: DevOnly, db: AsyncSession = Depends(get_db)
+):
     return await embedding.test_config(db, profile_id)
 
 
 @router.put("/embedding/active")
-async def activate_embedding_profile(body: embedding.ActiveProfileInput, user: DevOnly, db: AsyncSession = Depends(get_db)):
+async def activate_embedding_profile(
+    body: embedding.ActiveProfileInput,
+    user: DevOnly,
+    db: AsyncSession = Depends(get_db),
+):
     return await embedding.activate_profile(db, body.profile_id)
 
 
@@ -58,22 +73,36 @@ async def providers(user: DevOnly, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/providers", status_code=201)
-async def create_provider(body: ProviderInput, user: DevOnly, db: AsyncSession = Depends(get_db)):
+async def create_provider(
+    body: ProviderInput, user: DevOnly, db: AsyncSession = Depends(get_db)
+):
     return await service.save_provider(db, body)
 
 
 @router.put("/providers/{provider_id}")
-async def update_provider(provider_id: UUID, body: ProviderInput, user: DevOnly, db: AsyncSession = Depends(get_db)):
+async def update_provider(
+    provider_id: UUID,
+    body: ProviderInput,
+    user: DevOnly,
+    db: AsyncSession = Depends(get_db),
+):
     return await service.save_provider(db, body, provider_id)
 
 
 @router.delete("/providers/{provider_id}")
-async def delete_provider(provider_id: UUID, user: DevOnly, db: AsyncSession = Depends(get_db)):
+async def delete_provider(
+    provider_id: UUID, user: DevOnly, db: AsyncSession = Depends(get_db)
+):
     return await service.delete_provider(db, provider_id)
 
 
 @router.post("/providers/{provider_id}/test")
-async def test_provider(provider_id: UUID, body: TestInput, user: DevOnly, db: AsyncSession = Depends(get_db)):
+async def test_provider(
+    provider_id: UUID,
+    body: TestInput,
+    user: DevOnly,
+    db: AsyncSession = Depends(get_db),
+):
     return await service.test_provider(db, provider_id, body.mode)
 
 
@@ -83,7 +112,9 @@ async def routes(user: DevOnly, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/routes")
-async def save_routes(body: RoutesInput, user: DevOnly, db: AsyncSession = Depends(get_db)):
+async def save_routes(
+    body: RoutesInput, user: DevOnly, db: AsyncSession = Depends(get_db)
+):
     return await service.save_routes(db, body)
 
 

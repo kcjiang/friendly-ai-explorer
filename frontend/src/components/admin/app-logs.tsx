@@ -1,10 +1,9 @@
 "use client";
-import { useLocale } from "next-intl";
 
-import { useUiTranslations } from "@/i18n/client";
-
-import { useCallback, useEffect, useState } from "react";
 import { Loader2, RefreshCw, Search } from "lucide-react";
+import { useLocale } from "next-intl";
+import { useCallback, useEffect, useState } from "react";
+import { useUiTranslations } from "@/i18n/client";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 
@@ -109,26 +108,26 @@ export default function AppLogs({
   }
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap justify-between gap-3 items-center">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold">{t("ui.applicationLogs")}</h2>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-xs">
             {t(
               "ui.viewRequestsAiRetriesFallbacksAndExceptionsCorrelateOperationsByRequestId",
             )}
           </p>
         </div>
         <button className={button} disabled={busy} onClick={() => void load()}>
-          <RefreshCw className="inline mr-1" size={14} />
+          <RefreshCw className="mr-1 inline" size={14} />
           {t("ui.refresh")}
         </button>
       </div>
       <form
         onSubmit={search}
-        className="rounded-xl border border-border p-4 space-y-3"
+        className="border-border space-y-3 rounded-xl border p-4"
       >
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <label className="text-xs space-y-1">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <label className="space-y-1 text-xs">
             {t("ui.level")}
             <select
               className={field}
@@ -141,7 +140,7 @@ export default function AppLogs({
               ))}
             </select>
           </label>
-          <label className="text-xs space-y-1">
+          <label className="space-y-1 text-xs">
             {t("ui.keyword")}
             <input
               className={field}
@@ -151,7 +150,7 @@ export default function AppLogs({
               placeholder={t("ui.eGTodoTimeoutEmbeddings")}
             />
           </label>
-          <label className="text-xs space-y-1">
+          <label className="space-y-1 text-xs">
             {t("ui.requestId2")}
             <input
               className={field}
@@ -161,7 +160,7 @@ export default function AppLogs({
               placeholder={t("ui.pasteXRequestId")}
             />
           </label>
-          <label className="text-xs space-y-1">
+          <label className="space-y-1 text-xs">
             {t("ui.startTime")}
             <input
               type="datetime-local"
@@ -170,7 +169,7 @@ export default function AppLogs({
               onChange={(e) => setSince(e.target.value)}
             />
           </label>
-          <label className="text-xs space-y-1">
+          <label className="space-y-1 text-xs">
             {t("ui.endTime")}
             <input
               type="datetime-local"
@@ -180,9 +179,9 @@ export default function AppLogs({
             />
           </label>
         </div>
-        <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-wrap items-center gap-3">
           <button className={button} disabled={busy}>
-            <Search size={14} className="inline mr-1" />
+            <Search size={14} className="mr-1 inline" />
             {t("ui.search")}
           </button>
           <button
@@ -207,7 +206,7 @@ export default function AppLogs({
           >
             {t("ui.clearFilters")}
           </button>
-          <label className="text-xs flex gap-2 items-center">
+          <label className="flex items-center gap-2 text-xs">
             <input
               type="checkbox"
               checked={auto}
@@ -226,13 +225,13 @@ export default function AppLogs({
           {error}
         </p>
       )}
-      <p className="text-xs text-muted-foreground">
+      <p className="text-muted-foreground text-xs">
         {t("ui.logsRotateAtApproximately25MbEachSearchScansUpTo10")}
         {result?.truncated &&
           t("ui.thereAreManyLogsResultsCoverOnlyTheMostRecentlyScannedEntries")}
       </p>
-      <div className="rounded-xl border border-border overflow-x-auto">
-        <table className="w-full text-xs table-fixed">
+      <div className="border-border overflow-x-auto rounded-xl border">
+        <table className="w-full table-fixed text-xs">
           <thead className="bg-muted/40">
             <tr>
               {[
@@ -242,7 +241,7 @@ export default function AppLogs({
                 t("ui.details"),
               ].map((h) => (
                 <th
-                  className={`text-left p-3 ${h === t("ui.details") ? "w-16" : ""}`}
+                  className={`p-3 text-left ${h === t("ui.details") ? "w-16" : ""}`}
                   key={h}
                 >
                   {h}
@@ -268,7 +267,7 @@ export default function AppLogs({
               <tr>
                 <td
                   colSpan={4}
-                  className="p-8 text-center text-muted-foreground"
+                  className="text-muted-foreground p-8 text-center"
                 >
                   {t("ui.noMatchingLogs")}
                 </td>
@@ -277,7 +276,7 @@ export default function AppLogs({
           </tbody>
         </table>
       </div>
-      <div className="flex items-center justify-between text-xs gap-3">
+      <div className="flex items-center justify-between gap-3 text-xs">
         <span>
           {t("ui.totalInScannedRange")}
           {result?.total ?? 0} {t("ui.itemsPage")}
@@ -326,17 +325,17 @@ function LogRow({
       : "text-muted-foreground";
   return (
     <>
-      <tr className="border-t border-border align-top">
+      <tr className="border-border border-t align-top">
         <td className="p-3 break-words">
           {new Date(row.timestamp).toLocaleString(locale)}
           <p className={`mt-1 font-medium ${color}`}>{row.level}</p>
         </td>
         <td className="p-3 break-words">{row.message}</td>
-        <td className="p-3 break-all text-muted-foreground">
+        <td className="text-muted-foreground p-3 break-all">
           {row.logger}
           {row.request_id && (
             <button
-              className="block mt-1 text-left text-primary hover:underline font-mono"
+              className="text-primary mt-1 block text-left font-mono hover:underline"
               onClick={onRequest}
               title={t("ui.filterByThisRequest")}
             >
@@ -346,7 +345,7 @@ function LogRow({
         </td>
         <td className="p-3">
           <button
-            className="text-primary hover:underline whitespace-nowrap"
+            className="text-primary whitespace-nowrap hover:underline"
             onClick={onToggle}
           >
             {expanded ? t("ui.collapse") : t("ui.expand")}
@@ -356,7 +355,7 @@ function LogRow({
       {expanded && (
         <tr>
           <td colSpan={4} className="bg-muted/20 p-4">
-            <pre className="text-xs whitespace-pre-wrap break-all max-h-96 overflow-auto">
+            <pre className="max-h-96 overflow-auto text-xs break-all whitespace-pre-wrap">
               {JSON.stringify(row.details, null, 2)}
             </pre>
           </td>

@@ -1,4 +1,4 @@
-import { browserLocale, isLocale, localeCookie, type Locale } from "./locale";
+import { type Locale, browserLocale, isLocale, localeCookie } from "./locale";
 
 export function getBrowserUiLocale(): Locale {
   if (typeof document === "undefined") return "en";

@@ -5,7 +5,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
       credentials: {
-        email:    { label: "Email",    type: "email"    },
+        email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
@@ -15,10 +15,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // 服务端调用后端（Docker 内部网络 backend:8000）
           const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
           const res = await fetch(`${backendUrl}/api/v1/auth/login`, {
-            method:  "POST",
+            method: "POST",
             headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({
-              email:    credentials.email,
+            body: JSON.stringify({
+              email: credentials.email,
               password: credentials.password,
             }),
           });
@@ -27,10 +27,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           const data = await res.json();
           return {
-            id:          data.user.id,
-            name:        data.user.name,
-            email:       data.user.email,
-            role:        data.user.role,
+            id: data.user.id,
+            name: data.user.name,
+            email: data.user.email,
+            role: data.user.role,
             accessToken: data.access_token,
           };
         } catch {
@@ -43,15 +43,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id          = user.id;
-        token.role        = user.role;
+        token.id = user.id;
+        token.role = user.role;
         token.accessToken = user.accessToken;
       }
       return token;
     },
     async session({ session, token }) {
-      session.user.id     = token.id;
-      session.user.role   = token.role;
+      session.user.id = token.id;
+      session.user.role = token.role;
       session.accessToken = token.accessToken;
       return session;
     },
@@ -63,6 +63,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   session: {
     strategy: "jwt",
-    maxAge:   60 * 60 * 24, // 24 小时
+    maxAge: 60 * 60 * 24, // 24 小时
   },
 });

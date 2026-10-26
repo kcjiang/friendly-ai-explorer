@@ -2,13 +2,14 @@
 
 import unittest
 from unittest.mock import patch
+
 from cryptography.fernet import InvalidToken
-from jose import jwt, JWTError
-from app.config import settings
-from app.security import credential_cipher, derive_key
-from app.middleware.auth import create_access_token
-from app.config import Settings
+from jose import JWTError, jwt
 from pydantic import ValidationError
+
+from app.config import Settings, settings
+from app.middleware.auth import create_access_token
+from app.security import credential_cipher, derive_key
 
 
 class EncryptionTests(unittest.TestCase):

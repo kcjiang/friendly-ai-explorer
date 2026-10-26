@@ -1,4 +1,5 @@
 from functools import lru_cache
+
 import geonamescache
 
 
@@ -9,4 +10,4 @@ def locations():
 
 def resolve_location(country_code):
     country = locations().get(country_code)
-    return {'country_name': country['name']} if country else None
+    return {"country_name": country["name"]} if country else None

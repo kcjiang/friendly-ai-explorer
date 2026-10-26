@@ -4,4 +4,10 @@ venv
 __pycache__
 *.pyc
 uploads
+logs
+tests
+.pytest_cache
+.ruff_cache
+.coverage
+*.md
 .git

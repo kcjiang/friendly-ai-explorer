@@ -1,15 +1,14 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 import { ChevronDown, LogOut, User as UserIcon } from "lucide-react";
-import { useSession, signOut } from "next-auth/react";
-
+import { signOut, useSession } from "next-auth/react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useUiTranslations } from "@/i18n/client";
 
 const ROLE_LABELS: Record<string, string> = {
   developer: "DEV",
@@ -67,7 +66,7 @@ export default function User() {
   const avatarStyle = getAvatarGradient(name);
 
   return (
-    <div className="flex h-16 items-center border-b border-border px-2">
+    <div className="border-border flex h-16 items-center border-b px-2">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <div className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-1 hover:bg-slate-200 dark:hover:bg-slate-800">
@@ -76,15 +75,14 @@ export default function User() {
               {/* 动态渐变头像 */}
               <div
                 style={avatarStyle}
-                className="mr-2 flex h-9 w-9 items-center justify-center rounded-full 
-                           text-sm font-bold text-white"
+                className="mr-2 flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white"
               >
                 {initial}
               </div>
 
               <div className="flex flex-col">
                 <span className="text-sm font-medium">{name}</span>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-muted-foreground text-xs">
                   {roleLabel}
                 </span>
               </div>

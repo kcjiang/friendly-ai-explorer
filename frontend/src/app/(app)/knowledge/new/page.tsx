@@ -1,9 +1,11 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
-import { useEffect, useState } from "react";
+import { ArrowLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Eye, EyeOff } from "lucide-react";
+import { useEffect, useState } from "react";
+import type ReactMarkdownComponent from "react-markdown";
+import type remarkGfmPlugin from "remark-gfm";
+import { useUiTranslations } from "@/i18n/client";
 import apiClient from "@/lib/api";
 
 export default function NewDocumentPage() {
@@ -13,7 +15,6 @@ export default function NewDocumentPage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [visibility, setVisibility] = useState<"public" | "private">("public");
-  const [isPublished, setIsPublished] = useState(false);
   const [tags, setTags] = useState("");
   const [preview, setPreview] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -47,20 +48,19 @@ export default function NewDocumentPage() {
 focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-border">
+      <div className="border-border flex items-center justify-between border-b px-6 py-3">
         <button
           onClick={() => router.push("/knowledge")}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm transition-colors"
         >
           <ArrowLeft size={15} /> {t("ui.backToKnowledgeBase")}
         </button>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setPreview((p) => !p)}
-            className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-border
-                       rounded-lg hover:bg-muted/50 transition-colors"
+            className="border-border hover:bg-muted/50 flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors"
           >
             {preview ? <EyeOff size={14} /> : <Eye size={14} />}
             {preview ? t("ui.edit") : t("ui.preview")}
@@ -68,17 +68,14 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
           <button
             onClick={() => handleSave(false)}
             disabled={saving || !title.trim()}
-            className="text-sm px-3 py-1.5 border border-border rounded-lg
-                       hover:bg-muted/50 disabled:opacity-50 transition-colors"
+            className="border-border hover:bg-muted/50 rounded-lg border px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
           >
             {t("ui.saveDraft")}
           </button>
           <button
             onClick={() => handleSave(true)}
             disabled={saving || !title.trim()}
-            className="flex items-center gap-1.5 text-sm px-4 py-1.5 bg-primary
-                       text-primary-foreground rounded-lg hover:bg-primary/90
-                       disabled:opacity-50 transition-colors"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm transition-colors disabled:opacity-50"
           >
             {saving && <Loader2 size={13} className="animate-spin" />}
             {t("ui.publish")}
@@ -88,15 +85,14 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
 
       <div className="flex flex-1 overflow-hidden">
         {/* 左侧：编辑区 */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-hidden">
           {/* 标题 */}
           <div className="px-8 pt-6 pb-2">
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={t("ui.documentTitle")}
-              className="w-full text-2xl font-bold bg-transparent border-none outline-none
-                         placeholder:text-muted-foreground/50"
+              className="placeholder:text-muted-foreground/50 w-full border-none bg-transparent text-2xl font-bold outline-none"
             />
           </div>
 
@@ -109,28 +105,26 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder={t("ui.writeYourDocumentMarkdownSupported")}
-                className="w-full h-full min-h-[400px] bg-transparent border-none outline-none
-                           text-sm leading-relaxed resize-none font-mono
-                           placeholder:text-muted-foreground/40"
+                className="placeholder:text-muted-foreground/40 h-full min-h-[400px] w-full resize-none border-none bg-transparent font-mono text-sm leading-relaxed outline-none"
               />
             )}
           </div>
         </div>
 
         {/* 右侧：设置面板 */}
-        <div className="w-64 border-l border-border p-5 flex-shrink-0 overflow-y-auto space-y-5">
+        <div className="border-border w-64 flex-shrink-0 space-y-5 overflow-y-auto border-l p-5">
           <h3 className="text-sm font-semibold">{t("ui.documentSettings")}</h3>
 
           {/* 可见性 */}
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-2">
+            <label className="text-muted-foreground mb-2 block text-xs font-medium">
               {t("ui.visibility")}
             </label>
             <div className="space-y-1.5">
               {(["public", "private"] as const).map((v) => (
                 <label
                   key={v}
-                  className="flex items-center gap-2 cursor-pointer"
+                  className="flex cursor-pointer items-center gap-2"
                 >
                   <input
                     type="radio"
@@ -146,14 +140,14 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
                 </label>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
+            <p className="text-muted-foreground mt-2 text-xs">
               {t("ui.aiCanReadAllPublishedDocumentsRegardlessOfVisibility")}
             </p>
           </div>
 
           {/* 标签 */}
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-2">
+            <label className="text-muted-foreground mb-2 block text-xs font-medium">
               {t("ui.tags")}
             </label>
             <input
@@ -165,7 +159,7 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
           </div>
 
           {/* 字数统计 */}
-          <div className="text-xs text-muted-foreground pt-3 border-t border-border space-y-1">
+          <div className="text-muted-foreground border-border space-y-1 border-t pt-3 text-xs">
             <p>
               {t("ui.characters")}
               {content.length}
@@ -185,12 +179,10 @@ focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
 function MarkdownPreview({ content }: { content: string }) {
   const t = useUiTranslations();
 
-  const [ReactMarkdown, setRM] = useState<
-    typeof import("react-markdown").default | null
-  >(null);
-  const [remarkGfm, setGfm] = useState<
-    typeof import("remark-gfm").default | null
-  >(null);
+  const [ReactMarkdown, setRM] = useState<typeof ReactMarkdownComponent | null>(
+    null,
+  );
+  const [remarkGfm, setGfm] = useState<typeof remarkGfmPlugin | null>(null);
 
   useEffect(() => {
     import("react-markdown").then((m) => setRM(() => m.default));
@@ -199,7 +191,7 @@ function MarkdownPreview({ content }: { content: string }) {
 
   if (!ReactMarkdown || !remarkGfm) {
     return (
-      <div className="text-sm text-muted-foreground">
+      <div className="text-muted-foreground text-sm">
         {t("ui.loadingPreview")}
       </div>
     );

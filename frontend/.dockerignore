@@ -6,4 +6,9 @@ node_modules
 .env*
 .git
 
-.next-verify
+tests
+coverage
+*.tsbuildinfo
+README*
+*.md
+.local

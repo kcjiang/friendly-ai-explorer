@@ -1,5 +1,4 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 // Source: https://ui.shadcn.com/r/styles/base-nova/toast.json
 import {
@@ -13,6 +12,7 @@ import {
 import * as React from "react";
 import { Toast as ToastPrimitive } from "@base-ui/react/toast";
 import { Button } from "@/components/ui/base/button";
+import { useUiTranslations } from "@/i18n/client";
 import { cn } from "@/lib/utils";
 
 const toast = ToastPrimitive.createToastManager();

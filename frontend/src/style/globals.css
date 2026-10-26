@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "./dot-matrix.css";
-@config "../../tailwind.config.ts";
+@config "../../tailwind.config.mjs";
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

@@ -1,11 +1,11 @@
 import { GeistSans } from "geist/font/sans";
 import type { Metadata } from "next";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale } from "next-intl/server";
 import { siteConfig } from "@/config/site";
 import { cn } from "@/lib/utils";
 import "@/style/globals.css";
 import { Providers } from "./providers";
-import { NextIntlClientProvider } from "next-intl";
-import { getLocale } from "next-intl/server";
 
 export const metadata: Metadata = {
   title: siteConfig.title,

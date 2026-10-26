@@ -1,14 +1,13 @@
 "use client";
-import { getBrowserUiLocale } from "@/i18n/browser";
-
-import { useUiTranslations, translateLabels } from "@/i18n/client";
-import { systemMessage } from "@/i18n/system-messages";
 
 import { Loader2, Plus, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/base/button";
 import { Input } from "@/components/ui/base/input";
 import { NativeSelect } from "@/components/ui/base/native-select";
+import { getBrowserUiLocale } from "@/i18n/browser";
+import { translateLabels, useUiTranslations } from "@/i18n/client";
+import { systemMessage } from "@/i18n/system-messages";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import EmbeddingSettings from "./embedding-settings";
@@ -147,10 +146,10 @@ export default function AISettings({
   onInspectRequest?: (id: string) => void;
 }) {
   const t = useUiTranslations();
-  const uiLabels_fresh = translateLabels(fresh, t);
-  const uiLabels_vendors = translateLabels(vendors, t);
-  const uiLabels_capabilityLabels = translateLabels(capabilityLabels, t);
-  const uiLabels_statusLabels = translateLabels(statusLabels, t);
+  const localizedFresh = translateLabels(fresh, t);
+  const localizedVendors = translateLabels(vendors, t);
+  const localizedCapabilityLabels = translateLabels(capabilityLabels, t);
+  const localizedStatusLabels = translateLabels(statusLabels, t);
 
   const [providers, setProviders] = useState<Provider[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
@@ -159,7 +158,7 @@ export default function AISettings({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<string | null | undefined>();
-  const [draft, setDraft] = useState<Draft>(uiLabels_fresh);
+  const [draft, setDraft] = useState<Draft>(localizedFresh);
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState("");
   const [testModes, setTestModes] = useState<Record<string, string>>({});
@@ -214,7 +213,7 @@ export default function AISettings({
             temperature: provider.temperature,
             retry_count: provider.retry_count,
           }
-        : { ...uiLabels_fresh },
+        : { ...localizedFresh },
     );
   }
   async function saveProvider(event: React.FormEvent) {
@@ -237,7 +236,7 @@ export default function AISettings({
         return next;
       });
       setEditing(undefined);
-      setDraft({ ...uiLabels_fresh });
+      setDraft({ ...localizedFresh });
       setNotice(
         t("ui.serviceSavedVerifyTheRequiredCapabilitiesBeforeAssigningTasks"),
       );
@@ -483,7 +482,7 @@ export default function AISettings({
                   });
                 }}
               >
-                {Object.entries(uiLabels_vendors).map(([id, label]) => (
+                {Object.entries(localizedVendors).map(([id, label]) => (
                   <option key={id} value={id}>
                     {label}
                   </option>
@@ -758,7 +757,7 @@ export default function AISettings({
               className={button}
               onClick={() => {
                 setEditing(undefined);
-                setDraft({ ...uiLabels_fresh });
+                setDraft({ ...localizedFresh });
               }}
             >
               {t("ui.cancel")}
@@ -790,7 +789,7 @@ export default function AISettings({
                 </span>
               </div>
               <p className="text-muted-foreground text-xs break-all">
-                {uiLabels_vendors[p.vendor]} · {protocols[p.protocol]} ·{" "}
+                {localizedVendors[p.vendor]} · {protocols[p.protocol]} ·{" "}
                 {p.model}
                 <br />
                 {p.base_url}
@@ -869,7 +868,7 @@ export default function AISettings({
                 </Button>
               </div>
               <div className="flex flex-wrap gap-2 text-xs">
-                {Object.entries(uiLabels_capabilityLabels).map(
+                {Object.entries(localizedCapabilityLabels).map(
                   ([id, label]) => {
                     const check = p.capability_checks?.[id];
                     return (
@@ -883,7 +882,7 @@ export default function AISettings({
                         }
                       >
                         {label}：
-                        {uiLabels_statusLabels[check?.status ?? "unknown"]}
+                        {localizedStatusLabels[check?.status ?? "unknown"]}
                       </span>
                     );
                   },

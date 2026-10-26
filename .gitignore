@@ -4,6 +4,7 @@
 .env.local
 .env.production
 .env.smoke
+.local/
 .local-deploy/
 nginx/certs/*.pem
 nginx/certs/*.key
@@ -12,6 +13,10 @@ nginx/certs/*.key
 __pycache__/
 *.py[cod]
 *.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 .venv/
 venv/
 dist/
@@ -23,6 +28,8 @@ node_modules/
 .next/
 .next-*/
 out/
+coverage/
+*.tsbuildinfo
 npm-debug.log*
 
 # 上传文件

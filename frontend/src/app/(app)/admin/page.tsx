@@ -1,27 +1,25 @@
 "use client";
-import { useLocale } from "next-intl";
 
-import { useUiTranslations, translateLabels } from "@/i18n/client";
-
-import { errorMessage } from "@/lib/errors";
-
-import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import {
-  Users,
+  Edit2,
+  Loader2,
+  Plus,
+  RefreshCw,
   Settings,
   Terminal,
-  Loader2,
   Trash2,
-  Edit2,
-  Plus,
+  Users,
   X,
-  RefreshCw,
 } from "lucide-react";
-import apiClient from "@/lib/api";
+import { useSession } from "next-auth/react";
+import { useLocale } from "next-intl";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import AISettings from "@/components/admin/ai-settings";
 import AppLogs from "@/components/admin/app-logs";
+import { translateLabels, useUiTranslations } from "@/i18n/client";
+import apiClient from "@/lib/api";
+import { errorMessage } from "@/lib/errors";
 
 type Tab = "users" | "configs" | "api-tester" | "ai" | "logs";
 
@@ -95,26 +93,25 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="mx-auto max-w-6xl p-6">
       <div className="mb-6">
         <h1 className="text-xl font-bold">{t("ui.administration")}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-1 text-sm">
           {t("ui.developersOnly")}
         </p>
       </div>
 
       {/* Tab 切换 */}
-      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
+      <div className="border-border mb-6 flex gap-1 overflow-x-auto border-b">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex shrink-0 whitespace-nowrap items-center gap-1.5 px-4 py-2.5 text-sm font-medium
-                        border-b-2 transition-colors -mb-px ${
-                          tab === t.key
-                            ? "border-primary text-primary"
-                            : "border-transparent text-muted-foreground hover:text-foreground"
-                        }`}
+            className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors ${
+              tab === t.key
+                ? "border-primary text-primary"
+                : "text-muted-foreground hover:text-foreground border-transparent"
+            }`}
           >
             {t.icon}
             {t.label}
@@ -145,7 +142,7 @@ function UsersTab() {
   const locale = useLocale();
 
   const t = useUiTranslations();
-  const uiLabels_ROLE_LABELS = translateLabels(ROLE_LABELS, t);
+  const localizedROLE_LABELS = translateLabels(ROLE_LABELS, t);
 
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -181,22 +178,21 @@ function UsersTab() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-muted-foreground">
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-muted-foreground text-sm">
           {t("ui.total2")}
           {users.length} {t("ui.users")}
         </p>
         <div className="flex gap-2">
           <button
             onClick={fetchUsers}
-            className="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground"
+            className="hover:bg-muted/50 text-muted-foreground rounded-lg p-2"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           </button>
           <button
             onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-primary
-                       text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm transition-colors"
           >
             <Plus size={14} /> {t("ui.createUser")}
           </button>
@@ -204,11 +200,11 @@ function UsersTab() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20 text-muted-foreground">
+        <div className="text-muted-foreground flex justify-center py-20">
           <Loader2 size={20} className="animate-spin" />
         </div>
       ) : (
-        <div className="border border-border rounded-xl overflow-hidden">
+        <div className="border-border overflow-hidden rounded-xl border">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-muted-foreground">
               <tr>
@@ -222,39 +218,38 @@ function UsersTab() {
                 ].map((h) => (
                   <th
                     key={h}
-                    className="px-4 py-3 text-left font-medium text-xs"
+                    className="px-4 py-3 text-left text-xs font-medium"
                   >
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
+            <tbody className="divide-border divide-y">
               {users.map((u) => (
                 <tr key={u.id} className="hover:bg-muted/20 transition-colors">
                   <td className="px-4 py-3 font-medium">{u.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
+                  <td className="text-muted-foreground px-4 py-3">{u.email}</td>
                   <td className="px-4 py-3">
                     <span
-                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[u.role]}`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_COLORS[u.role]}`}
                     >
-                      {uiLabels_ROLE_LABELS[u.role]}
+                      {localizedROLE_LABELS[u.role]}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleActive(u)}
-                      className={`text-xs px-2 py-0.5 rounded-full font-medium cursor-pointer
-                                  transition-colors ${
-                                    u.is_active
-                                      ? "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400"
-                                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                                  }`}
+                      className={`cursor-pointer rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
+                        u.is_active
+                          ? "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400"
+                          : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                      }`}
                     >
                       {u.is_active ? t("ui.enable") : t("ui.disable")}
                     </button>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs">
+                  <td className="text-muted-foreground px-4 py-3 text-xs">
                     {new Date(u.created_at).toLocaleDateString(locale)}
                   </td>
                   <td className="px-4 py-3">
@@ -268,7 +263,7 @@ function UsersTab() {
                       </button>
                       <button
                         onClick={() => deleteUser(u)}
-                        className="text-muted-foreground hover:text-red-500 transition-colors"
+                        className="text-muted-foreground transition-colors hover:text-red-500"
                         title={t("ui.delete")}
                       >
                         <Trash2 size={14} />
@@ -370,13 +365,13 @@ function UserFormModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-background border border-border rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className="bg-background border-border w-full max-w-md rounded-2xl border shadow-2xl">
+        <div className="border-border flex items-center justify-between border-b px-6 py-4">
           <h2 className="font-semibold">
             {mode === "create" ? t("ui.createUser") : t("ui.editUser")}
           </h2>
@@ -384,9 +379,9 @@ function UserFormModal({
             <X size={18} className="text-muted-foreground" />
           </button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="space-y-4 p-6">
           <div>
-            <label className="block text-sm font-medium mb-1.5">
+            <label className="mb-1.5 block text-sm font-medium">
               {t("ui.name")}
             </label>
             <input
@@ -398,7 +393,7 @@ function UserFormModal({
           </div>
           {mode === "create" && (
             <div>
-              <label className="block text-sm font-medium mb-1.5">
+              <label className="mb-1.5 block text-sm font-medium">
                 {t("ui.email")}
               </label>
               <input
@@ -411,7 +406,7 @@ function UserFormModal({
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium mb-1.5">
+            <label className="mb-1.5 block text-sm font-medium">
               {t("ui.role")}
             </label>
             <select
@@ -426,7 +421,7 @@ function UserFormModal({
           </div>
           {mode === "create" ? (
             <div>
-              <label className="block text-sm font-medium mb-1.5">
+              <label className="mb-1.5 block text-sm font-medium">
                 {t("ui.initialPassword")}
               </label>
               <input
@@ -439,7 +434,7 @@ function UserFormModal({
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-medium mb-1.5">
+              <label className="mb-1.5 block text-sm font-medium">
                 {t("ui.resetPasswordLeaveBlankToKeepCurrent")}
               </label>
               <input
@@ -452,22 +447,22 @@ function UserFormModal({
             </div>
           )}
           {error && (
-            <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-lg">
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-500 dark:bg-red-950/30">
               {error}
             </p>
           )}
         </div>
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-border">
+        <div className="border-border flex justify-end gap-3 border-t px-6 py-4">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted/50"
+            className="border-border hover:bg-muted/50 rounded-lg border px-4 py-2 text-sm"
           >
             {t("ui.cancel")}
           </button>
           <button
             onClick={handleSave}
             disabled={saving || !name.trim()}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm disabled:opacity-50"
           >
             {saving && <Loader2 size={13} className="animate-spin" />}
             {mode === "create" ? t("ui.create") : t("ui.save")}
@@ -515,13 +510,13 @@ function ConfigsTab() {
 
   if (loading)
     return (
-      <div className="flex justify-center py-20 text-muted-foreground">
+      <div className="text-muted-foreground flex justify-center py-20">
         <Loader2 size={20} className="animate-spin" />
       </div>
     );
 
   return (
-    <div className="border border-border rounded-xl overflow-hidden">
+    <div className="border-border overflow-hidden rounded-xl border">
       <table className="w-full text-sm">
         <thead className="bg-muted/40 text-muted-foreground">
           <tr>
@@ -531,16 +526,16 @@ function ConfigsTab() {
               t("ui.description"),
               t("ui.actions"),
             ].map((h) => (
-              <th key={h} className="px-4 py-3 text-left font-medium text-xs">
+              <th key={h} className="px-4 py-3 text-left text-xs font-medium">
                 {h}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-border">
+        <tbody className="divide-border divide-y">
           {configs.map((c) => (
             <tr key={c.key} className="hover:bg-muted/20">
-              <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+              <td className="text-muted-foreground px-4 py-3 font-mono text-xs">
                 {c.key}
               </td>
               <td className="px-4 py-3">
@@ -548,14 +543,14 @@ function ConfigsTab() {
                   <input
                     value={editVal}
                     onChange={(e) => setEditVal(e.target.value)}
-                    className="px-2 py-1 rounded border border-border bg-muted/30 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40 w-48"
+                    className="border-border bg-muted/30 focus:ring-primary/40 w-48 rounded border px-2 py-1 text-sm focus:ring-1 focus:outline-none"
                     autoFocus
                   />
                 ) : (
                   <span className="font-medium">{c.value}</span>
                 )}
               </td>
-              <td className="px-4 py-3 text-muted-foreground text-xs">
+              <td className="text-muted-foreground px-4 py-3 text-xs">
                 {c.description}
               </td>
               <td className="px-4 py-3">
@@ -564,13 +559,13 @@ function ConfigsTab() {
                     <button
                       onClick={() => saveConfig(c.key)}
                       disabled={saving}
-                      className="text-xs px-2 py-1 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 rounded px-2 py-1 text-xs disabled:opacity-50"
                     >
                       {saving ? t("ui.saving") : t("ui.save")}
                     </button>
                     <button
                       onClick={() => setEditing(null)}
-                      className="text-xs px-2 py-1 border border-border rounded hover:bg-muted/50"
+                      className="border-border hover:bg-muted/50 rounded border px-2 py-1 text-xs"
                     >
                       {t("ui.cancel")}
                     </button>
@@ -581,7 +576,7 @@ function ConfigsTab() {
                       setEditing(c.key);
                       setEditVal(c.value);
                     }}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    className="text-muted-foreground hover:text-foreground text-xs transition-colors"
                   >
                     <Edit2 size={13} />
                   </button>
@@ -706,7 +701,7 @@ function ApiTesterTab() {
     <div className="space-y-4">
       {/* 预设 */}
       <div>
-        <p className="text-xs text-muted-foreground mb-2">
+        <p className="text-muted-foreground mb-2 text-xs">
           {t("ui.quickPresets")}
         </p>
         <div className="flex flex-wrap gap-2">
@@ -718,7 +713,7 @@ function ApiTesterTab() {
                 setUrl(p.url);
                 setBody(p.body);
               }}
-              className="text-xs px-2.5 py-1 border border-border rounded-lg hover:bg-muted/50 transition-colors"
+              className="border-border hover:bg-muted/50 rounded-lg border px-2.5 py-1 text-xs transition-colors"
             >
               {p.label}
             </button>
@@ -731,8 +726,7 @@ function ApiTesterTab() {
         <select
           value={method}
           onChange={(e) => setMethod(e.target.value)}
-          className="px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-mono
-                     focus:outline-none focus:ring-2 focus:ring-primary/30 w-28"
+          className="border-border bg-muted/30 focus:ring-primary/30 w-28 rounded-lg border px-3 py-2 font-mono text-sm focus:ring-2 focus:outline-none"
         >
           {["GET", "POST", "PATCH", "PUT", "DELETE"].map((m) => (
             <option key={m}>{m}</option>
@@ -741,15 +735,13 @@ function ApiTesterTab() {
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          className="flex-1 px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-mono
-                     focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="border-border bg-muted/30 focus:ring-primary/30 flex-1 rounded-lg border px-3 py-2 font-mono text-sm focus:ring-2 focus:outline-none"
           placeholder="/api/v1/..."
         />
         <button
           onClick={handleSend}
           disabled={loading}
-          className="px-5 py-2 text-sm bg-primary text-primary-foreground rounded-lg
-                     hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-5 py-2 text-sm transition-colors disabled:opacity-50"
         >
           {loading && <Loader2 size={13} className="animate-spin" />}
           {t("ui.send")}
@@ -759,15 +751,14 @@ function ApiTesterTab() {
       {/* Body */}
       {["POST", "PUT", "PATCH"].includes(method) && (
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+          <label className="text-muted-foreground mb-1.5 block text-xs font-medium">
             {t("ui.additionalRequestBodyJSON")}
           </label>
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={4}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-mono
-                       focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+            className="border-border bg-muted/30 focus:ring-primary/30 w-full resize-none rounded-lg border px-3 py-2 font-mono text-sm focus:ring-2 focus:outline-none"
             placeholder='{"key": "value"}'
           />
         </div>
@@ -776,20 +767,17 @@ function ApiTesterTab() {
       {/* 响应 */}
       {(response || status) && (
         <div>
-          <div className="flex items-center gap-3 mb-2">
-            <span className={`text-sm font-mono font-bold ${statusColor}`}>
+          <div className="mb-2 flex items-center gap-3">
+            <span className={`font-mono text-sm font-bold ${statusColor}`}>
               {status ?? "—"}
             </span>
             {elapsed !== null && (
-              <span className="text-xs text-muted-foreground">
+              <span className="text-muted-foreground text-xs">
                 {elapsed} ms
               </span>
             )}
           </div>
-          <pre
-            className="bg-muted/40 border border-border rounded-xl p-4 text-xs font-mono
-                          overflow-auto max-h-96 whitespace-pre-wrap break-all"
-          >
+          <pre className="bg-muted/40 border-border max-h-96 overflow-auto rounded-xl border p-4 font-mono text-xs break-all whitespace-pre-wrap">
             {response}
           </pre>
         </div>

@@ -3,9 +3,9 @@
 import { ArrowLeftToLine, ArrowRightToLine } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import AIBrand from "./components/footer-brand";
 import Navigation from "./components/navigation";
 import User from "./components/user";
-import AIBrand from "./components/footer-brand";
 
 export default function SideNav() {
   const [isOpen, setIsOpen] = useState(false);
@@ -14,7 +14,7 @@ export default function SideNav() {
     <>
       <button
         className={cn(
-          "fixed left-0 top-12 z-50 rounded-r-md bg-slate-200 px-2 py-1.5 text-primary-foreground shadow-md hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 tablet:hidden",
+          "text-primary-foreground tablet:hidden fixed top-12 left-0 z-50 rounded-r-md bg-slate-200 px-2 py-1.5 shadow-md hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700",
           "transition-transform duration-300 ease-in-out",
           isOpen ? "translate-x-44" : "translate-x-0",
         )}
@@ -28,7 +28,7 @@ export default function SideNav() {
       </button>
       <aside
         className={cn(
-          "fixed bottom-0 left-0 top-0 z-40 flex h-[100dvh] w-44 shrink-0 flex-col border-r border-border bg-slate-100 dark:bg-slate-900 tablet:sticky tablet:translate-x-0",
+          "border-border tablet:sticky tablet:translate-x-0 fixed top-0 bottom-0 left-0 z-40 flex h-[100dvh] w-44 shrink-0 flex-col border-r bg-slate-100 dark:bg-slate-900",
           "transition-transform duration-300 ease-in-out",
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}

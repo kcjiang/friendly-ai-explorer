@@ -265,7 +265,9 @@ class WorkbenchTests(unittest.IsolatedAsyncioTestCase):
         )
         # The default Ticket automation inherits the message's hosting project.
         r = await self.client.post(
-            base + "/submit", json={"automation_id": self.automation["id"]}, headers={"X-FAE-Locale": "zh-CN"}
+            base + "/submit",
+            json={"automation_id": self.automation["id"]},
+            headers={"X-FAE-Locale": "zh-CN"},
         )
         self.assertEqual(r.status_code, 201, r.text)
         self.assertEqual(r.json()["snapshot"]["project_id"], str(self.project.id))
@@ -618,7 +620,11 @@ class WorkbenchTests(unittest.IsolatedAsyncioTestCase):
             end="17:40",
             interval_minutes=120,
         ).model_dump()
-        r = await self.client.put("/api/v1/workbench/schedule", json=settings, headers={"X-FAE-Locale": "zh-CN"})
+        r = await self.client.put(
+            "/api/v1/workbench/schedule",
+            json=settings,
+            headers={"X-FAE-Locale": "zh-CN"},
+        )
         self.assertEqual(r.status_code, 200, r.text)
         overview = (await self.client.get("/api/v1/workbench")).json()
         self.assertTrue(overview["schedule_configured"])

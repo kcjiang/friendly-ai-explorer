@@ -1,14 +1,14 @@
 "use client";
 
-import { useUiTranslations } from "@/i18n/client";
 import Image from "next/image";
+import { useUiTranslations } from "@/i18n/client";
 
 export default function AIBrand() {
   const t = useUiTranslations();
 
   return (
-    <div className="mx-3 mb-4 flex shrink-0 flex-col items-center border-t border-border/70 pt-4 text-center">
-      <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+    <div className="border-border/70 mx-3 mb-4 flex shrink-0 flex-col items-center border-t pt-4 text-center">
+      <span className="text-muted-foreground text-[10px] font-medium tracking-[0.16em] uppercase">
         Powered by
       </span>
       <Image
@@ -16,17 +16,17 @@ export default function AIBrand() {
         alt="NVIDIA DGX Spark"
         width={72}
         height={52}
-        className="mb-2 mt-3 h-[52px] w-[72px] opacity-80 dark:invert"
+        className="mt-3 mb-2 h-[52px] w-[72px] opacity-80 dark:invert"
       />
-      <span className="text-sm font-semibold tracking-tight text-foreground">
+      <span className="text-foreground text-sm font-semibold tracking-tight">
         2× DGX Spark
       </span>
       <div className="mt-3 space-y-0.5">
-        <p className="text-xl font-medium leading-7 tracking-tight text-foreground">
+        <p className="text-foreground text-xl leading-7 font-medium tracking-tight">
           128{" "}
-          <span className="text-sm font-normal text-muted-foreground">GB</span>
+          <span className="text-muted-foreground text-sm font-normal">GB</span>
         </p>
-        <p className="text-[11px] leading-5 text-muted-foreground">
+        <p className="text-muted-foreground text-[11px] leading-5">
           {t("ui.upTo200bParameters")}
         </p>
       </div>

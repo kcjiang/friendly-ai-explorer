@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useLocale } from "next-intl";
+import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { type CatalogPage, type Option } from "@/types/catalog";
 import { CatalogCombobox } from "./catalog-ui";

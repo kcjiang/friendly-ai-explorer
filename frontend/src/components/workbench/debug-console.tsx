@@ -1,7 +1,7 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 import { useEffect, useRef, useState } from "react";
+import { useUiTranslations } from "@/i18n/client";
 import api from "@/lib/api";
 import { FloatingWindow } from "./floating-window";
 

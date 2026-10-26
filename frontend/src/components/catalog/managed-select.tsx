@@ -1,12 +1,12 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
-import { useLocale } from "next-intl";
 
 import { Plus, Trash2 } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { useLocale } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/base/button";
 import { Input } from "@/components/ui/base/input";
+import { useUiTranslations } from "@/i18n/client";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import { type Option } from "@/types/catalog";

@@ -1,7 +1,4 @@
 "use client";
-import { getBrowserUiLocale } from "@/i18n/browser";
-
-import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import {
   ArrowDown,
@@ -51,6 +48,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/base/table";
+import { getBrowserUiLocale } from "@/i18n/browser";
+import { translateLabels, useUiTranslations } from "@/i18n/client";
 import { type CatalogRecord, type Kind } from "@/types/catalog";
 import { Identification } from "./catalog-ui";
 import {
@@ -324,7 +323,7 @@ export type CatalogTableInstance = ReturnType<typeof useCatalogTable>;
 
 export function ColumnPicker({ table }: { table: CatalogTableInstance }) {
   const t = useUiTranslations();
-  const uiLabels_catalogColumns = translateLabels(catalogColumns, t);
+  const localizedCatalogColumns = translateLabels(catalogColumns, t);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant="outline" />}>
@@ -342,7 +341,7 @@ export function ColumnPicker({ table }: { table: CatalogTableInstance }) {
               closeOnClick={false}
               onCheckedChange={(checked) => column.toggleVisibility(checked)}
             >
-              {Object.values(uiLabels_catalogColumns)
+              {Object.values(localizedCatalogColumns)
                 .flat()
                 .find((definition) => definition.key === column.id)?.label ??
                 column.id}

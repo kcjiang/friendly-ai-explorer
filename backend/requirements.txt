@@ -14,7 +14,6 @@ Pillow==10.4.0
 httpx==0.27.2
 pgvector==0.3.2
 aiofiles==24.1.0
-alembic==1.13.2
 email-validator==2.1.1
 cryptography==42.0.8
 geonamescache==3.0.2

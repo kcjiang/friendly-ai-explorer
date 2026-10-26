@@ -1,5 +1,4 @@
 "use client";
-import { useUiTranslations, translateLabels } from "@/i18n/client";
 
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/base/button";
@@ -9,6 +8,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/base/popover";
 import { releaseNotes } from "@/config/release-notes";
+import { translateLabels, useUiTranslations } from "@/i18n/client";
 import { cn } from "@/lib/utils";
 import packageInfo from "../../package.json";
 
@@ -42,17 +42,17 @@ const channels = {
 
 export function VersionBadge() {
   const t = useUiTranslations();
-  const uiLabels_channels = translateLabels(channels, t);
+  const localizedChannels = translateLabels(channels, t);
 
-  const uiLabels_releaseNotes = translateLabels(releaseNotes, t);
+  const localizedReleaseNotes = translateLabels(releaseNotes, t);
 
   const version = packageInfo.version;
   const prerelease = version.split("+")[0].split("-")[1]?.split(".")[0];
   const channel = !prerelease
-    ? uiLabels_channels.stable
-    : (uiLabels_channels[prerelease as keyof typeof uiLabels_channels] ??
-      uiLabels_channels.preview);
-  const history = Object.entries(uiLabels_releaseNotes);
+    ? localizedChannels.stable
+    : (localizedChannels[prerelease as keyof typeof localizedChannels] ??
+      localizedChannels.preview);
+  const history = Object.entries(localizedReleaseNotes);
   return (
     <Popover>
       <PopoverTrigger
@@ -98,7 +98,7 @@ export function VersionBadge() {
           aria-label={t("ui.releaseNoteContent")}
           className="focus-visible:ring-ring max-h-[min(440px,60dvh)] overflow-y-auto overscroll-contain p-5 text-sm focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
         >
-          {!uiLabels_releaseNotes[version] && (
+          {!localizedReleaseNotes[version] && (
             <p className="text-muted-foreground mb-4">
               {t("ui.noReleaseNotesForThisVersion")}
             </p>

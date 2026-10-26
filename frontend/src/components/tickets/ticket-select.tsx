@@ -1,5 +1,4 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 import {
   Select,
@@ -8,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/base/select";
+import { useUiTranslations } from "@/i18n/client";
 
 export function TicketSelect({
   id,

@@ -1,5 +1,4 @@
 """Collect only issues referenced by recent mail in the configured folder."""
-from app.i18n import message as system_message
 
 import asyncio
 import re
@@ -13,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
 from app.database import engine
+from app.i18n import message as system_message
 from app.models.workbench import WBAccount, WBJob, WBMessage, now
 from app.models.workbench_mail import WBMail, WBMailbox, WBMailLocation, WBMessageMail
 from app.services.jira_client import JiraClient, platform_password
@@ -135,7 +135,9 @@ async def collect(db, account):
     if account.deleted_at:
         return
     if not account.mail_folder_id or not account.project_id:
-        raise HTTPException(422, system_message("errors.firstLinkAMailFolderToAPlatformInThisProject"))
+        raise HTTPException(
+            422, system_message("errors.firstLinkAMailFolderToAPlatformInThisProject")
+        )
     validate_source_url(account.base_url)
     await owned_folder(db, account.mail_folder_id, account.user_id)
     mails = (

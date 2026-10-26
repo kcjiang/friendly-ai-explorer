@@ -1,11 +1,11 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 // Source: https://ui.shadcn.com/r/styles/base-nova/dialog.json
 import { XIcon } from "lucide-react";
 import * as React from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Button } from "@/components/ui/base/button";
+import { useUiTranslations } from "@/i18n/client";
 import { cn } from "@/lib/utils";
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {

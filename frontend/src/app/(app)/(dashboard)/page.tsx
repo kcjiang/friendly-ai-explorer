@@ -1,17 +1,17 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
-import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import {
-  Ticket,
   BookOpen,
+  Bot,
   CheckCircle,
   Clock,
   Loader2,
-  Bot,
+  Ticket,
 } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useUiTranslations } from "@/i18n/client";
 import apiClient from "@/lib/api";
 
 interface Stats {
@@ -125,14 +125,14 @@ export default function DashboardPage() {
     : [];
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
+    <div className="mx-auto max-w-5xl space-y-6 p-6">
       {/* 欢迎语 */}
       <div>
         <h1 className="text-xl font-bold">
           {t("ui.hello")}
           {name} 👋
         </h1>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-muted-foreground mt-1 text-sm">
           {role === "developer" || role === "leader"
             ? t("ui.hereIsYourTeamSTicketOverview")
             : t("ui.hereIsYourTicketOverview")}
@@ -141,8 +141,8 @@ export default function DashboardPage() {
 
       {/* 统计卡片 */}
       {loadS ? (
-        <div className="flex items-center justify-center py-12 text-muted-foreground">
-          <Loader2 size={20} className="animate-spin mr-2" /> {t("ui.loading")}
+        <div className="text-muted-foreground flex items-center justify-center py-12">
+          <Loader2 size={20} className="mr-2 animate-spin" /> {t("ui.loading")}
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
@@ -150,12 +150,11 @@ export default function DashboardPage() {
             <div
               key={c.label}
               onClick={() => router.push("/ticket")}
-              className={`${c.bg} rounded-2xl p-4 cursor-pointer
-                          hover:scale-105 transition-transform duration-200`}
+              className={`${c.bg} cursor-pointer rounded-2xl p-4 transition-transform duration-200 hover:scale-105`}
             >
               <div className={`${c.color} mb-2`}>{c.icon}</div>
               <p className="text-2xl font-bold">{c.value}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{c.label}</p>
+              <p className="text-muted-foreground mt-0.5 text-xs">{c.label}</p>
             </div>
           ))}
         </div>
@@ -163,22 +162,22 @@ export default function DashboardPage() {
 
       {/* 解决率进度条 */}
       {stats && stats.total > 0 && (
-        <div className="bg-background border border-border rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-3">
+        <div className="bg-background border-border rounded-2xl border p-5">
+          <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-medium">{t("ui.resolutionRate")}</p>
             <p className="text-sm font-bold text-green-500">
               {Math.round((stats.resolved / stats.total) * 100)}%
             </p>
           </div>
-          <div className="w-full bg-muted rounded-full h-2.5">
+          <div className="bg-muted h-2.5 w-full rounded-full">
             <div
-              className="bg-gradient-to-r from-green-400 to-emerald-500 h-2.5 rounded-full transition-all duration-700"
+              className="h-2.5 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 transition-all duration-700"
               style={{
                 width: `${Math.round((stats.resolved / stats.total) * 100)}%`,
               }}
             />
           </div>
-          <div className="flex justify-between text-xs text-muted-foreground mt-2">
+          <div className="text-muted-foreground mt-2 flex justify-between text-xs">
             <span>
               {t("ui.resolved2")}
               {stats.resolved}
@@ -192,20 +191,17 @@ export default function DashboardPage() {
       )}
 
       {/* AI TODO 面板 */}
-      <div className="bg-background border border-border rounded-2xl p-5">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-background border-border rounded-2xl border p-5">
+        <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div
-              className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600
-                            flex items-center justify-center"
-            >
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-violet-600">
               <Bot size={16} className="text-white" />
             </div>
             <div>
               <p className="text-sm font-semibold">
                 {t("ui.todaySAiTodoList")}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 {t("ui.generatedFromYourTickets")}
               </p>
             </div>
@@ -213,9 +209,7 @@ export default function DashboardPage() {
           <button
             onClick={generateTodos}
             disabled={loadT}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary
-                       text-primary-foreground rounded-lg hover:bg-primary/90
-                       disabled:opacity-50 transition-colors"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
           >
             {loadT ? (
               <>
@@ -235,21 +229,20 @@ export default function DashboardPage() {
             {todos.map((t, i) => (
               <li
                 key={i}
-                className="flex items-start gap-3 py-2 border-b border-border last:border-0"
+                className="border-border flex items-start gap-3 border-b py-2 last:border-0"
               >
                 <div
-                  className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0
-                                 ${PRIORITY_COLORS[t.priority] ?? "bg-slate-400"}`}
+                  className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${PRIORITY_COLORS[t.priority] ?? "bg-slate-400"}`}
                 />
                 <span className="text-sm">{t.task}</span>
-                <span className="ml-auto text-xs text-muted-foreground flex-shrink-0 capitalize">
+                <span className="text-muted-foreground ml-auto flex-shrink-0 text-xs capitalize">
                   {t.priority}
                 </span>
               </li>
             ))}
           </ul>
         ) : (
-          <div className="text-center py-8 text-muted-foreground">
+          <div className="text-muted-foreground py-8 text-center">
             <Bot size={32} className="mx-auto mb-2 opacity-30" />
             <p className="text-sm">
               {t("ui.clickGenerateTodosToPlanYourDayWithAi")}
@@ -295,20 +288,16 @@ function QuickCard({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-4 p-5 bg-background border border-border
-                 rounded-2xl hover:shadow-md hover:border-primary/30 transition-all
-                 duration-200 text-left w-full group"
+      className="bg-background border-border hover:border-primary/30 group flex w-full items-center gap-4 rounded-2xl border p-5 text-left transition-all duration-200 hover:shadow-md"
     >
       <div
-        className={`w-10 h-10 rounded-xl bg-gradient-to-br ${color}
-                       flex items-center justify-center flex-shrink-0
-                       group-hover:scale-110 transition-transform duration-200`}
+        className={`h-10 w-10 rounded-xl bg-gradient-to-br ${color} flex flex-shrink-0 items-center justify-center transition-transform duration-200 group-hover:scale-110`}
       >
         <span className="text-white">{icon}</span>
       </div>
       <div>
-        <p className="font-semibold text-sm">{title}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+        <p className="text-sm font-semibold">{title}</p>
+        <p className="text-muted-foreground mt-0.5 text-xs">{desc}</p>
       </div>
     </button>
   );

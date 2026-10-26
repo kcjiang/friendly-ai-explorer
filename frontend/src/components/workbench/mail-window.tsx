@@ -1,8 +1,4 @@
 "use client";
-import { getBrowserUiLocale } from "@/i18n/browser";
-
-import { systemMessage } from "@/i18n/system-messages";
-import { useUiTranslations } from "@/i18n/client";
 
 import {
   ChevronLeft,
@@ -48,6 +44,9 @@ import {
   NativeSelectOption,
 } from "@/components/ui/base/native-select";
 import { usePolling } from "@/hooks/use-polling";
+import { getBrowserUiLocale } from "@/i18n/browser";
+import { useUiTranslations } from "@/i18n/client";
+import { systemMessage } from "@/i18n/system-messages";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";

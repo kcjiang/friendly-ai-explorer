@@ -1,18 +1,21 @@
 """
 文件解析器：将 PDF / DOCX / PNG 转为纯文本
 """
+
 import io
 from pathlib import Path
 
 
 def parse_pdf(file_bytes: bytes) -> str:
     import fitz  # PyMuPDF
+
     doc = fitz.open(stream=file_bytes, filetype="pdf")
     return "\n".join(page.get_text() for page in doc)
 
 
 def parse_docx(file_bytes: bytes) -> str:
     from docx import Document
+
     doc = Document(io.BytesIO(file_bytes))
     return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
 

@@ -1,4 +1,3 @@
-from app.i18n import message as system_message
 import base64
 import re
 from typing import Literal
@@ -6,6 +5,7 @@ from uuid import UUID
 
 from pydantic import EmailStr, Field, SecretStr, field_validator, model_validator
 
+from app.i18n import message as system_message
 from app.schemas.workbench import Input
 
 
@@ -24,7 +24,11 @@ class Mailbox(Input):
     @classmethod
     def host(cls, value):
         if not re.fullmatch(r"[a-zA-Z0-9.-]+", value):
-            raise ValueError(system_message("errors.enterAMailboxServerHostnameUrlsProtocolsAndPortsAreNotAllowed"))
+            raise ValueError(
+                system_message(
+                    "errors.enterAMailboxServerHostnameUrlsProtocolsAndPortsAreNotAllowed"
+                )
+            )
         return value.lower()
 
 
@@ -35,7 +39,9 @@ class Folder(Input):
     @classmethod
     def safe(cls, value):
         if any(ord(char) < 32 for char in value):
-            raise ValueError(system_message("errors.folderNamesCannotContainControlCharacters"))
+            raise ValueError(
+                system_message("errors.folderNamesCannotContainControlCharacters")
+            )
         return value
 
 
@@ -50,7 +56,9 @@ class Rule(Input):
     def condition(self):
         self.keywords = [word.strip()[:200] for word in self.keywords if word.strip()]
         if not self.sender and not self.keywords:
-            raise ValueError(system_message("errors.enterAtLeastASenderOrASubjectKeyword"))
+            raise ValueError(
+                system_message("errors.enterAtLeastASenderOrASubjectKeyword")
+            )
         return self
 
 
@@ -63,9 +71,13 @@ class Attachment(Input):
         try:
             raw = base64.b64decode(self.data, validate=True)
         except Exception:
-            raise ValueError(system_message("errors.invalidAttachmentEncoding")) from None
+            raise ValueError(
+                system_message("errors.invalidAttachmentEncoding")
+            ) from None
         if len(raw) > 5_000_000:
-            raise ValueError(system_message("errors.eachAttachmentMustBeNoLargerThan5Mb"))
+            raise ValueError(
+                system_message("errors.eachAttachmentMustBeNoLargerThan5Mb")
+            )
         return self
 
 
@@ -90,5 +102,7 @@ class Send(Input):
     @model_validator(mode="after")
     def size(self):
         if len(self.html) + sum(len(a.data) for a in self.attachments) > 14_000_000:
-            raise ValueError(system_message("errors.theEmailIsTooLargeReduceAttachmentsOrImages"))
+            raise ValueError(
+                system_message("errors.theEmailIsTooLargeReduceAttachmentsOrImages")
+            )
         return self

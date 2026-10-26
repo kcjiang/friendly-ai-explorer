@@ -1,13 +1,13 @@
 "use client";
-import { useUiTranslations } from "@/i18n/client";
 
 import { Bot, ChevronDown, Loader2, Send, Trash2 } from "lucide-react";
-import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import Image from "next/image";
 import { useLocale } from "next-intl";
-import { systemMessage } from "@/i18n/system-messages";
+import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useUiTranslations } from "@/i18n/client";
+import { systemMessage } from "@/i18n/system-messages";
 
 interface Message {
   role: "user" | "assistant";
@@ -203,7 +203,7 @@ export default function AiChatPanel() {
       {/* 浮动按钮 */}
       <button
         onClick={() => setOpen((o) => !o)}
-        className={`fixed bottom-6 right-6 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-300 via-indigo-400 to-violet-500 p-0.5 shadow-lg shadow-indigo-500/20 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-indigo-500/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transform-none ${
+        className={`focus-visible:ring-ring fixed right-6 bottom-6 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-cyan-300 via-indigo-400 to-violet-500 p-0.5 shadow-lg shadow-indigo-500/20 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-indigo-500/30 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none motion-reduce:transform-none ${
           open ? "pointer-events-none scale-90 opacity-0" : ""
         }`}
         title={t("ui.aiAssistant")}
@@ -227,7 +227,7 @@ export default function AiChatPanel() {
       {/* 聊天面板 */}
       <div
         id="fae-ai-chat-panel"
-        className={`fixed bottom-6 right-6 z-50 flex w-96 origin-bottom-right flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl transition-all duration-300 ${
+        className={`border-border bg-background fixed right-6 bottom-6 z-50 flex w-96 origin-bottom-right flex-col overflow-hidden rounded-2xl border shadow-2xl transition-all duration-300 ${
           open
             ? "max-h-[600px] scale-100 opacity-100"
             : "pointer-events-none max-h-0 scale-90 opacity-0"
@@ -247,7 +247,7 @@ export default function AiChatPanel() {
             title={t("ui.newConversation")}
             aria-label={t("ui.newConversation")}
             disabled={thinking}
-            className="ml-auto mr-3 text-white/70 disabled:opacity-40"
+            className="mr-3 ml-auto text-white/70 disabled:opacity-40"
             onClick={() => setMessages((prev) => prev.slice(0, 1))}
           >
             <Trash2 size={16} />
@@ -261,7 +261,7 @@ export default function AiChatPanel() {
           </button>
         </div>
 
-        <p className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
+        <p className="border-border text-muted-foreground border-b px-4 py-2 text-xs">
           {pageNames[page]}{" "}
           {t("ui.knowledgeFirstGeneralAnswersWhenNoRelevantSourcesExist")}
         </p>
@@ -282,7 +282,7 @@ export default function AiChatPanel() {
                   <Bot size={14} className="text-white" />
                 </div>
               ) : (
-                <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                <div className="bg-primary/10 text-primary mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold">
                   {session?.user?.name?.[0]?.toUpperCase() ?? "U"}
                 </div>
               )}
@@ -291,12 +291,12 @@ export default function AiChatPanel() {
               <div
                 className={`max-w-[75%] rounded-2xl px-3 py-2.5 text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "rounded-tr-sm bg-primary text-primary-foreground"
-                    : "rounded-tl-sm bg-muted"
+                    ? "bg-primary text-primary-foreground rounded-tr-sm"
+                    : "bg-muted rounded-tl-sm"
                 }`}
               >
                 {msg.loading ? (
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
                     <Loader2 size={13} className="animate-spin" />
                     {t("ui.thinking")}
                   </span>
@@ -316,7 +316,7 @@ export default function AiChatPanel() {
         </div>
 
         {/* 输入区 */}
-        <div className="flex flex-shrink-0 items-center gap-2 border-t border-border px-3 py-3">
+        <div className="border-border flex flex-shrink-0 items-center gap-2 border-t px-3 py-3">
           <input
             ref={inputRef}
             maxLength={8000}
@@ -330,7 +330,7 @@ export default function AiChatPanel() {
             }}
             placeholder={t("ui.enterAQuestionEnterToSend")}
             disabled={thinking}
-            className="flex-1 rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
+            className="border-border bg-muted/30 focus:ring-primary/30 flex-1 rounded-xl border px-3 py-2 text-sm transition-colors focus:ring-2 focus:outline-none disabled:opacity-50"
           />
           <button
             aria-label={t("ui.sendMessage")}
@@ -357,7 +357,7 @@ function MarkdownText({ content }: { content: string }) {
   // 将 **bold** 转为 <strong>，`code` 转为 <code>，## 标题转为 <strong>
   const lines = content.split("\n");
   return (
-    <div className="space-y-1 whitespace-pre-wrap break-words">
+    <div className="space-y-1 break-words whitespace-pre-wrap">
       {lines.map((line, i) => {
         // 标题行
         if (line.startsWith("## ")) {

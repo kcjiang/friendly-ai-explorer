@@ -1,9 +1,9 @@
 import { createTranslator } from "next-intl";
 import en from "../../messages/en.json";
 import zh from "../../messages/zh-CN.json";
-import labelKeys from "./label-keys.json";
 import { getBrowserUiLocale } from "./browser";
 import type { UiTranslator } from "./client";
+import labelKeys from "./label-keys.json";
 
 export function systemMessage(
   value: unknown,

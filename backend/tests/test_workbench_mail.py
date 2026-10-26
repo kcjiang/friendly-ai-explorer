@@ -11,10 +11,10 @@ from sqlalchemy import func, select
 
 from app.models.workbench import WBAccount, WBJob, WBMessage, now
 from app.models.workbench_mail import WBMail, WBMailbox, WBMailLocation, WBMessageMail
+from app.security import encrypt_credential
 from app.services import workbench_collection as sources
 from app.services import workbench_mail_protocol as protocol
 from app.services import workbench_mail_service as mail_service
-from app.security import encrypt_credential
 from tests import test_workbench as workbench_tests
 
 

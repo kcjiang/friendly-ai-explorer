@@ -1,9 +1,11 @@
 """Validate the fresh-deployment schema against the application's actual metadata."""
 
 import unittest
+
 from sqlalchemy import inspect, text
+
 from app.database import Base, engine
-from app.main import app  # Registers the models used by every mounted route.
+from app.main import app  # noqa: F401 -- Register the models used by every mounted route.
 
 
 class DatabaseInitTests(unittest.IsolatedAsyncioTestCase):

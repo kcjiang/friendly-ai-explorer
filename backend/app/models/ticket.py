@@ -1,10 +1,22 @@
 import enum
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, TYPE_CHECKING
-from sqlalchemy import String, Text, DateTime, Enum as SAEnum, ForeignKey, Boolean, ARRAY, BigInteger, Integer
+from typing import TYPE_CHECKING, Optional
+
+from sqlalchemy import (
+    ARRAY,
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+
 from app.database import Base
 
 if TYPE_CHECKING:
@@ -12,72 +24,106 @@ if TYPE_CHECKING:
 
 
 class TicketStatus(str, enum.Enum):
-    open        = "open"
+    open = "open"
     in_progress = "in_progress"
-    pending     = "pending"
-    resolved    = "resolved"
+    pending = "pending"
+    resolved = "resolved"
     reproducing = "reproducing"
-    verifying   = "verifying"
+    verifying = "verifying"
 
 
 class TicketPriority(str, enum.Enum):
     critical = "critical"
-    major    = "major"
-    trivial  = "trivial"
+    major = "major"
+    trivial = "trivial"
 
 
 class Ticket(Base):
     __tablename__ = "tickets"
 
-    id:               Mapped[uuid.UUID]          = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    ticket_no:        Mapped[str]                = mapped_column(String(50), unique=True, nullable=False)
-    title:            Mapped[str]                = mapped_column(String(500), nullable=False)
-    description:      Mapped[Optional[str]]      = mapped_column(Text, nullable=True)
-    customer_name:    Mapped[Optional[str]]      = mapped_column(String(200), nullable=True)
-    customer_contact: Mapped[Optional[str]]      = mapped_column(String(200), nullable=True)
-    product_name:     Mapped[Optional[str]]      = mapped_column(String(200), nullable=True)
-    firmware_version: Mapped[Optional[str]]      = mapped_column(String(100), nullable=True)
-    status:           Mapped[TicketStatus]       = mapped_column(SAEnum(TicketStatus, native_enum=False), nullable=False, default=TicketStatus.open)
-    priority:         Mapped[TicketPriority]     = mapped_column(SAEnum(TicketPriority, native_enum=False), nullable=False, default=TicketPriority.major)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    ticket_no: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    customer_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    customer_contact: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    product_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    firmware_version: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    status: Mapped[TicketStatus] = mapped_column(
+        SAEnum(TicketStatus, native_enum=False),
+        nullable=False,
+        default=TicketStatus.open,
+    )
+    priority: Mapped[TicketPriority] = mapped_column(
+        SAEnum(TicketPriority, native_enum=False),
+        nullable=False,
+        default=TicketPriority.major,
+    )
     system_seq: Mapped[int] = mapped_column(BigInteger, unique=True)
-    project_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey('catalog_projects.id'))
+    project_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("catalog_projects.id")
+    )
     project_seq: Mapped[Optional[int]] = mapped_column(BigInteger)
-    source: Mapped[str] = mapped_column(String(100), default='Email')
-    source_number: Mapped[str] = mapped_column(String(200), default='')
-    source_url: Mapped[str] = mapped_column(String(2000), default='')
-    raw_report: Mapped[str] = mapped_column(Text, default='')
+    source: Mapped[str] = mapped_column(String(100), default="Email")
+    source_number: Mapped[str] = mapped_column(String(200), default="")
+    source_url: Mapped[str] = mapped_column(String(2000), default="")
+    raw_report: Mapped[str] = mapped_column(Text, default="")
     tapd_created: Mapped[bool] = mapped_column(Boolean, default=False)
-    tapd_url: Mapped[str] = mapped_column(String(2000), default='')
-    status_note: Mapped[str] = mapped_column(String(500), default='')
-    next_plan: Mapped[str] = mapped_column(Text, default='')
-    notes: Mapped[str] = mapped_column(Text, default='')
-    updated_by: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
+    tapd_url: Mapped[str] = mapped_column(String(2000), default="")
+    status_note: Mapped[str] = mapped_column(String(500), default="")
+    next_plan: Mapped[str] = mapped_column(Text, default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    updated_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     revision: Mapped[int] = mapped_column(Integer, default=1)
-    assignee_id:      Mapped[Optional[uuid.UUID]]= mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    creator_id:       Mapped[uuid.UUID]          = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    ai_analysis:      Mapped[Optional[str]]      = mapped_column(Text, nullable=True)
-    ai_suggestions:   Mapped[Optional[str]]      = mapped_column(Text, nullable=True)
-    tags:             Mapped[Optional[list]]      = mapped_column(ARRAY(String), nullable=True)
-    attachments:      Mapped[Optional[dict]]      = mapped_column(JSONB, default=list)
-    created_at:       Mapped[datetime]           = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at:       Mapped[datetime]           = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    resolved_at:      Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    assignee_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    creator_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    ai_analysis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ai_suggestions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tags: Mapped[Optional[list]] = mapped_column(ARRAY(String), nullable=True)
+    attachments: Mapped[Optional[dict]] = mapped_column(JSONB, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
-    creator:  Mapped["User"]               = relationship("User", foreign_keys=[creator_id])
+    creator: Mapped["User"] = relationship("User", foreign_keys=[creator_id])
     updater: Mapped["User"] = relationship("User", foreign_keys=[updated_by])
-    assignee: Mapped[Optional["User"]]     = relationship("User", foreign_keys=[assignee_id])
-    comments: Mapped[list["TicketComment"]]= relationship("TicketComment", back_populates="ticket", cascade="all, delete-orphan")
+    assignee: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[assignee_id]
+    )
+    comments: Mapped[list["TicketComment"]] = relationship(
+        "TicketComment", back_populates="ticket", cascade="all, delete-orphan"
+    )
 
 
 class TicketComment(Base):
     __tablename__ = "ticket_comments"
 
-    id:          Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    ticket_id:   Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
-    author_id:   Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    content:     Mapped[str]       = mapped_column(Text, nullable=False)
-    is_internal: Mapped[bool]      = mapped_column(Boolean, default=False)
-    created_at:  Mapped[datetime]  = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    ticket_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False
+    )
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    is_internal: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
     ticket: Mapped["Ticket"] = relationship("Ticket", back_populates="comments")
-    author: Mapped["User"]   = relationship("User", foreign_keys=[author_id])
+    author: Mapped["User"] = relationship("User", foreign_keys=[author_id])
