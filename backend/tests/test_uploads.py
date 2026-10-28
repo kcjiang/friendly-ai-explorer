@@ -289,7 +289,7 @@ class UploadTests(unittest.IsolatedAsyncioTestCase):
             ("delete", "", None),
             ("patch", "/name", {"name": "new.txt"}),
             ("post", "/transfer", {"space": "personal", "copy": True}),
-            ("put", "/content", {"content": "edit"}),
+            ("put", "/content", {"content": "edit", "revision": "unavailable"}),
             ("put", "/shares", {"user_ids": [str(self.other.id)]}),
         ]:
             response = await self.client.request(

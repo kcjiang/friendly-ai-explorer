@@ -339,6 +339,7 @@ export function SessionToolbar({
 
 function DeviceTerminal() {
   const d = useDeviceText();
+  const [commandEditing, setCommandEditing] = useState(false);
   const [kind, setKind] = useState<"adb" | "serial">("adb");
   const { session, status } = useDeviceSession(kind);
   const [error, setError] = useState("");
@@ -387,6 +388,7 @@ function DeviceTerminal() {
             {d("Connection", "连接方式")}{" "}
             <select
               className="bg-background h-8 rounded-md border px-2 text-sm"
+              disabled={commandEditing}
               value={kind}
               onChange={(e) => {
                 setKind(e.target.value as typeof kind);
@@ -554,6 +556,7 @@ function DeviceTerminal() {
             <PresetPanel
               key={kind}
               deviceType={kind}
+              onEditingChange={setCommandEditing}
               onRun={run}
               disabled={status !== "connected"}
             />

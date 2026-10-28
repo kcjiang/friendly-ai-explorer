@@ -15,7 +15,7 @@ The production stack runs PostgreSQL, the backend, the workbench worker, the fro
 2. Copy `.env.prod.example` to `.env.prod`. Set independent random values for `DB_PASSWORD`, `APP_MASTER_KEY`, and `AUTH_SECRET`. Restrict access to this file, for example with `chmod 600 .env.prod`.
 3. Set `APP_URL` to the public HTTPS URL, including any externally mapped port. Set `FAE_DATA_DIR` to the persistent data directory and set the bind address and HTTP/HTTPS ports for the host's network configuration.
 4. Prepare the hostname and TLS certificates. See [Nginx configuration](../nginx/README.md). The default configuration requires the host's `/etc/letsencrypt/live` and `/etc/letsencrypt/archive` directories.
-5. Ensure the uploads, storage and logs directories under `FAE_DATA_DIR` are writable by the backend image's UID 10001.
+5. Ensure the storage and logs directories under `FAE_DATA_DIR` are writable by the backend image's UID 10001.
 6. Start the stack:
 
 ```sh
@@ -42,3 +42,17 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail 100 b
 ## Database initialization
 
 `db/init.sql` is the single fresh-installation schema, including file spaces, resumable uploads and immutable ticket attachments. This release rebaselines the schema: initialize an empty database and do not apply the initialization script to an existing populated database. Historical storage upgrade scripts and the legacy file migration command have been removed. Back up the database and persistent files before a reset; a reset database must not reuse orphaned old managed attachment files. See [file storage](file-storage.md) for the directory layout, quota and cleanup rules.
+
+## Development and production storage
+
+Both backend images run as UID 10001, use `/app/data` for business files and `/app/logs` for application logs, and disable Python bytecode files. The development image enables Uvicorn reload; Compose bind-mounts the source and uses named `storage_data` and shared `logs_data` volumes. The production image uses server bind mounts under `FAE_DATA_DIR`; prepare `storage` and `logs` with UID 10001 write access. The worker shares application logs with the backend in both environments.
+
+The retired public upload directory, `UPLOAD_DIR`, and `/uploads` proxy are removed. Current uploads still use `/api/v1/uploads`, with temporary chunks and files inside `STORAGE_DIR`. The source tree's old empty upload directory is no longer needed. Legacy Docker upload volumes are not used by the current configuration; existing volume contents are not deleted automatically.
+
+For an existing development volume created by the retired root container, adjust its ownership once before starting the updated image:
+
+```sh
+docker compose run --rm --no-deps --user root backend chown -R 10001:10001 /app/data
+```
+
+This changes ownership only; it does not migrate or delete files. Fresh named volumes already inherit the image directory ownership.

@@ -7,7 +7,7 @@
 - USB ADB：启用机顶盒 USB 调试并允许设备上的授权提示；持续交互 Shell、ANSI 终端、Ctrl+C、Logcat。
 - 串口：可配置波特率、数据位、停止位、校验及硬件流控；支持直接输入、文本快捷发送、换行符设置和 HEX 收发。
 - `.sh`：通过 USB ADB 上传 UTF-8 脚本（最大 1 MiB），统一 LF 换行，在 `/data/local/tmp` 生成唯一文件，再由持续 Shell 执行 `sh`。正常结束后删除临时文件；设备掉线或脚本执行 `exit` 时可能需要手动清理。
-- 快捷命令：搜索名称、内容与分组，编辑、多行内容、置顶、执行前确认。公共命令仍仅由 developer 管理；个人命令仅本人可编辑。置顶顺序按账号和连接方式保存在当前浏览器。
+- 快捷命令：搜索名称、内容与分组，编辑、多行内容、置顶、执行前确认。终端通过“我的空间 / 公共空间”切换读取固定路径的默认 JSON；个人命令可自行编辑，公共命令仅 developer 可在终端编辑，所有成员仍可在文件空间管理原文件。点击刷新重新载入。置顶顺序按账号和连接方式保存在当前浏览器。
 - 不包含网络 ADB、VBS 或 SecureCRT API 兼容层。
 
 ## 设备控制台 `/device-console`
@@ -28,8 +28,39 @@
 
 应用布局持有终端与控制台组件，内部导航不会断开设备或停止录像。刷新、关闭标签页、退出登录后不保证恢复；不同标签页不共享会话。日志保留最近约 500,000 字符，终端回滚保留 10,000 行。设备控制台上传点击时的输出快照；设备终端仍沿用原日志面板，以打开面板时的快照为准。
 
-快捷命令复用 `preset_commands`。文件空间升级为 `uploaded_logs` 新增文件关联，并使用统一存储表；本版本统一使用 `db/init.sql` 初始化空库，不再提供历史升级脚本。设备日志只允许本人查看，developer 不再具有跨用户读取权限。详情见 [文件空间](file-storage.md)。旧 `/adb`、`/serial` 地址重定向至 `/terminal`。
+快捷命令使用当前选中空间的 `Commands/ADB/adb_cmd_default.json`、`Commands/Serial/serial_cmd_default.json`，不再使用独立命令表。个人空间仅本人可读取；其他文件名均不读取。文件空间升级为 `uploaded_logs` 新增文件关联，并使用统一存储表；本版本统一使用 `db/init.sql` 初始化空库，不再提供历史升级脚本。设备日志只允许本人查看，developer 不再具有跨用户读取权限。详情见 [文件空间](file-storage.md)。旧 `/adb`、`/serial` 地址重定向至 `/terminal`。
 
 ## 验证
 
 前端运行 `pnpm typecheck`、`pnpm lint`、`pnpm test` 和 `pnpm build`。模拟测试覆盖 ADB 校验和、快速响应竞争、写入 ACK、共享串口读取与断开、UTF-8 分块及脚本上传。真实硬件需验证首次/再次 USB 授权、拔插、串口共享、HEX、Ctrl+C、采集卡断流、录像下载及三路继电器。
+
+## Command files
+
+System paths use English: `Commands/ADB`, `Commands/Serial`, and `Commands/Scripts` (reserved for stored shell scripts; no new execution engine).
+The terminal switches between My space (the current user only) and Public space, reading only the exact default filenames in the selected space. Missing files show an empty list; invalid JSON shows an error and cannot be overwritten from the terminal. Updates are loaded only on opening the panel or clicking Refresh. Terminal saves use content revisions to reject stale overwrites.
+
+```json
+{
+  "version": 1,
+  "transport": "adb",
+  "commands": [
+    {
+      "id": "a49f2f54-ff7c-44de-a65e-f3b1f9edd9e5",
+      "name": "Device model",
+      "command": "getprop ro.product.model",
+      "group": "General",
+      "confirmBeforeRun": false
+    }
+  ]
+}
+```
+
+IDs must be unique UUIDs; names and command text may repeat. Serial catalogs use `"transport": "serial"`. Files must be UTF-8 and at most 2 MB. Form editing maintains this format. Pinning uses IDs stored in the current browser.
+
+Command editing locks other edit/delete/new actions, space switching, and transport switching until save/cancel. A browser-close warning protects active drafts. On a save conflict, reload explicitly while retaining the draft; if the same command changed or was deleted, review the latest version and choose the draft, the latest version, or save a deleted command as new. Other users' unrelated commands remain intact. Saving a new file cleans up published content if its database commit fails.
+
+Command parsers reject unknown fields and non-boolean confirmation flags. Invalid files report their path and field location (or JSON line/column). The form enforces name/group/content limits and distinguishes missing files, empty catalogs and empty search results. Successful saves/deletes provide status feedback.
+
+New-command drafts receive a stable ID on creation. If a save response is lost, explicitly reload to reconcile that ID with the latest file before retrying. Command fields are shared directly between the form and JSON, and file paths come from the backend.
+
+Fresh deployments initialize an empty database with `db/init.sql`; no legacy command migration tools are provided. Default command JSON files are created when the first command is saved in each space.

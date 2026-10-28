@@ -448,6 +448,38 @@ async def serialize(db, e):
     return result
 
 
+async def write_text(db, user, entry, content, revision=None):
+    """Edit an ordinary text file, including quota, metadata and rollback."""
+    assert_write(entry.space, user)
+    if entry.is_dir or Path(entry.path).suffix.lower() not in (".md", ".markdown", ".json", ".sh"):
+        fail(400, "Unsupported editable file type")
+    target = disk_path(entry.space, entry.path)
+    original = target.read_bytes()
+    if revision is not None and hashlib.sha256(original).hexdigest() != revision:
+        from app.i18n import message as system_message
+        raise HTTPException(409, system_message("errors.fileContentChanged"))
+    value = content.encode("utf-8")
+    if len(value) > 2_000_000:
+        fail(413, "File exceeds 2 MB")
+    await check_quota(db, user, entry.space, max(0, len(value) - len(original)))
+    staged = target.with_name(".edit-" + uuid.uuid4().hex)
+    try:
+        staged.write_bytes(value)
+        staged.replace(target)
+        entry.size = len(value)
+        entry.sha256 = hashlib.sha256(value).hexdigest()
+        entry.updated_at = datetime.now(timezone.utc)
+        if entry.space == "knowledge":
+            await attach_document(db, user, entry)
+        record(db, user, entry, "edit")
+        await db.commit()
+    except BaseException:
+        target.write_bytes(original)
+        raise
+    finally:
+        staged.unlink(missing_ok=True)
+
+
 async def create_folder(db, user, space, parent, name, conflict="keep"):
     assert_write(space, user)
     clean_path(parent)
@@ -622,9 +654,72 @@ async def guard_upload_target(db, entry):
         )
     ).all()
     for task in rows:
-        parent = "设备日志" if task.purpose == "log" else task.parent
+        parent = "DeviceLogs" if task.purpose == "log" else task.parent
         if parent == entry.path or parent.startswith(entry.path + "/"):
             fail(409, "文件夹存在上传任务，请完成或取消后再操作")
+
+
+async def replace_copy(db, user, source_entry, destination):
+    """Replace file contents while keeping the destination's identity and shares."""
+    from app.services.storage_media import prepare_entry, thumbnail_path
+
+    source = disk_path(source_entry.space, source_entry.path)
+    target = disk_path(destination.space, destination.path)
+    backup = target.with_name(".replace-" + uuid.uuid4().hex)
+    staged = target.with_name(".copy-" + uuid.uuid4().hex)
+    thumb = thumbnail_path(destination.id)
+    old_thumb = thumb.read_bytes() if thumb.exists() else None
+    delta = max(
+        0,
+        source.stat().st_size + source_entry.thumbnail_size
+        - destination.size - destination.thumbnail_size,
+    )
+    await check_quota(db, user, destination.space, delta, staged=True)
+    if (
+        shutil.disk_usage(target.parent).free - source.stat().st_size - 512 * 1024
+        < settings.storage_reserve_mb * 1024**2
+    ):
+        fail(507, "服务器可用磁盘空间不足")
+    try:
+        await asyncio.to_thread(shutil.copyfile, source, staged)
+        target.rename(backup)
+        staged.replace(target)
+        destination.size = target.stat().st_size
+
+        def digest_file():
+            with target.open("rb") as source_file:
+                return hashlib.file_digest(source_file, "sha256").hexdigest()
+
+        destination.sha256 = await asyncio.to_thread(digest_file)
+        await asyncio.to_thread(prepare_entry, destination)
+        await db.flush()
+        info = await usage(db, user)
+        if destination.space != "knowledge" and (
+            info["used_bytes"] + info["reserved_bytes"] > info["total_bytes"]
+            or (
+                destination.space == personal(user)
+                and info["personal_bytes"] + info["personal_reserved_bytes"]
+                > info["personal_limit"]
+            )
+        ):
+            fail(413, "存储空间配额不足")
+        destination.updated_at = datetime.now(timezone.utc)
+        if destination.space == "knowledge":
+            await attach_document(db, user, destination)
+        record(db, user, destination, "replace", source_id=str(source_entry.id))
+        await db.commit()
+    except BaseException:
+        if backup.exists():
+            backup.replace(target)
+        if old_thumb is None:
+            thumb.unlink(missing_ok=True)
+        else:
+            thumb.write_bytes(old_thumb)
+        raise
+    finally:
+        staged.unlink(missing_ok=True)
+        backup.unlink(missing_ok=True)
+    return destination
 
 
 async def transfer(
@@ -668,6 +763,15 @@ async def transfer(
     if (target_dir / name).exists():
         if conflict == "skip":
             return None
+        if conflict == "replace":
+            if not copy or entry.is_dir or not (target_dir / name).is_file():
+                fail(400, "Replace is supported for copying files only")
+            destination = await register(
+                db, destination_space, "/".join(filter(None, [parent, name])), user
+            )
+            if destination.id == entry.id:
+                fail(400, "Cannot replace a file with itself")
+            return await replace_copy(db, user, entry, destination)
         name = available_name(target_dir, name, entry.is_dir)
     source = disk_path(entry.space, entry.path)
     amount = await asyncio.to_thread(tree_bytes, source)

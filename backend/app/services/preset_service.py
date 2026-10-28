@@ -3,119 +3,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.i18n import message as system_message
-from app.models.preset import PresetCommand, UploadedLog
-from app.models.user import User, UserRole
-from app.schemas.preset import CreatePresetRequest, UpdatePresetRequest
-
-# ── 预制命令 ──────────────────────────────────────────────────
-
-
-async def list_presets(
-    device_type: str, db: AsyncSession, user: User
-) -> list[PresetCommand]:
-    """返回：公共命令 + 当前用户的个人命令"""
-    result = await db.execute(
-        select(PresetCommand)
-        .where(
-            PresetCommand.device_type == device_type,
-            or_(
-                PresetCommand.is_public.is_(True),
-                PresetCommand.owner_id == user.id,
-            ),
-        )
-        .order_by(
-            PresetCommand.is_public.desc(), PresetCommand.group_name, PresetCommand.name
-        )
-    )
-    return list(result.scalars().all())
-
-
-async def create_preset(
-    body: CreatePresetRequest, db: AsyncSession, user: User
-) -> PresetCommand:
-    # 只有开发者可以创建公共命令
-    if body.is_public and user.role != UserRole.developer:
-        raise HTTPException(
-            status_code=403,
-            detail=system_message("errors.onlyDevelopersCanCreatePublicCommands"),
-        )
-
-    preset = PresetCommand(
-        name=body.name,
-        command=body.command,
-        group_name=body.group_name,
-        device_type=body.device_type,
-        is_public=body.is_public,
-        is_danger=body.is_danger,
-        owner_id=None if body.is_public else user.id,
-    )
-    db.add(preset)
-    await db.commit()
-    await db.refresh(preset)
-    return preset
-
-
-async def update_preset(
-    preset_id: str, body: UpdatePresetRequest, db: AsyncSession, user: User
-) -> PresetCommand:
-    result = await db.execute(
-        select(PresetCommand).where(PresetCommand.id == preset_id)
-    )
-    preset = result.scalar_one_or_none()
-    if not preset:
-        raise HTTPException(
-            status_code=404, detail=system_message("errors.commandNotFound")
-        )
-
-    # 公共命令只有开发者可以修改；个人命令只有本人可以修改
-    if preset.is_public and user.role != UserRole.developer:
-        raise HTTPException(
-            status_code=403,
-            detail=system_message("errors.onlyDevelopersCanEditPublicCommands"),
-        )
-    if not preset.is_public and preset.owner_id != user.id:
-        raise HTTPException(
-            status_code=403,
-            detail=system_message("errors.youCannotEditAnotherUserSCommand"),
-        )
-
-    for k, v in body.model_dump(exclude_unset=True).items():
-        setattr(preset, k, v)
-    preset.updated_at = datetime.now(timezone.utc)
-    await db.commit()
-    await db.refresh(preset)
-    return preset
-
-
-async def delete_preset(preset_id: str, db: AsyncSession, user: User) -> dict:
-    result = await db.execute(
-        select(PresetCommand).where(PresetCommand.id == preset_id)
-    )
-    preset = result.scalar_one_or_none()
-    if not preset:
-        raise HTTPException(
-            status_code=404, detail=system_message("errors.commandNotFound")
-        )
-
-    if preset.is_public and user.role != UserRole.developer:
-        raise HTTPException(
-            status_code=403,
-            detail=system_message("errors.onlyDevelopersCanDeletePublicCommands"),
-        )
-    if not preset.is_public and preset.owner_id != user.id:
-        raise HTTPException(
-            status_code=403,
-            detail=system_message("errors.youCannotDeleteAnotherUserSCommand"),
-        )
-
-    await db.delete(preset)
-    await db.commit()
-    return {"message": system_message("errors.deleteSuccess")}
-
+from app.models.preset import UploadedLog
+from app.models.user import User
 
 # ── 日志上传 ──────────────────────────────────────────────────
 
@@ -140,13 +33,13 @@ async def upload_log(
         space = storage.personal(user)
         root = storage.disk_path(space)
         root.mkdir(parents=True, exist_ok=True)
-        folder = root / "设备日志"
+        folder = root / "DeviceLogs"
         if folder.exists() and not folder.is_dir():
             storage.fail(409, "个人空间中“设备日志”已被同名文件占用")
         if not folder.exists():
-            await storage.create_folder(db, user, space, "", "设备日志")
+            await storage.create_folder(db, user, space, "", "DeviceLogs")
         entry = await storage.commit_upload(
-            db, user, space, "设备日志", filename, staged, size, digest, "keep"
+            db, user, space, "DeviceLogs", filename, staged, size, digest, "keep"
         )
         target = storage.disk_path(entry.space, entry.path)
         content = target.read_text(encoding="utf-8", errors="replace")

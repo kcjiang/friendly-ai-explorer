@@ -1340,6 +1340,16 @@
     "storagecda5511d78": "图片格式无效或像素尺寸超出限制",
     "storage2d5b5cda44": "附件尚未上传完成或已经失效",
     "storage210607b98c": "附件已关联到其他记录",
-    "storagef5507286fe": "无效上传大小限制"
+    "storagef5507286fe": "无效上传大小限制",
+    "storage65b31f6f91": "不支持编辑此文件类型",
+    "storage0c09366f83": "文件超过 2 MB",
+    "storageb0f5c67b76": "仅复制文件时支持替换",
+    "storage778236d3d3": "不能用文件替换自身",
+    "storage8ba2f6fe49": "存储空间配额不足",
+    "commandFileInvalid": "命令 JSON 格式无效，请在储存空间修正文件",
+    "commandFileTooLarge": "命令文件必须是 2 MB 以内的 JSON 文件",
+    "commandFileChanged": "命令文件已变更，请载入最新版本，草稿会保留。",
+    "commandFileDetail": "命令文件 {path}：{reason}",
+    "fileContentChanged": "文件已变更，草稿已保留，请载入最新版本后再保存。"
   }
 }

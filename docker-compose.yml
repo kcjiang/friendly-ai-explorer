@@ -34,7 +34,6 @@ services:
       APP_MASTER_KEY: ${APP_MASTER_KEY:?Set APP_MASTER_KEY in .env}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
-      UPLOAD_DIR: /app/uploads
       STORAGE_DIR: /app/data
       STORAGE_MAX_FILE_MB: ${STORAGE_MAX_FILE_MB:-2048}
       STORAGE_RESERVE_MB: ${STORAGE_RESERVE_MB:-256}
@@ -43,7 +42,7 @@ services:
       WATCHFILES_FORCE_POLLING: "true"
     volumes:
       - ./backend:/app
-      - uploads_data:/app/uploads
+      - logs_data:/app/logs
       - storage_data:/app/data
     ports:
       - "8000:8000"
@@ -68,8 +67,11 @@ services:
       DATABASE_URL: postgresql+asyncpg://admin:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/fae_app_pgdb
       APP_MASTER_KEY: ${APP_MASTER_KEY:?Set APP_MASTER_KEY in .env}
       LOG_DIR: /app/logs
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENVIRONMENT: development
     volumes:
       - ./backend:/app
+      - logs_data:/app/logs
     depends_on:
       postgres:
         condition: service_healthy
@@ -111,5 +113,5 @@ networks:
 
 volumes:
   postgres_data:
-  uploads_data:
   storage_data:
+  logs_data:

@@ -26,7 +26,6 @@ services:
       DATABASE_URL: postgresql+asyncpg://fae_test:test-only-password@postgres:5432/fae_test
       APP_MASTER_KEY: test-only-master-key-at-least-32-characters
       ENVIRONMENT: test
-      UPLOAD_DIR: /tmp/fae-test/uploads
       STORAGE_DIR: /tmp/fae-test/storage
       LOG_DIR: /tmp/fae-test/logs
     volumes:

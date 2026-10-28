@@ -63,6 +63,8 @@ test("all released languages have identical keys and valid ICU messages", () => 
           p3: "test",
           message: "test",
           requestId: "test",
+          path: "Commands/ADB/adb_cmd_default.json",
+          reason: "commands.0.id: missing",
         });
     }
     assert.deepEqual(errors, []);

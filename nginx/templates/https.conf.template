@@ -51,11 +51,6 @@ server {
         proxy_buffering off;
     }
 
-    location /uploads/ {
-        set $backend backend:8000;
-        proxy_pass http://$backend;
-    }
-
     location / {
         set $frontend frontend:3000;
         proxy_pass http://$frontend;

@@ -1,5 +1,6 @@
 "use client";
 
+import { isAxiosError } from "axios";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/base/button";
@@ -8,40 +9,174 @@ import { Textarea } from "@/components/ui/base/textarea";
 import apiClient from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import { useDeviceText } from "./device-tools";
-import type { Preset } from "./preset-panel";
 
-export default function QuickCommands({
-  deviceType,
-  onRun,
-  disabled,
-}: {
+type Command = {
+  id: string;
+  name: string;
+  command: string;
+  group: string;
+  confirmBeforeRun: boolean;
+};
+type EditorState = {
+  draft: Command;
+  original: Command | null;
+  status: "editing" | "conflict" | "compare";
+  latest: Command | null;
+};
+function normalized(command: Command): Command {
+  return {
+    id: command.id,
+    name: command.name.trim(),
+    command: command.command,
+    group: command.group.trim() || "General",
+    confirmBeforeRun: command.confirmBeforeRun,
+  };
+}
+function sameCommand(left: Command | null, right: Command | null): boolean {
+  if (!left || !right) return left === right;
+  return (
+    left.id === right.id &&
+    left.name === right.name &&
+    left.command === right.command &&
+    left.group === right.group &&
+    left.confirmBeforeRun === right.confirmBeforeRun
+  );
+}
+
+type CommandProps = {
   deviceType: "adb" | "serial";
   onRun: (command: string) => void;
   disabled: boolean;
+  onEditingChange?: (editing: boolean) => void;
+};
+
+export default function QuickCommands(props: CommandProps) {
+  const { onEditingChange } = props;
+  const d = useDeviceText();
+  const { data: auth } = useSession();
+  const [space, setSpace] = useState<"personal" | "public">("personal");
+  const [locked, setLocked] = useState(false);
+  useEffect(() => {
+    onEditingChange?.(locked);
+    return () => onEditingChange?.(false);
+  }, [locked, onEditingChange]);
+  return (
+    <div>
+      <div
+        className="flex gap-1 border-b p-3"
+        role="group"
+        aria-label={d("Command space", "命令空间")}
+      >
+        {(["personal", "public"] as const).map((value) => (
+          <Button
+            key={value}
+            size="sm"
+            variant={space === value ? "secondary" : "ghost"}
+            aria-pressed={space === value}
+            disabled={locked}
+            onClick={() => setSpace(value)}
+          >
+            {value === "personal"
+              ? d("My space", "我的空间")
+              : d("Public space", "公共空间")}
+          </Button>
+        ))}
+      </div>
+      <CommandList
+        key={`${auth?.user?.id}:${space}:${props.deviceType}`}
+        {...props}
+        space={space}
+        onLockChange={setLocked}
+      />
+    </div>
+  );
+}
+
+function CommandList({
+  deviceType,
+  onRun,
+  disabled,
+  space,
+  onLockChange,
+}: CommandProps & {
+  space: "personal" | "public";
+  onLockChange: (locked: boolean) => void;
 }) {
   const d = useDeviceText();
   const { data: auth } = useSession();
   const developer = auth?.user?.role === "developer";
-  const storageKey = `fae-command-order:${auth?.user?.id || "guest"}:${deviceType}`;
-  const [commands, setCommands] = useState<Preset[]>([]);
+  const editable = space === "personal" || developer;
+  const storageKey = `fae-command-order:${auth?.user?.id || "guest"}:${deviceType}${space === "personal" ? ":personal" : ""}`;
+  const [notice, setNotice] = useState("");
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const editing = editor?.draft || null;
+  const conflict = editor?.status === "conflict";
+  const comparison =
+    editor?.status === "compare" ? { latest: editor.latest } : null;
+  const [exists, setExists] = useState(false);
+  const [filePath, setFilePath] = useState("");
+  function startEditing(draft: Command, original: Command | null = null) {
+    setEditor({ draft, original, status: "editing", latest: null });
+    setNotice("");
+    setError("");
+  }
+  function updateDraft(draft: Command) {
+    setEditor((current) => (current ? { ...current, draft } : null));
+  }
+  const [revision, setRevision] = useState("missing");
+  const [commands, setCommands] = useState<Command[]>([]);
   const [order, setOrder] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [editing, setEditing] = useState<Partial<Preset> | null>(null);
-  async function load() {
+  useEffect(() => {
+    onLockChange(busy || !!editing);
+    return () => onLockChange(false);
+  }, [busy, editing, onLockChange]);
+  useEffect(() => {
+    if (!editing || typeof window === "undefined") return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [editing]);
+  async function load(preserveDraft = false) {
     setLoading(true);
     setError("");
     try {
-      setCommands(
-        (
-          await apiClient.get("/api/v1/debug/commands", {
-            params: { device_type: deviceType },
-          })
-        ).data,
-      );
+      const { data } = await apiClient.get("/api/v1/debug/commands", {
+        params: { device_type: deviceType, space },
+      });
+      const latest: Command[] = data.catalog.commands;
+      if (preserveDraft && editor) {
+        const updated =
+          latest.find((item) => item.id === editor.draft.id) || null;
+        if (updated && sameCommand(updated, normalized(editor.draft))) {
+          setEditor(null);
+          setNotice(
+            d("Command is already saved", "命令已保存，无需重复保存。"),
+          );
+        } else if (!sameCommand(updated, editor.original)) {
+          setEditor({ ...editor, status: "compare", latest: updated });
+        } else {
+          setEditor({ ...editor, status: "editing", latest: null });
+          setNotice(
+            d(
+              "Latest list loaded. Your draft is retained; save when ready.",
+              "已载入最新列表并保留草稿，可以继续保存。",
+            ),
+          );
+        }
+      }
+      setCommands(latest);
+      setExists(data.exists);
+      setFilePath(data.path);
+      setRevision(data.revision);
     } catch (error) {
+      setCommands([]);
       setError(
         errorMessage(error, d("Could not load commands", "无法加载快捷命令")),
       );
@@ -52,7 +187,7 @@ export default function QuickCommands({
   useEffect(() => {
     void load(); /* keyed by transport */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deviceType]);
+  }, [deviceType, space]);
   useEffect(() => {
     try {
       const saved: unknown = JSON.parse(
@@ -75,51 +210,85 @@ export default function QuickCommands({
     return rank(a.id) - rank(b.id) || a.name.localeCompare(b.name);
   });
   const visible = sorted.filter((item) =>
-    `${item.name} ${item.command} ${item.group_name}`
+    `${item.name} ${item.command} ${item.group}`
       .toLowerCase()
       .includes(search.toLowerCase()),
   );
   const groups = Array.from(
-    new Set(visible.map((item) => item.group_name || "General")),
+    new Set(visible.map((item) => item.group || "General")),
   );
-  const editable = (item: Preset) =>
-    item.is_public ? developer : item.owner_id === auth?.user?.id;
+  async function persist(next: Command[]) {
+    const { data } = await apiClient.put("/api/v1/debug/commands", {
+      revision,
+      space,
+      catalog: {
+        version: 1,
+        transport: deviceType,
+        commands: next,
+      },
+    });
+    setCommands(next);
+    setExists(true);
+    setRevision(data.revision);
+  }
   async function save(event: React.FormEvent) {
     event.preventDefault();
-    if (!editing?.name?.trim() || !editing.command?.trim()) return;
+    if (
+      busy ||
+      loading ||
+      conflict ||
+      comparison ||
+      !editable ||
+      !editing?.name?.trim() ||
+      !editing.command
+    )
+      return;
     setBusy(true);
     setError("");
-    const body = {
-      name: editing.name.trim(),
-      command: editing.command,
-      group_name: editing.group_name?.trim() || "General",
-      is_danger: !!editing.is_danger,
-    };
+    setNotice("");
+    const item = normalized(editing);
     try {
-      if (editing.id)
-        await apiClient.patch(`/api/v1/debug/commands/${editing.id}`, body);
-      else
-        await apiClient.post("/api/v1/debug/commands", {
-          ...body,
-          device_type: deviceType,
-          is_public: !!editing.is_public,
-        });
-      setEditing(null);
-      await load();
+      await persist(
+        commands.some((old) => old.id === item.id)
+          ? commands.map((old) => (old.id === item.id ? item : old))
+          : [...commands, item],
+      );
+      setEditor(null);
+      setNotice(d("Command saved", "命令已保存"));
     } catch (error) {
-      setError(String(error));
+      if (
+        isAxiosError(error) &&
+        (error.response?.status === 409 || !error.response)
+      )
+        setEditor((current) =>
+          current ? { ...current, status: "conflict", latest: null } : null,
+        );
+      setError(
+        errorMessage(error, d("Could not save commands", "无法保存命令")),
+      );
     } finally {
       setBusy(false);
     }
   }
-  async function remove(item: Preset) {
-    if (!confirm(`${d("Delete command", "删除命令")} “${item.name}”?`)) return;
+  async function remove(item: Command) {
+    if (
+      busy ||
+      loading ||
+      !!editing ||
+      !editable ||
+      !confirm(`${d("Delete command", "删除命令")} “${item.name}”?`)
+    )
+      return;
     setBusy(true);
+    setError("");
+    setNotice("");
     try {
-      await apiClient.delete(`/api/v1/debug/commands/${item.id}`);
-      await load();
+      await persist(commands.filter((old) => old.id !== item.id));
+      setNotice(d("Command deleted", "命令已删除"));
     } catch (error) {
-      setError(String(error));
+      setError(
+        errorMessage(error, d("Could not delete command", "无法删除命令")),
+      );
     } finally {
       setBusy(false);
     }
@@ -142,22 +311,33 @@ export default function QuickCommands({
         <Button
           size="xs"
           variant="ghost"
-          disabled={loading}
+          disabled={loading || busy || !!editing}
           onClick={() => {
             void load();
           }}
         >
           {d("Refresh", "刷新")}
         </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() =>
-            setEditing({ name: "", command: "", group_name: "General" })
-          }
-        >
-          {d("New", "新建")}
-        </Button>
+        {editable && (
+          <Button
+            disabled={
+              loading || busy || !!error || !!editing || commands.length >= 1000
+            }
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              startEditing({
+                id: crypto.randomUUID(),
+                name: "",
+                command: "",
+                group: "General",
+                confirmBeforeRun: false,
+              })
+            }
+          >
+            {d("New", "新建")}
+          </Button>
+        )}
       </div>
       <Input
         aria-label={d("Search commands", "搜索命令")}
@@ -170,70 +350,140 @@ export default function QuickCommands({
           {error}
         </p>
       )}
-      {editing && (
-        <form onSubmit={save} className="space-y-2 rounded-lg border p-2">
-          <Input
-            required
-            aria-label={d("Name", "名称")}
-            placeholder={d("Name", "名称")}
-            value={editing.name || ""}
-            onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-          />
-          <Input
-            aria-label={d("Group", "分组")}
-            placeholder={d("Group", "分组")}
-            value={editing.group_name || ""}
-            onChange={(e) =>
-              setEditing({ ...editing, group_name: e.target.value })
-            }
-          />
-          <Textarea
-            required
-            aria-label={d("Command content", "命令内容")}
-            placeholder={d(
-              "One or more shell commands",
-              "一条或多条 Shell 命令",
+      {notice && (
+        <p role="status" className="text-muted-foreground text-xs">
+          {notice}
+        </p>
+      )}
+      <p className="text-muted-foreground text-xs break-all">{filePath}</p>
+      {conflict && !comparison && editing && (
+        <Button
+          size="sm"
+          disabled={loading || busy}
+          onClick={() => void load(true)}
+        >
+          {d("Reload latest and keep draft", "载入最新列表并保留草稿")}
+        </Button>
+      )}
+      {comparison && editing && (
+        <div className="space-y-2 rounded border p-2 text-xs">
+          <p>
+            {d(
+              "This command also changed. Review the latest version before choosing.",
+              "此命令也已变更，请比较最新内容和下方草稿后选择。",
             )}
-            className="min-h-32 font-mono text-xs"
-            value={editing.command || ""}
-            onChange={(e) =>
-              setEditing({ ...editing, command: e.target.value })
-            }
-          />
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              checked={!!editing.is_danger}
+          </p>
+          <pre className="max-h-48 overflow-auto whitespace-pre-wrap">
+            {comparison.latest
+              ? JSON.stringify(comparison.latest, null, 2)
+              : d("The command was deleted.", "此命令已被删除。")}
+          </pre>
+          <Button
+            size="xs"
+            disabled={busy || loading}
+            onClick={() => {
+              setEditor({
+                draft: comparison.latest
+                  ? editing
+                  : { ...editing, id: crypto.randomUUID() },
+                original: comparison.latest,
+                status: "editing",
+                latest: null,
+              });
+              setError("");
+            }}
+          >
+            {comparison.latest
+              ? d("Keep my draft", "保留我的草稿")
+              : d("Save draft as new command", "将草稿另存为新命令")}
+          </Button>
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => {
+              if (comparison.latest)
+                startEditing(comparison.latest, comparison.latest);
+              else setEditor(null);
+              setError("");
+            }}
+          >
+            {d("Use latest version", "使用最新版本")}
+          </Button>
+        </div>
+      )}
+      {editing && (
+        <form onSubmit={save} className="rounded-lg border p-2">
+          <fieldset disabled={busy || loading} className="space-y-2">
+            <Input
+              required
+              maxLength={200}
+              aria-label={d("Name", "名称")}
+              placeholder={d("Name", "名称")}
+              value={editing.name || ""}
               onChange={(e) =>
-                setEditing({ ...editing, is_danger: e.target.checked })
+                updateDraft({ ...editing, name: e.target.value })
               }
             />
-            {d("Confirm before running", "执行前确认")}
-          </label>
-          {developer && !editing.id && (
+            <Input
+              maxLength={100}
+              aria-label={d("Group", "分组")}
+              placeholder={d("Group", "分组")}
+              value={editing.group || ""}
+              onChange={(e) =>
+                updateDraft({ ...editing, group: e.target.value })
+              }
+            />
+            <Textarea
+              required
+              maxLength={100000}
+              aria-label={d("Command content", "命令内容")}
+              placeholder={d(
+                "One or more shell commands",
+                "一条或多条 Shell 命令",
+              )}
+              className="min-h-32 font-mono text-xs"
+              value={editing.command || ""}
+              onChange={(e) =>
+                updateDraft({ ...editing, command: e.target.value })
+              }
+            />
+            <p className="text-muted-foreground text-xs">
+              {d("Name", "名称")} {(editing.name || "").length}/200 ·{" "}
+              {d("Group", "分组")} {(editing.group || "").length}/100 ·{" "}
+              {d("Content", "内容")} {(editing.command || "").length}/100000
+            </p>
             <label className="flex items-center gap-2 text-xs">
               <input
                 type="checkbox"
-                checked={!!editing.is_public}
+                checked={!!editing.confirmBeforeRun}
                 onChange={(e) =>
-                  setEditing({ ...editing, is_public: e.target.checked })
+                  updateDraft({
+                    ...editing,
+                    confirmBeforeRun: e.target.checked,
+                  })
                 }
               />
-              {d("Public command", "公共命令")}
+              {d("Confirm before running", "执行前确认")}
             </label>
-          )}
-          <div className="flex gap-2">
-            <Button type="submit" disabled={busy}>
-              {d("Save", "保存")}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => setEditing(null)}
-            >
-              {d("Cancel", "取消")}
-            </Button>
-          </div>
+            <div className="flex gap-2">
+              <Button
+                type="submit"
+                disabled={busy || loading || conflict || !!comparison}
+              >
+                {d("Save", "保存")}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  setEditor(null);
+                  setError("");
+                }}
+              >
+                {d("Cancel", "取消")}
+              </Button>
+            </div>
+          </fieldset>
         </form>
       )}
       {loading && (
@@ -241,9 +491,21 @@ export default function QuickCommands({
           {d("Loading…", "加载中…")}
         </p>
       )}
-      {!loading && visible.length === 0 && (
+      {!loading && !error && visible.length === 0 && (
         <p className="text-muted-foreground text-xs">
-          {d("No commands found", "暂无匹配的命令")}
+          {!exists
+            ? editable
+              ? d(
+                  "Default command file does not exist. Create your first command to generate it.",
+                  "默认命令文件尚不存在，新建第一条命令即可生成。",
+                )
+              : d(
+                  "Default command file does not exist. Ask an administrator to create it.",
+                  "默认命令文件尚不存在，请联系管理员创建。",
+                )
+            : commands.length === 0
+              ? d("This command file is empty", "此命令文件暂无命令")
+              : d("No commands match your search", "没有匹配搜索条件的命令")}
         </p>
       )}
       {groups.map((group) => (
@@ -253,7 +515,7 @@ export default function QuickCommands({
           </summary>
           <div className="space-y-2 p-2">
             {visible
-              .filter((item) => (item.group_name || "General") === group)
+              .filter((item) => (item.group || "General") === group)
               .map((item) => (
                 <div
                   key={item.id}
@@ -262,11 +524,11 @@ export default function QuickCommands({
                   <Button
                     className="h-auto w-full justify-start text-left whitespace-normal"
                     variant="secondary"
-                    disabled={disabled}
+                    disabled={disabled || loading}
                     title={item.command}
                     onClick={() => {
                       if (
-                        !item.is_danger ||
+                        !item.confirmBeforeRun ||
                         confirm(
                           `${d("Run command", "执行命令")} “${item.name}”?\n${item.command}`,
                         )
@@ -274,7 +536,7 @@ export default function QuickCommands({
                         onRun(item.command);
                     }}
                   >
-                    {item.is_danger ? "⚠ " : ""}
+                    {item.confirmBeforeRun ? "⚠ " : ""}
                     {item.name}
                   </Button>
                   <pre className="text-muted-foreground max-h-24 overflow-auto text-xs break-all whitespace-pre-wrap">
@@ -282,9 +544,9 @@ export default function QuickCommands({
                   </pre>
                   <div className="flex flex-wrap items-center gap-1">
                     <span className="text-muted-foreground mr-auto text-xs">
-                      {item.is_public
-                        ? d("Public", "公共")
-                        : d("Personal", "个人")}
+                      {space === "personal"
+                        ? d("My space", "我的空间")
+                        : d("Public space", "公共空间")}
                     </span>
                     <Button
                       size="xs"
@@ -293,19 +555,22 @@ export default function QuickCommands({
                     >
                       {d("Move to top", "置顶")}
                     </Button>
-                    {editable(item) && (
+                    {editable && (
                       <>
                         <Button
                           size="xs"
                           variant="ghost"
-                          onClick={() => setEditing(item)}
+                          disabled={busy || loading || !!editing}
+                          onClick={() => {
+                            startEditing(item, item);
+                          }}
                         >
                           {d("Edit", "编辑")}
                         </Button>
                         <Button
                           size="xs"
                           variant="ghost"
-                          disabled={busy}
+                          disabled={busy || loading || !!editing}
                           onClick={() => {
                             void remove(item);
                           }}
@@ -322,8 +587,8 @@ export default function QuickCommands({
       ))}
       <p className="text-muted-foreground text-xs">
         {d(
-          "Commands are saved to your account. Display order is saved in this browser. .sh files run through the upload button.",
-          "命令保存在账号中，置顶顺序保存在当前浏览器。.sh 文件通过上传按钮执行。",
+          "Commands come from the default JSON file in the selected space. Click Refresh to reload. Display order is saved in this browser.",
+          "命令读取自当前空间指定的 JSON 文件，点击刷新重新载入。置顶顺序保存在当前浏览器。",
         )}
       </p>
     </section>

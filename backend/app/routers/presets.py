@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
@@ -7,63 +8,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.i18n import message as system_message
 from app.middleware.rbac import AnyUser
-from app.schemas.preset import (
-    CreatePresetRequest,
-    PresetCommandOut,
-    UpdatePresetRequest,
-)
-from app.services import preset_service
+from app.services import command_files, preset_service
 
 router = APIRouter()
 
 
-# ── 预制命令 ──────────────────────────────────────────────────
+# Terminal catalogs reuse personal/public storage permissions.
 
 
-@router.get(
-    "/commands", response_model=list[PresetCommandOut], summary="获取预制命令列表"
-)
-async def list_presets(
-    device_type: str,  # query param: adb | serial
+@router.get("/commands")
+async def commands(
+    current_user: AnyUser,
+    device_type: Literal["adb", "serial"],
+    space: Literal["public", "personal"] = "public",
+    db: AsyncSession = Depends(get_db),
+):
+    return await command_files.load(db, device_type, current_user, space)
+
+
+@router.put("/commands")
+async def save_commands(
+    body: command_files.SaveCatalog,
     current_user: AnyUser,
     db: AsyncSession = Depends(get_db),
 ):
-    return await preset_service.list_presets(device_type, db, current_user)
-
-
-@router.post(
-    "/commands",
-    response_model=PresetCommandOut,
-    status_code=201,
-    summary="新建预制命令",
-)
-async def create_preset(
-    body: CreatePresetRequest,
-    current_user: AnyUser,
-    db: AsyncSession = Depends(get_db),
-):
-    return await preset_service.create_preset(body, db, current_user)
-
-
-@router.patch(
-    "/commands/{preset_id}", response_model=PresetCommandOut, summary="更新预制命令"
-)
-async def update_preset(
-    preset_id: str,
-    body: UpdatePresetRequest,
-    current_user: AnyUser,
-    db: AsyncSession = Depends(get_db),
-):
-    return await preset_service.update_preset(preset_id, body, db, current_user)
-
-
-@router.delete("/commands/{preset_id}", summary="删除预制命令")
-async def delete_preset(
-    preset_id: str,
-    current_user: AnyUser,
-    db: AsyncSession = Depends(get_db),
-):
-    return await preset_service.delete_preset(preset_id, db, current_user)
+    return await command_files.save(db, current_user, body)
 
 
 # ── 日志上传 / 列表 / 下载 / 删除 ────────────────────────────

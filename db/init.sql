@@ -200,21 +200,7 @@ CREATE TABLE embedding_settings (
     FOREIGN KEY (active_profile_id) REFERENCES embedding_profiles(id)
 );
 
-CREATE TABLE preset_commands (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    name character varying(200) NOT NULL,
-    command text NOT NULL,
-    group_name character varying(100) DEFAULT 'General'::character varying,
-    device_type character varying(20) NOT NULL,
-    is_public boolean DEFAULT false,
-    is_danger boolean DEFAULT false,
-    owner_id uuid,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
-    CHECK (((device_type)::text = ANY (ARRAY[('adb'::character varying)::text, ('serial'::character varying)::text]))),
-    PRIMARY KEY (id),
-    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
-);
+
 
 CREATE TABLE system_configs (
     key character varying(100) NOT NULL,
@@ -686,39 +672,7 @@ INSERT INTO catalog_options (category, value) VALUES
 
 
 INSERT INTO embedding_settings (id) VALUES (1);
-INSERT INTO preset_commands (id, name, command, group_name, device_type, is_public, is_danger, owner_id) VALUES
-    ('a49f2f54-ff7c-44de-a65e-f3b1f9edd9e5', 'Device model', 'getprop ro.product.model', 'Device information', 'adb', 't', 'f', NULL),
-    ('3e42f166-838c-4887-8eb6-6fb589a7a1fd', 'System version', 'getprop ro.build.version.release', 'Device information', 'adb', 't', 'f', NULL),
-    ('3f3e8cbb-d72d-40de-b3f7-a58695fa49c8', 'All properties', 'getprop', 'Device information', 'adb', 't', 'f', NULL),
-    ('6dd54701-e2e5-4beb-ab9e-fc05d02ce017', 'Screen resolution', 'wm size', 'Device information', 'adb', 't', 'f', NULL),
-    ('45d1852f-3627-415d-8f44-637dd9f5cb55', 'Disk space', 'df -h', 'Device information', 'adb', 't', 'f', NULL),
-    ('684249e3-d113-471d-b412-06cedfbe2682', 'Memory information', 'free -h', 'Device information', 'adb', 't', 'f', NULL),
-    ('bfba44e9-9a06-49ef-ac6c-e20e55270b90', 'Battery status', 'dumpsys battery', 'Device information', 'adb', 't', 'f', NULL),
-    ('5fe88648-bbd5-4b6d-a59d-345c76d6e17a', 'Network interfaces', 'ip addr show', 'Device information', 'adb', 't', 'f', NULL),
-    ('fa5e2f70-2da5-4aff-b190-e6ed4e3efa83', 'Third-party apps', 'pm list packages -3', 'Application management', 'adb', 't', 'f', NULL),
-    ('74bf2f9d-cbc2-458f-a02a-e1689c2b26d0', 'Foreground app', 'dumpsys activity | grep -i resumed', 'Application management', 'adb', 't', 'f', NULL),
-    ('4430ec40-6748-4ace-b885-648dd6584f8a', 'Clear logs', 'logcat -c', 'Application management', 'adb', 't', 'f', NULL),
-    ('aae71d39-b36a-4f02-bbce-45f2c033ea23', 'Reboot', 'reboot', 'Control', 'adb', 't', 't', NULL),
-    ('49e72196-9810-4210-a410-41ae3b07d17c', 'Reboot Recovery', 'reboot recovery', 'Control', 'adb', 't', 't', NULL),
-    ('c225708a-79aa-46d2-bae2-e3c56f569b07', 'Reboot Bootloader', 'reboot bootloader', 'Control', 'adb', 't', 't', NULL),
-    ('0aa814fe-5e78-4086-ac05-6b754f4814f9', 'Enter', '
-', 'General', 'serial', 't', 'f', NULL),
-    ('36edfb91-78ac-4e69-8f03-34453f28b24f', 'Help', 'help
-', 'General', 'serial', 't', 'f', NULL),
-    ('87325559-6bf3-4fa7-8e1c-b17e1d730389', 'Show version', 'version
-', 'General', 'serial', 't', 'f', NULL),
-    ('9a3b801a-590d-479d-ab2b-9c6abfad1aa5', 'dmesg', 'dmesg
-', 'Android serial', 'serial', 't', 'f', NULL),
-    ('9302dd04-2121-4ac8-9789-c62c9ebdee54', 'List processes', 'ps
-', 'Android serial', 'serial', 't', 'f', NULL),
-    ('dff51c03-0a7e-4200-9fb7-760b8d4016cc', 'Storage information', 'df -h
-', 'Android serial', 'serial', 't', 'f', NULL),
-    ('84b9e850-9194-4f8f-934f-f15f65cbb2f0', 'Stop Android', 'stop
-', 'Android serial', 'serial', 't', 't', NULL),
-    ('8175a90b-9940-419c-a369-16d0c4e205f1', 'Start Android', 'start
-', 'Android serial', 'serial', 't', 'f', NULL),
-    ('46b3b629-2dbc-407c-bd87-907d0c41ca97', 'Reboot device', 'reboot
-', 'Control', 'serial', 't', 't', NULL);
+
 
 
 INSERT INTO system_configs (key, value, description, updated_by) VALUES

@@ -50,6 +50,5 @@ with httpx.Client(base_url="http://nginx", headers={"Host": host}, timeout=30) a
     entry = matching[0]
     downloaded = ok(client.get(f"/api/v1/debug/logs/{entry['id']}/download"))
     assert downloaded.content == content, "Upload/download content mismatch"
-    static = ok(client.get(f"/uploads/device_logs/{entry['filename']}"))
-    assert static.content == content, "Static upload proxy mismatch"
-    print("PASS: persisted upload record, authenticated download and /uploads proxy")
+    assert client.get(f"/uploads/device_logs/{entry['filename']}").status_code == 404
+    print("PASS: persisted upload record, authenticated download and no legacy public file access")

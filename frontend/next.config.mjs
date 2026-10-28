@@ -6,15 +6,10 @@ const nextConfig = {
   output: "standalone",
   // A routed AI request can take two 300s attempts plus transport overhead.
   experimental: { proxyTimeout: 660_000 },
-  // 开发环境：将 /api/v1/* 代理到 FastAPI 后端
-  // 生产环境由 Nginx 负责，此配置不生效
-  // 生产镜像构建时固定 Docker 服务名，浏览器使用同源请求。
+  // 同源 API 代理；生产环境的 /api/v1/ 优先由 Nginx 直接转发。
+  // 生产构建使用固定的 Docker 服务名 backend，浏览器不访问内部地址。
   async rewrites() {
     return [
-      {
-        source: "/uploads/:path*",
-        destination: `${process.env.BACKEND_URL ?? "http://localhost:8000"}/uploads/:path*`,
-      },
       {
         source: "/api/v1/:path*",
         destination: `${process.env.BACKEND_URL ?? "http://localhost:8000"}/api/v1/:path*`,

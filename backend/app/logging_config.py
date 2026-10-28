@@ -97,9 +97,6 @@ class JSONLogFormatter(logging.Formatter):
 
 def configure_logging():
     directory = Path(settings.log_dir).resolve()
-    uploads = Path(settings.upload_dir).resolve()
-    if directory == uploads or uploads in directory.parents:
-        raise RuntimeError("LOG_DIR 必须位于公开 uploads 目录之外")
     storage = Path(settings.storage_dir).resolve()
     if directory == storage or storage in directory.parents:
         raise RuntimeError("LOG_DIR 必须位于业务文件存储目录之外")

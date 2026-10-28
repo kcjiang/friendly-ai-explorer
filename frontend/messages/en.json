@@ -1340,6 +1340,16 @@
     "storagecda5511d78": "Invalid image format or image dimensions exceed the limit.",
     "storage2d5b5cda44": "The attachment upload is incomplete or has expired.",
     "storage210607b98c": "The attachment is already linked to another record.",
-    "storagef5507286fe": "Invalid upload size limit"
+    "storagef5507286fe": "Invalid upload size limit",
+    "storage65b31f6f91": "Unsupported editable file type",
+    "storage0c09366f83": "File exceeds 2 MB",
+    "storageb0f5c67b76": "Replace is supported for copying files only",
+    "storage778236d3d3": "Cannot replace a file with itself",
+    "storage8ba2f6fe49": "Storage quota exceeded",
+    "commandFileInvalid": "Invalid command JSON; correct the file in storage",
+    "commandFileTooLarge": "Command file must be a JSON file under 2 MB",
+    "commandFileChanged": "Command file changed. Load the latest version; your draft will be retained.",
+    "commandFileDetail": "Command file {path}: {reason}",
+    "fileContentChanged": "The file has changed. Your draft is retained; load the latest version before saving."
   }
 }

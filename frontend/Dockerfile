@@ -4,6 +4,7 @@ FROM node:22-alpine
 RUN npm install -g pnpm@9.15.9
 
 WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # 先复制依赖文件，利用 Docker 层缓存
 COPY package.json pnpm-lock.yaml ./

@@ -364,7 +364,7 @@ class StorageTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(info["knowledge_bytes"], 0)
         self.current = self.other
         r = await self.client.put(
-            f"/api/v1/files/{item['id']}/content", json={"content": "# Updated"}
+            f"/api/v1/files/{item['id']}/content", json={"content": "# Updated", "revision": (await self.client.get(f"/api/v1/files/{item['id']}/content")).json()["revision"]}
         )
         self.assertEqual(r.status_code, 200, r.text)
         doc = await self.db.get(Document, item["document_id"])
@@ -391,7 +391,7 @@ class StorageTests(unittest.IsolatedAsyncioTestCase):
         log = r.json()
         row = await self.db.get(UploadedLog, log["id"])
         entry = await self.db.get(StorageEntry, row.storage_entry_id)
-        self.assertTrue(entry.path.startswith("设备日志/"))
+        self.assertTrue(entry.path.startswith("DeviceLogs/"))
         self.assertEqual(row.line_count, 2)
         self.current = self.dev
         self.assertEqual(

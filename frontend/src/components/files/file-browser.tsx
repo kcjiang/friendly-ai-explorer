@@ -1,5 +1,6 @@
 "use client";
 
+import { isAxiosError } from "axios";
 import {
   ArrowLeft,
   Copy,
@@ -160,6 +161,12 @@ export default function FileBrowser({
   const [archiveTicket, setArchiveTicket] = useState<Ticket | null>(null);
   const [selected, setSelected] = useState<Entry | null>(null);
   const [name, setName] = useState("");
+  const [fileConflict, setFileConflict] = useState(false);
+  const [latestFile, setLatestFile] = useState<{
+    content: string;
+    revision: string;
+  } | null>(null);
+  const [contentRevision, setContentRevision] = useState("");
   const [content, setContent] = useState("");
   const [editMarkdown, setEditMarkdown] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -180,7 +187,10 @@ export default function FileBrowser({
     count: number;
   } | null>(null);
   const [conflictName, setConflictName] = useState("");
-  const conflictResolve = useRef<((keep: boolean) => void) | null>(null);
+  const conflictResolve = useRef<
+    ((choice: "skip" | "keep" | "replace") => void) | null
+  >(null);
+  const [allowReplace, setAllowReplace] = useState(false);
   const abortUpload = useRef<AbortController | null>(null);
   const previewAbort = useRef<AbortController | null>(null);
   const dialogAbort = useRef<AbortController | null>(null);
@@ -308,7 +318,7 @@ export default function FileBrowser({
       abortUpload.current?.abort();
       previewAbort.current?.abort();
       dialogAbort.current?.abort();
-      conflictResolve.current?.(false);
+      conflictResolve.current?.("skip");
     };
   }, []);
   useEffect(() => {
@@ -384,6 +394,8 @@ export default function FileBrowser({
     setModal("preview");
     setModalLoading(true);
     setContent("");
+    setFileConflict(false);
+    setLatestFile(null);
     setPreviewUrl("");
     setPreviewType("");
     setError("");
@@ -395,6 +407,7 @@ export default function FileBrowser({
         });
         if (controller.signal.aborted) return;
         setContent(r.data.content);
+        setContentRevision(r.data.revision);
         setPreviewType(
           /\.(md|markdown)$/i.test(entry.name) &&
             r.data.content.length <= 200000
@@ -476,6 +489,7 @@ export default function FileBrowser({
     }
   }
   async function submit() {
+    if (modal === "preview" && fileConflict) return;
     setBusy(true);
     setError("");
     try {
@@ -496,18 +510,37 @@ export default function FileBrowser({
         });
       else if (modal === "rename" && selected)
         await api.patch(`/api/v1/files/${selected.id}`, { name });
-      else if ((modal === "copy" || modal === "move") && selected)
-        await api.post(
-          `/api/v1/files/${selected.id}/transfer`,
-          {
+      else if ((modal === "copy" || modal === "move") && selected) {
+        let choice: "skip" | "keep" | "replace" = "keep";
+        const existing = await api.get("/api/v1/files/exists", {
+          params: {
             space: targetSpace,
             parent: targetPath,
-            copy: modal === "copy",
-            conflict: "keep",
+            name: selected.name,
           },
-          { timeout: 600000 },
-        );
-      else if (modal === "delete" && selected)
+        });
+        if (existing.data.exists) {
+          setAllowReplace(modal === "copy" && !selected.is_dir);
+          setConflictName(selected.name);
+          choice = await new Promise<"skip" | "keep" | "replace">((resolve) => {
+            conflictResolve.current = resolve;
+          });
+          conflictResolve.current = null;
+          setConflictName("");
+          setAllowReplace(false);
+        }
+        if (choice !== "skip")
+          await api.post(
+            `/api/v1/files/${selected.id}/transfer`,
+            {
+              space: targetSpace,
+              parent: targetPath,
+              copy: modal === "copy",
+              conflict: choice,
+            },
+            { timeout: 600000 },
+          );
+      } else if (modal === "delete" && selected)
         await api.delete(`/api/v1/files/${selected.id}`);
       else if (modal === "purge" && selected)
         await api.delete(`/api/v1/files/trash/${selected.id}`);
@@ -519,12 +552,17 @@ export default function FileBrowser({
       else if (modal === "capacity" && capacity)
         await api.put("/api/v1/files/capacity", capacity);
       else if (modal === "preview" && selected && editMarkdown)
-        await api.put(`/api/v1/files/${selected.id}/content`, { content });
+        await api.put(`/api/v1/files/${selected.id}/content`, {
+          content,
+          revision: contentRevision,
+        });
       setModal(null);
       setPreviewUrl("");
       setMessage(d("Saved", "操作完成"));
       refresh();
     } catch (e) {
+      if (modal === "preview" && isAxiosError(e) && e.response?.status === 409)
+        setFileConflict(true);
       report(e);
     } finally {
       setBusy(false);
@@ -586,12 +624,14 @@ export default function FileBrowser({
         });
         if (existing.data.exists) {
           setConflictName(file.name);
-          const keep = await new Promise<boolean>((resolve) => {
-            conflictResolve.current = resolve;
-          });
+          const keep = await new Promise<"skip" | "keep" | "replace">(
+            (resolve) => {
+              conflictResolve.current = resolve;
+            },
+          );
           conflictResolve.current = null;
           setConflictName("");
-          if (!keep) continue;
+          if (keep === "skip") continue;
           conflict = "keep";
         }
         if (controller.signal.aborted) break;
@@ -875,7 +915,7 @@ export default function FileBrowser({
                   size="sm"
                   onClick={() => {
                     abortUpload.current?.abort();
-                    conflictResolve.current?.(false);
+                    conflictResolve.current?.("skip");
                   }}
                 >
                   {d("Cancel", "取消")}
@@ -1227,7 +1267,7 @@ export default function FileBrowser({
               {modal === "markdown" && (
                 <textarea
                   className="min-h-72 w-full rounded-lg border bg-transparent p-3 font-mono text-sm"
-                  aria-label={d("Markdown content", "Markdown 正文")}
+                  aria-label={d("File content", "文件正文")}
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                 />
@@ -1292,8 +1332,8 @@ export default function FileBrowser({
                   </div>
                   <p className="text-muted-foreground text-xs">
                     {d(
-                      "Name conflicts keep both files. Shared copies become independent files and use your quota.",
-                      "重名时加括号数字保留两者；复制共享文件会生成独立副本并占用目标空间容量。",
+                      "For name conflicts, choose Replace, Keep both or Skip. Shared copies are independent and use your quota.",
+                      "复制文件重名时可选择替换、保留两者或跳过；复制共享文件会生成独立副本并占用目标空间容量。",
                     )}
                   </p>
                 </div>
@@ -1398,24 +1438,89 @@ export default function FileBrowser({
                       <Download />
                       {d("Download", "下载")}
                     </Button>
-                    {previewType === "markdown" && writable && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setEditMarkdown((v) => !v)}
-                      >
-                        <Pencil />
-                        {editMarkdown
-                          ? d("Preview", "预览")
-                          : d("Edit", "编辑")}
-                      </Button>
-                    )}
+                    {(previewType === "markdown" ||
+                      (selected && /\.(json|sh)$/i.test(selected.name))) &&
+                      writable && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditMarkdown((v) => !v)}
+                        >
+                          <Pencil />
+                          {editMarkdown
+                            ? d("Preview", "预览")
+                            : d("Edit", "编辑")}
+                        </Button>
+                      )}
                   </div>
                   <div className="min-h-0 flex-1 overflow-auto">
+                    {fileConflict && editMarkdown && (
+                      <div className="space-y-2 border p-2 text-xs">
+                        <p>
+                          {d(
+                            "Your draft is retained. Load the latest file to compare before saving.",
+                            "草稿已保留，请载入最新文件并比较后再保存。",
+                          )}
+                        </p>
+                        {!latestFile ? (
+                          <Button
+                            size="sm"
+                            disabled={busy}
+                            onClick={async () => {
+                              if (!selected) return;
+                              setBusy(true);
+                              try {
+                                const { data } = await api.get(
+                                  `/api/v1/files/${selected.id}/content`,
+                                );
+                                setLatestFile(data);
+                              } catch (e) {
+                                report(e);
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                          >
+                            {d("Load latest version", "载入最新版本")}
+                          </Button>
+                        ) : (
+                          <>
+                            <pre className="max-h-48 overflow-auto whitespace-pre-wrap">
+                              {latestFile.content}
+                            </pre>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setContentRevision(latestFile.revision);
+                                setLatestFile(null);
+                                setFileConflict(false);
+                                setError("");
+                              }}
+                            >
+                              {d("Keep my draft", "保留我的草稿")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setContent(latestFile.content);
+                                setContentRevision(latestFile.revision);
+                                setLatestFile(null);
+                                setFileConflict(false);
+                                setError("");
+                              }}
+                            >
+                              {d("Use latest version", "使用最新版本")}
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    )}
                     {editMarkdown ? (
                       <textarea
                         className="h-[55dvh] w-full rounded border bg-transparent p-3 font-mono text-sm"
-                        aria-label={d("Markdown content", "Markdown 正文")}
+                        disabled={busy}
+                        aria-label={d("File content", "文件正文")}
                         value={content}
                         onChange={(e) => setContent(e.target.value)}
                       />
@@ -1591,6 +1696,7 @@ export default function FileBrowser({
                 disabled={
                   busy ||
                   modalLoading ||
+                  (modal === "preview" && fileConflict) ||
                   ((modal === "folder" ||
                     modal === "rename" ||
                     modal === "markdown") &&
@@ -1609,7 +1715,7 @@ export default function FileBrowser({
         open={!!conflictName}
         onOpenChange={(value) => {
           if (!value) {
-            conflictResolve.current?.(false);
+            conflictResolve.current?.("skip");
             setConflictName("");
           }
         }}
@@ -1622,11 +1728,16 @@ export default function FileBrowser({
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
-              onClick={() => conflictResolve.current?.(false)}
+              onClick={() => conflictResolve.current?.("skip")}
             >
               {d("Skip", "跳过")}
             </Button>
-            <Button onClick={() => conflictResolve.current?.(true)}>
+            {allowReplace && (
+              <Button onClick={() => conflictResolve.current?.("replace")}>
+                {d("Replace", "替换")}
+              </Button>
+            )}
+            <Button onClick={() => conflictResolve.current?.("keep")}>
               {d("Keep both", "保留两者")}
             </Button>
           </div>

@@ -7,7 +7,7 @@
 ```text
 knowledge/                       # Markdown 知识库，允许子目录
 storage/public/                  # 公共文件
-storage/personal/<user-id>/       # 个人文件，含“设备日志”目录
+storage/personal/<user-id>/       # 个人文件，含 `DeviceLogs` 目录
 storage/tickets/<ticket-id>/      # 已提交的工单附件
 storage/attachment-drafts/<user-id>/ # 尚未关联工单的附件草稿
 recycle/<delete-id>/              # 公共空间回收站
@@ -65,7 +65,7 @@ PNG、JPEG、GIF、WebP 校验真实格式与扩展名、尺寸及解码生成�
 
 ## 设备日志
 
-只有点击上传时才保存到本人空间下的“设备日志”，ADB 与串口通过文件名区分，计入本人配额和总池。历史日志仅本人可查看，developer 无跨用户特权。存储中的日志可正常移动、复制和共享，历史入口通过 storage_entry_id 跟随当前文件路径。
+只有点击上传时才保存到本人空间下的 `DeviceLogs`，ADB 与串口通过文件名区分，计入本人配额和总池。历史日志仅本人可查看，developer 无跨用户特权。存储中的日志可正常移动、复制和共享，历史入口通过 storage_entry_id 跟随当前文件路径。
 
 ## 清理与异常恢复
 
@@ -84,3 +84,9 @@ PNG、JPEG、GIF、WebP 校验真实格式与扩展名、尺寸及解码生成�
 ## 当前范围
 
 采用单服务器和单持久化文件系统，不引入对象存储或内容去重。应用配额无法约束有服务器文件系统写权限的运维人员。上传和附件关联具有恢复记录；其他文件操作不保证跨数据库、文件系统的断电级原子事务，仍需备份。暂不支持外部分享、文件内容版本恢复、视频转码、文件夹压缩下载和自动清空公共回收站。
+
+## Terminal command files
+
+Terminal catalogs are ordinary JSON files. Copying a file to an existing filename offers Replace, Keep both, or Skip. Replace retains the destination file ID and sharing permissions; Keep both uses the existing numbered-name rule. Folder conflicts support Keep both or Skip. JSON and shell files can be edited as text in the file preview. Only the exact default catalog paths in the selected personal/public space are loaded by the terminal; see [device tools](device-tools.md#command-files).
+
+Text content reads return a SHA-256 revision. Content edits require that revision and return 409 on stale saves, including edits made from the terminal. The file editor retains the draft on conflict and allows explicit loading/comparison of the latest content before saving again. This applies to ordinary editable files rather than adding special command-file permissions.

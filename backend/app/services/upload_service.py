@@ -290,7 +290,7 @@ async def finish(db, user, task_id):
             parent = str(task.id)
             s.disk_path(task.space, parent).mkdir(parents=True, exist_ok=True)
         if task.purpose == "log":
-            parent = "设备日志"
+            parent = "DeviceLogs"
             root = s.disk_path(task.space)
             root.mkdir(parents=True, exist_ok=True)
             if not s.disk_path(task.space, parent).exists():

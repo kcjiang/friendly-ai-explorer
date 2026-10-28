@@ -5,35 +5,6 @@ from typing import Optional
 from pydantic import BaseModel
 
 
-class PresetCommandOut(BaseModel):
-    id: uuid.UUID
-    name: str
-    command: str
-    group_name: str
-    device_type: str
-    is_public: bool
-    is_danger: bool
-    owner_id: Optional[uuid.UUID]
-    created_at: datetime
-    model_config = {"from_attributes": True}
-
-
-class CreatePresetRequest(BaseModel):
-    name: str
-    command: str
-    group_name: str = "General"
-    device_type: str  # adb | serial
-    is_public: bool = False
-    is_danger: bool = False
-
-
-class UpdatePresetRequest(BaseModel):
-    name: Optional[str] = None
-    command: Optional[str] = None
-    group_name: Optional[str] = None
-    is_danger: Optional[bool] = None
-
-
 class UploadedLogOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID

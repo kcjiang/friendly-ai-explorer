@@ -1,10 +1,8 @@
 import logging
-import os
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.ai.provider_client import AIError
@@ -63,17 +61,6 @@ app.add_middleware(
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(LanguageMiddleware)
 
-
-class PublicAssets(StaticFiles):
-    async def get_response(self, path, scope):
-        # Old device-log URLs must never bypass authenticated download routes.
-        if path.replace("\\", "/").split("/")[0] == "device_logs":
-            raise StarletteHTTPException(404)
-        return await super().get_response(path, scope)
-
-
-os.makedirs(settings.upload_dir, exist_ok=True)
-app.mount("/uploads", PublicAssets(directory=settings.upload_dir), name="uploads")
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])

@@ -66,10 +66,11 @@ class TransferRequest(BaseModel):
     space: Literal["public", "personal", "knowledge"]
     parent: str = ""
     copy_file: bool = Field(default=False, alias="copy")
-    conflict: Literal["skip", "keep"] = "keep"
+    conflict: Literal["skip", "keep", "replace"] = "keep"
 
 
 class ContentRequest(BaseModel):
+    revision: str
     content: str = Field(max_length=2_000_000)
 
 
@@ -417,13 +418,17 @@ async def download(
 async def content(
     entry_id: uuid.UUID, user: AnyUser, db: AsyncSession = Depends(get_db)
 ):
+    await s.lock(db)
     entry = await s.entry_for(db, entry_id, user)
     path = s.disk_path(entry.space, entry.path)
     if entry.is_dir or not s.mime_type(entry.path).startswith("text/"):
         s.fail(415, "此格式请下载后查看")
     if path.stat().st_size > 2_000_000:
         s.fail(413, "文件较大，请下载后查看")
-    return {"content": path.read_text(encoding="utf-8-sig", errors="replace")}
+    raw = path.read_bytes()
+    result = {"content": raw.decode("utf-8-sig", errors="replace"), "revision": hashlib.sha256(raw).hexdigest()}
+    await db.commit()
+    return result
 
 
 @router.api_route("/{entry_id}/thumbnail", methods=["GET", "HEAD"])
@@ -453,26 +458,7 @@ async def edit(
 ):
     await s.lock(db)
     entry = await s.entry_for(db, entry_id, user, write=True)
-    if entry.is_dir or Path(entry.path).suffix.lower() not in (".md", ".markdown"):
-        s.fail(400, "目前仅支持编辑 Markdown")
-    target = s.disk_path(entry.space, entry.path)
-    original = target.read_bytes()
-    value = body.content.encode("utf-8")
-    await s.check_quota(db, user, entry.space, max(0, len(value) - len(original)))
-    try:
-        target.write_bytes(value)
-        entry.size = len(value)
-        entry.sha256 = hashlib.sha256(value).hexdigest()
-        from datetime import datetime, timezone
-
-        entry.updated_at = datetime.now(timezone.utc)
-        if entry.space == "knowledge":
-            await s.attach_document(db, user, entry)
-        s.record(db, user, entry, "edit")
-        await db.commit()
-    except BaseException:
-        target.write_bytes(original)
-        raise
+    await s.write_text(db, user, entry, body.content, body.revision)
     queue_index(tasks, [entry])
     return {"ok": True}
 
