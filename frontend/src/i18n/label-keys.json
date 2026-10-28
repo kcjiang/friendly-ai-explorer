@@ -986,5 +986,10 @@
   "Today's AI TODOs": "ui.TodaysAITODOs",
   "Ticket analysis": "ui.Ticketanalysis",
   "AI chat (knowledge first)": "ui.AIchatknowledgefirst",
-  "On hold": "ui.Onhold"
+  "On hold": "ui.Onhold",
+  "Device Terminal": "ui.deviceTerminal",
+  "Device Console": "ui.deviceConsole",
+  "Storage": "ui.storageSpace",
+  "Shared with me": "ui.sharedWithMe",
+  "System logs": "ui.systemLogs"
 }

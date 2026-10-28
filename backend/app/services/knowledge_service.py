@@ -1,10 +1,7 @@
 import asyncio
 import logging
-import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 
-import aiofiles
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,8 +14,6 @@ from app.ai.embeddings import (
     embed_chunks,
     embedding_identity,
 )
-from app.ai.file_parser import parse_file
-from app.config import settings
 from app.i18n import message as system_message
 from app.models.document import Document, DocumentChunk, DocVisibility
 from app.models.user import User
@@ -31,13 +26,66 @@ logger = logging.getLogger(__name__)
 
 
 def _visibility_filter(user: User):
-    """非作者只能看到公开文档；作者可以看到自己的所有文档"""
-    from sqlalchemy import or_
+    """Knowledge is shared by all signed-in users."""
+    from sqlalchemy import true
 
-    return or_(
-        Document.visibility == DocVisibility.public,
-        Document.author_id == user.id,
+    return true()
+
+
+async def _save_markdown_file(doc, db, user):
+    import hashlib
+    import re
+    import uuid
+    from pathlib import Path
+
+    from app.models.storage import StorageEntry
+    from app.services import storage_service as storage
+
+    await storage.lock(db)
+    entry = await db.scalar(
+        select(StorageEntry).where(StorageEntry.document_id == doc.id)
     )
+    value = (doc.content or "").encode("utf-8")
+    await storage.check_quota(db, user, "knowledge", len(value))
+    if not entry:
+        root = storage.disk_path("knowledge")
+        root.mkdir(parents=True, exist_ok=True)
+        name = (
+            re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", doc.title).strip(" .") or "Untitled"
+        )
+        name = name.encode("utf-8")[:180].decode("utf-8", errors="ignore")
+        if not name.lower().endswith((".md", ".markdown")):
+            name += ".md"
+        name = storage.available_name(root, name)
+        target = storage.disk_path("knowledge", name)
+    else:
+        target = storage.disk_path(entry.space, entry.path)
+    previous = target.read_bytes() if target.exists() else None
+    temporary = Path(storage.settings.storage_dir) / "temporary" / uuid.uuid4().hex
+    temporary.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        temporary.write_bytes(value)
+        temporary.replace(target)
+        if not entry:
+            entry = await storage.register(db, "knowledge", name, user)
+            entry.document_id = doc.id
+        else:
+            storage.record(db, user, entry, "edit")
+        entry.sha256 = hashlib.sha256(value).hexdigest()
+        entry.size = len(value)
+        entry.updated_at = datetime.now(timezone.utc)
+        await db.execute(
+            delete(DocumentChunk).where(DocumentChunk.document_id == doc.id)
+        )
+        await db.commit()
+    except BaseException:
+        if previous is None:
+            target.unlink(missing_ok=True)
+        else:
+            target.write_bytes(previous)
+        raise
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 # ── 向量化入库（内部使用）────────────────────────────────────
@@ -193,12 +241,6 @@ async def get_document(doc_id: str, db: AsyncSession, user: User) -> Document:
         raise HTTPException(
             status_code=404, detail=system_message("errors.documentNotFound")
         )
-    # 私有文档只有作者可以访问
-    if doc.visibility == DocVisibility.private and doc.author_id != user.id:
-        raise HTTPException(
-            status_code=403,
-            detail=system_message("errors.accessToThisDocumentIsDenied"),
-        )
     # 增加浏览量
     doc.view_count += 1
     await db.commit()
@@ -213,16 +255,17 @@ async def create_document(
         title=body.title,
         content=body.content,
         content_type="markdown",
-        visibility=body.visibility,
-        is_published=body.is_published,
+        visibility=DocVisibility.public,
+        is_published=True,
         tags=body.tags,
     )
     db.add(doc)
-    await db.commit()
+    await db.flush()
+    await _save_markdown_file(doc, db, user)
     await db.refresh(doc)
 
     # 自动向量化
-    if body.content and body.is_published:
+    if body.content:
         await _vectorize_document(doc, body.content, db)
 
     result = await db.execute(
@@ -242,16 +285,14 @@ async def update_document(
         raise HTTPException(
             status_code=404, detail=system_message("errors.documentNotFound")
         )
-    if doc.author_id != user.id:
-        raise HTTPException(
-            status_code=403,
-            detail=system_message("errors.onlyTheAuthorCanEditThisDocument"),
-        )
-
     for k, v in body.model_dump(exclude_unset=True).items():
+        if k in ("visibility", "is_published"):
+            continue
         setattr(doc, k, v)
+    doc.visibility = DocVisibility.public
+    doc.is_published = True
     doc.updated_at = datetime.now(timezone.utc)
-    await db.commit()
+    await _save_markdown_file(doc, db, user)
 
     # 内容或发布状态有变化时重新向量化
     if (
@@ -284,72 +325,47 @@ async def delete_document(doc_id: str, db: AsyncSession, user: User) -> dict:
             status_code=404, detail=system_message("errors.documentNotFound")
         )
 
-    # 删除关联文件
-    if doc.file_url:
-        file_path = Path(settings.upload_dir) / doc.file_url.lstrip("/uploads/")
-        if file_path.exists():
-            file_path.unlink(missing_ok=True)
+    from app.models.storage import StorageEntry
+    from app.services import storage_service as storage
 
-    await db.delete(doc)
-    await db.commit()
+    await storage.lock(db)
+    entry = await db.scalar(
+        select(StorageEntry).where(StorageEntry.document_id == doc.id)
+    )
+    if entry:
+        await storage.delete_entry(db, user, entry)
+    else:
+        await db.delete(doc)
+        await db.commit()
     return {"message": system_message("errors.deleteSuccess")}
 
 
 async def upload_document(
     file: UploadFile, title: str, visibility: str, db: AsyncSession, user: User
 ) -> Document:
-    """上传文件并自动解析 + 向量化"""
-    allowed = {".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg", ".webp"}
-    ext = Path(file.filename or "").suffix.lower()
-    if ext not in allowed:
-        raise HTTPException(
-            status_code=400, detail=system_message("errors.unsupportedFile")
+    """Legacy endpoint, using the same private streaming storage as the browser."""
+    from app.services import storage_service as storage
+
+    staged, count, digest = await storage.stage_upload(file, knowledge=True, db=db)
+    target = None
+    try:
+        await storage.lock(db)
+        entry = await storage.commit_upload(
+            db, user, "knowledge", "", file.filename, staged, count, digest, "keep"
         )
-
-    # 保存文件
-    save_dir = Path(settings.upload_dir)
-    save_dir.mkdir(parents=True, exist_ok=True)
-    unique_name = f"{uuid.uuid4()}{ext}"
-    save_path = save_dir / unique_name
-
-    file_bytes = await file.read()
-    if len(file_bytes) > settings.max_file_size_mb * 1024 * 1024:
-        raise HTTPException(
-            status_code=413, detail=system_message("errors.fileExceedsTheSizeLimit")
-        )
-
-    async with aiofiles.open(save_path, "wb") as f:
-        await f.write(file_bytes)
-
-    # 解析文本
-    extracted_text = parse_file(file_bytes, file.filename or unique_name)
-
-    # 判断 content_type
-    if ext == ".pdf":
-        ctype = "pdf"
-    elif ext in (".docx", ".doc"):
-        ctype = "docx"
-    else:
-        ctype = "image"
-
-    doc = Document(
-        author_id=user.id,
-        title=title or file.filename,
-        content=extracted_text,
-        content_type=ctype,
-        file_url=f"/uploads/{unique_name}",
-        file_original_name=file.filename,
-        visibility=DocVisibility(visibility),
-        is_published=True,
-        tags=None,
-    )
-    db.add(doc)
-    await db.commit()
-    await db.refresh(doc)
-
-    # 自动向量化
-    if extracted_text.strip():
-        await _vectorize_document(doc, extracted_text, db)
+        target = storage.disk_path(entry.space, entry.path)
+        doc = await db.get(Document, entry.document_id)
+        if title:
+            doc.title = title[:500]
+        doc.file_original_name = file.filename
+        await db.commit()
+    except BaseException:
+        if target:
+            target.unlink(missing_ok=True)
+        raise
+    finally:
+        staged.unlink(missing_ok=True)
+    await _vectorize_document(doc, doc.content or "", db)
 
     result = await db.execute(
         select(Document)
@@ -363,10 +379,6 @@ async def reindex_document(doc_id: str, db: AsyncSession, user: User):
     doc = await db.get(Document, doc_id)
     if not doc:
         raise HTTPException(404, system_message("errors.documentNotFound"))
-    if doc.author_id != user.id:
-        raise HTTPException(
-            403, system_message("errors.onlyTheAuthorCanRebuildThisDocumentIndex")
-        )
     if not doc.is_published:
         raise HTTPException(
             409, system_message("errors.publishTheDocumentBeforeRebuildingItsIndex")

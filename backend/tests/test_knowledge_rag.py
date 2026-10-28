@@ -1,5 +1,6 @@
 """Knowledge indexing/retrieval regression tests. DB writes roll back; API calls mocked."""
 
+import tempfile
 import unittest
 from dataclasses import asdict, replace
 from unittest.mock import AsyncMock, patch
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai import embeddings, rag_engine
 from app.ai.embedding_config import EmbeddingConfig, EmbeddingProfile, EmbeddingSettings
 from app.ai.provider_client import encrypt_key
+from app.config import settings
 from app.database import engine, get_db
 from app.main import app
 from app.middleware.auth import get_current_user
@@ -71,6 +73,9 @@ class EmbeddingTests(unittest.IsolatedAsyncioTestCase):
 
 class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.storage = patch.object(settings, "storage_dir", self.folder.name)
+        self.storage.start()
         self.connection = await engine.connect()
         self.transaction = await self.connection.begin()
         self.db = AsyncSession(
@@ -148,6 +153,8 @@ class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
         await self.transaction.rollback()
         await self.connection.close()
         await engine.dispose()
+        self.storage.stop()
+        self.folder.cleanup()
 
     async def create(self, **overrides):
         body = {
@@ -194,7 +201,7 @@ class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("凌云", context)
         self.assertIn("77W", context)
 
-    async def test_publication_and_private_visibility_apply_to_keyword_path(self):
+    async def test_all_knowledge_is_shared_and_new_documents_are_published(self):
         await self.create(content=self.code + " PUBLIC_MARKER")
         await self.create(
             title=self.code + " own private",
@@ -221,12 +228,14 @@ class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("PUBLIC_MARKER", context)
         self.assertIn("OWN_PRIVATE_MARKER", context)
-        self.assertNotIn("OTHER_PRIVATE_MARKER", context)
-        self.assertNotIn("DRAFT_MARKER", context)
+        self.assertIn("OTHER_PRIVATE_MARKER", context)
+        self.assertIn("DRAFT_MARKER", context)
         public_only = await rag_engine.retrieve_context(self.code, self.db, top_k=8)
-        self.assertNotIn("OWN_PRIVATE_MARKER", public_only)
+        self.assertIn("OWN_PRIVATE_MARKER", public_only)
 
-    async def test_vector_path_filters_private_and_incompatible_models(self):
+    async def test_vector_path_includes_all_knowledge_but_filters_incompatible_models(
+        self,
+    ):
         docs = [
             Document(
                 author_id=self.owner.id,
@@ -274,10 +283,10 @@ class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
                 "unmatchedsemantic" + uuid4().hex, self.db, user=self.owner
             )
         self.assertIn("VECTOR_PUBLIC", context)
-        self.assertNotIn("VECTOR_HIDDEN", context)
+        self.assertIn("VECTOR_HIDDEN", context)
         self.assertNotIn("VECTOR_OLD_MODEL", context)
 
-    async def test_reindex_is_author_only_and_reports_ready(self):
+    async def test_any_member_can_reindex_shared_knowledge(self):
         row = await self.create()
 
         async def vectors(chunks, **kwargs):
@@ -300,7 +309,7 @@ class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
             (
                 await self.client.post(f"/api/v1/knowledge/{row['id']}/reindex")
             ).status_code,
-            403,
+            200,
         )
 
     async def test_switch_encoder_excludes_old_vectors_and_disabled_keeps_text(self):
@@ -404,7 +413,7 @@ class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
                 await rag_engine.retrieve_context(query, self.db, user=self.owner),
             )
 
-    async def test_update_empty_or_unpublish_removes_stale_chunks(self):
+    async def test_empty_content_removes_chunks_and_legacy_unpublish_is_ignored(self):
         row = await self.create()
         response = await self.client.patch(
             f"/api/v1/knowledge/{row['id']}", json={"content": ""}
@@ -419,13 +428,13 @@ class KnowledgeRAGTests(unittest.IsolatedAsyncioTestCase):
         response = await self.client.patch(
             f"/api/v1/knowledge/{row['id']}", json={"is_published": False}
         )
-        self.assertEqual(response.json()["index_status"], "draft")
-        self.assertEqual(response.json()["indexed_chunks"], 0)
+        self.assertEqual(response.json()["index_status"], "text_only")
+        self.assertGreater(response.json()["indexed_chunks"], 0)
         self.assertEqual(
             (
                 await self.client.post(f"/api/v1/knowledge/{row['id']}/reindex")
             ).status_code,
-            409,
+            200,
         )
 
     async def test_empty_retrieval_uses_general_conversation_without_fake_sources(self):

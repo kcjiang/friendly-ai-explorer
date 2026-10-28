@@ -1,13 +1,16 @@
 import {
   BookOpen,
-  Cable,
   Database,
+  FolderOpen,
   Gauge,
   type LucideIcon,
   PanelsTopLeft,
+  ScrollText,
   Settings,
+  Share2,
+  SlidersHorizontal,
   SquareKanban,
-  Usb,
+  Terminal,
 } from "lucide-react";
 
 export type SiteConfig = typeof siteConfig;
@@ -50,15 +53,23 @@ export const navigations: Navigation[] = [
     name: "Knowledge",
     href: "/knowledge",
   },
+  { icon: FolderOpen, name: "Storage", href: "/storage" },
+  { icon: Share2, name: "Shared with me", href: "/shared" },
   {
-    icon: Usb,
-    name: "ADB Connection",
-    href: "/adb",
+    icon: ScrollText,
+    name: "System logs",
+    href: "/system-logs",
+    accessible: ["developer"],
   },
   {
-    icon: Cable,
-    name: "Serial Port",
-    href: "/serial",
+    icon: Terminal,
+    name: "Device Terminal",
+    href: "/terminal",
+  },
+  {
+    icon: SlidersHorizontal,
+    name: "Device Console",
+    href: "/device-console",
   },
   {
     icon: Settings,

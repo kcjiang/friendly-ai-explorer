@@ -6,6 +6,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
 } from "react";
@@ -63,6 +64,7 @@ export function FloatingWindow({
   title: suppliedTitle,
   initialSize = { width: 720, height: 420 },
   containScroll = false,
+  closeLabel,
 }: {
   open: boolean;
   onClose: () => void;
@@ -70,9 +72,11 @@ export function FloatingWindow({
   title?: string;
   initialSize?: { width: number; height: number };
   containScroll?: boolean;
+  closeLabel?: string;
 }) {
   const t = useUiTranslations();
   const title = suppliedTitle ?? t("ui.liveAiOutput");
+  const helpId = useId();
   const localizedLabels = translateLabels(labels, t);
 
   const popup = useRef<HTMLDivElement>(null);
@@ -207,11 +211,7 @@ export function FloatingWindow({
       <DialogPortal>
         <Primitive.Popup
           ref={popup}
-          aria-describedby={
-            title === t("ui.email")
-              ? "workbench-mail-help"
-              : "workbench-debug-help"
-          }
+          aria-describedby={helpId}
           className="bg-popover text-popover-foreground fixed z-50 flex flex-col rounded-xl border shadow-xl outline-none"
           style={
             rect
@@ -276,14 +276,7 @@ export function FloatingWindow({
             >
               {title}
             </DialogTitle>
-            <DialogDescription
-              id={
-                title === t("ui.email")
-                  ? "workbench-mail-help"
-                  : "workbench-debug-help"
-              }
-              className="sr-only"
-            >
+            <DialogDescription id={helpId} className="sr-only">
               {t("ui.dragTheTitleBarToMoveAndEdgesToResizeUseAlt")}
             </DialogDescription>
             <Button
@@ -302,9 +295,10 @@ export function FloatingWindow({
                   variant="ghost"
                   size="icon-sm"
                   aria-label={
-                    title === t("ui.email")
+                    closeLabel ??
+                    (title === t("ui.email")
                       ? t("ui.closeMail")
-                      : t("ui.closeLiveOutput")
+                      : t("ui.closeLiveOutput"))
                   }
                 />
               }

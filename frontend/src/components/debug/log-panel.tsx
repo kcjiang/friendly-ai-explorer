@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useUiTranslations } from "@/i18n/client";
 import apiClient from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
+import { uploadManager } from "@/lib/upload-manager";
 
 interface LogEntry {
   id: string;
@@ -75,14 +76,15 @@ export default function LogPanel({ deviceType, lines }: Props) {
     setUploading(true);
     try {
       const text = lines.join("\n");
-      const blob = new Blob([text], { type: "text/plain" });
-      const fd = new FormData();
-      fd.append("file", blob, `${deviceType}_${Date.now()}.txt`);
-      fd.append("device_type", deviceType);
-      fd.append("description", description.trim());
-      await apiClient.post("/api/v1/debug/logs", fd, {
-        headers: { "Content-Type": "multipart/form-data" },
+      const file = new File([text], `${deviceType}_${Date.now()}.txt`, {
+        type: "text/plain;charset=utf-8",
       });
+      await uploadManager.enqueue(file, {
+        purpose: "log",
+        device_type: deviceType,
+        description: description.trim(),
+        conflict: "keep",
+      }).promise;
       setDesc("");
       loadLogs();
     } catch (e: unknown) {
@@ -104,7 +106,10 @@ export default function LogPanel({ deviceType, lines }: Props) {
     setViewContent("");
     try {
       const url = `${process.env.NEXT_PUBLIC_API_URL}/api/v1/debug/logs/${log.id}/download`;
-      const r = await apiClient.get(url, { responseType: "text" });
+      const r = await apiClient.get(url, {
+        responseType: "text",
+        transformResponse: [(value) => value],
+      });
       setViewContent(
         typeof r.data === "string" ? r.data : JSON.stringify(r.data),
       );
@@ -112,6 +117,22 @@ export default function LogPanel({ deviceType, lines }: Props) {
       setViewContent(t("ui.loadFailed"));
     } finally {
       setViewLoading(false);
+    }
+  }
+
+  async function handleDownload(log: LogEntry) {
+    try {
+      const r = await apiClient.get(`/api/v1/debug/logs/${log.id}/download`, {
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(r.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = log.filename;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      alert(errorMessage(e));
     }
   }
 
@@ -196,15 +217,13 @@ export default function LogPanel({ deviceType, lines }: Props) {
                   >
                     <Eye size={12} />
                   </button>
-                  <a
-                    href={`${process.env.NEXT_PUBLIC_API_URL}/api/v1/debug/logs/${log.id}/download`}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    onClick={() => void handleDownload(log)}
                     title={t("ui.download")}
                     className="text-muted-foreground hover:text-primary p-1 transition-colors"
                   >
                     <Download size={12} />
-                  </a>
+                  </button>
                   <button
                     onClick={() => handleDelete(log.id)}
                     title={t("ui.delete")}
@@ -232,14 +251,12 @@ export default function LogPanel({ deviceType, lines }: Props) {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <a
-                  href={`${process.env.NEXT_PUBLIC_API_URL}/api/v1/debug/logs/${viewing.id}/download`}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  onClick={() => void handleDownload(viewing)}
                   className="border-border hover:bg-muted/50 text-muted-foreground flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs transition-colors"
                 >
                   <Download size={12} /> {t("ui.download")}
-                </a>
+                </button>
                 <button onClick={() => setViewing(null)}>
                   <X size={18} className="text-muted-foreground" />
                 </button>

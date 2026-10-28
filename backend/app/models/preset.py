@@ -35,6 +35,12 @@ class PresetCommand(Base):
 class UploadedLog(Base):
     __tablename__ = "uploaded_logs"
 
+    storage_entry_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("storage_entries.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )

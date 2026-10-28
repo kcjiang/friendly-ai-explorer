@@ -29,8 +29,12 @@ services:
       APP_MASTER_KEY: ${APP_MASTER_KEY:?Set APP_MASTER_KEY}
       ENVIRONMENT: production
       UPLOAD_DIR: /app/uploads
+      STORAGE_DIR: /app/data
+      STORAGE_MAX_FILE_MB: ${STORAGE_MAX_FILE_MB:-2048}
+      STORAGE_RESERVE_MB: ${STORAGE_RESERVE_MB:-256}
     volumes:
       - ${FAE_DATA_DIR:-/opt/fae}/uploads:/app/uploads
+      - ${FAE_DATA_DIR:-/opt/fae}/storage:/app/data
       - ${FAE_DATA_DIR:-/opt/fae}/logs:/app/logs
     depends_on:
       postgres:

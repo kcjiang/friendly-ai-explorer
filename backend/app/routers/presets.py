@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -86,9 +86,14 @@ async def upload_log(
 async def list_logs(
     device_type: str,
     current_user: AnyUser,
+    page: int | None = Query(None, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    q: str = Query("", max_length=100),
     db: AsyncSession = Depends(get_db),
 ):
-    return await preset_service.list_logs(device_type, db, current_user)
+    return await preset_service.list_logs(
+        device_type, db, current_user, page, page_size, q
+    )
 
 
 @router.get("/logs/{log_id}/download", summary="下载日志文件")
@@ -101,7 +106,6 @@ async def download_log(
     from sqlalchemy import select
 
     from app.models.preset import UploadedLog
-    from app.models.user import UserRole
 
     result = await db.execute(select(UploadedLog).where(UploadedLog.id == log_id))
     log = result.scalar_one_or_none()
@@ -109,15 +113,29 @@ async def download_log(
         raise HTTPException(
             status_code=404, detail=system_message("errors.logNotFound")
         )
-    if log.user_id != current_user.id and current_user.role != UserRole.developer:
+    if log.user_id != current_user.id:
         raise HTTPException(
             status_code=403, detail=system_message("errors.accessDenied")
         )
-    if not Path(log.file_path).exists():
+    from app.services import storage_service as storage
+
+    if not log.storage_entry_id:
+        storage.fail(404, "日志尚未迁移到个人空间")
+    entry = await storage.entry_for(db, log.storage_entry_id, current_user)
+    path = storage.disk_path(entry.space, entry.path)
+    if not path.exists():
         raise HTTPException(
             status_code=404, detail=system_message("errors.fileNotFound")
         )
-    return FileResponse(log.file_path, filename=log.filename, media_type="text/plain")
+    return FileResponse(
+        path,
+        filename=Path(entry.path).name,
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.delete("/logs/{log_id}", summary="删除日志记录")

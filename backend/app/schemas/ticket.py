@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Annotated
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 from app.i18n import message as system_message
 from app.models.ticket import TicketPriority, TicketStatus
@@ -61,6 +61,10 @@ class TicketListOut(BaseModel):
 
 
 class TicketOut(TicketListOut):
+    attachments: list[dict] = Field(
+        default_factory=list,
+        validation_alias="file_attachments",
+    )
     source_url: str
     raw_report: str
     tapd_created: bool
@@ -71,7 +75,10 @@ class TicketOut(TicketListOut):
     ai_analysis: str | None = None
     ai_suggestions: str | None = None
     tags: list[str] | None = None
-    comments: list[TicketCommentOut] = Field(default_factory=list)
+    comments: list[TicketCommentOut] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("visible_comments", "comments"),
+    )
     resolved_at: datetime | None
 
 
@@ -95,6 +102,7 @@ class InputBase(BaseModel):
 
 
 class CreateTicketRequest(InputBase):
+    upload_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50)
     title: str = Field(min_length=1, max_length=500)
     description: Long = ""
     project_id: uuid.UUID
@@ -113,6 +121,8 @@ class CreateTicketRequest(InputBase):
 
 
 class UpdateTicketRequest(InputBase):
+    delete_attachment_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50)
+    upload_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50)
     revision: int = Field(ge=1)
     title: str | None = Field(default=None, min_length=1, max_length=500)
     description: Long | None = None

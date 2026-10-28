@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.document import DocVisibility
 
@@ -57,16 +57,16 @@ class DocumentOut(IndexState):
 
 
 class CreateDocumentRequest(BaseModel):
-    title: str
-    content: Optional[str] = None
+    title: str = Field(min_length=1, max_length=500)
+    content: Optional[str] = Field(default=None, max_length=2_000_000)
     visibility: DocVisibility = DocVisibility.public
     is_published: bool = False
     tags: Optional[list[str]] = None
 
 
 class UpdateDocumentRequest(BaseModel):
-    title: Optional[str] = None
-    content: Optional[str] = None
+    title: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    content: Optional[str] = Field(default=None, max_length=2_000_000)
     visibility: Optional[DocVisibility] = None
     is_published: Optional[bool] = None
     tags: Optional[list[str]] = None

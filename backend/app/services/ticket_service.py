@@ -17,6 +17,12 @@ from app.schemas.ticket import (
 from app.services.catalog_references import require_active
 
 
+def can_view(ticket, user):
+    # All active signed-in members can currently view tickets. Keep one policy
+    # for the ticket page, attachment downloads and the personal attachment view.
+    return bool(ticket and user.is_active)
+
+
 def can_edit(ticket, user):
     return user.role in (UserRole.developer, UserRole.leader) or user.id in (
         ticket.updated_by,
@@ -256,6 +262,17 @@ async def get_ticket(ticket_id, db, user):
     ticket = await db.scalar(ticket_query(True).where(Ticket.id == ticket_id))
     if not ticket:
         raise HTTPException(404, system_message("errors.ticketNotFound"))
+    from app.services.storage_service import require_ticket_view
+
+    require_ticket_view(ticket, user)
+    from app.services.ticket_attachments import all_for
+
+    ticket.file_attachments = await all_for(db, ticket.id, user)
+    ticket.visible_comments = [
+        c
+        for c in ticket.comments
+        if not c.is_internal or c.author_id == user.id or can_edit(ticket, user)
+    ]
     return (await decorate([ticket], db, user))[0]
 
 
@@ -287,7 +304,11 @@ def validate_tapd(values, ticket=None):
 async def create_ticket(
     body: CreateTicketRequest, db: AsyncSession, user: User, commit=True
 ):
-    values = body.model_dump()
+    from app.services import storage_service as storage
+    from app.services.ticket_attachments import bind, finalize_paths, rollback_paths
+
+    await storage.lock(db)
+    values = body.model_dump(exclude={"upload_ids"})
     values["assignee_id"] = values["assignee_id"] or user.id
     await validate_references(values, db)
     validate_tapd(values)
@@ -305,16 +326,36 @@ async def create_ticket(
         ticket.resolved_at = datetime.now(timezone.utc)
     db.add(ticket)
     await db.flush()
+    moved = await bind(db, user, ticket, body.upload_ids)
     if commit:
-        await db.commit()
+        try:
+            await db.commit()
+        except BaseException:
+            rollback_paths(moved)
+            raise
+        finalize_paths(moved)
     return await get_ticket(ticket.id, db, user)
 
 
 async def update_ticket(ticket_id, body: UpdateTicketRequest, db, user):
+    from app.services import storage_service as storage
+    from app.services.storage_maintenance import drain_garbage
+    from app.services.ticket_attachments import (
+        bind,
+        delete_files,
+        finalize_paths,
+        rollback_paths,
+    )
+
+    await storage.lock(db)
     ticket = await locked_ticket(ticket_id, db, user, body.revision)
-    values = body.model_dump(exclude_unset=True, exclude={"revision"})
+
+    values = body.model_dump(
+        exclude_unset=True, exclude={"revision", "upload_ids", "delete_attachment_ids"}
+    )
     await validate_references(values, db)
     validate_tapd(values, ticket)
+    await delete_files(db, user, ticket, body.delete_attachment_ids)
     if "project_id" in values and values["project_id"] != ticket.project_id:
         ticket.project_seq = await next_project_number(db, values["project_id"])
     for key, value in values.items():
@@ -325,14 +366,29 @@ async def update_ticket(ticket_id, body: UpdateTicketRequest, db, user):
         else None
     )
     stamp(ticket, user)
-    await db.commit()
+    moved = await bind(db, user, ticket, body.upload_ids)
+    try:
+        await db.commit()
+    except BaseException:
+        rollback_paths(moved)
+        raise
+    finalize_paths(moved)
+    await drain_garbage(db)
     return await get_ticket(ticket_id, db, user)
 
 
 async def delete_ticket(ticket_id, db, user, revision):
+    from app.services import storage_service as storage
+    from app.services.storage_maintenance import drain_garbage
+    from app.services.ticket_attachments import queue_ticket
+
+    await storage.lock(db)
     ticket = await locked_ticket(ticket_id, db, user, revision)
+    await queue_ticket(db, user, ticket.id)
+    await db.flush()
     await db.delete(ticket)
     await db.commit()
+    await drain_garbage(db)
     return {"message": system_message("errors.deleteSuccess")}
 
 

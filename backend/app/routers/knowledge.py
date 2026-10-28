@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.middleware.rbac import AnyUser, DevOnly
+from app.middleware.rbac import AnyUser
 from app.schemas.document import (
     CreateDocumentRequest,
     DocumentListOut,
@@ -14,6 +14,35 @@ from app.schemas.document import (
 from app.services import knowledge_service
 
 router = APIRouter()
+
+
+@router.get("/{doc_id}/download")
+async def download_original(
+    doc_id: UUID, current_user: AnyUser, db: AsyncSession = Depends(get_db)
+):
+    from pathlib import Path
+
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse
+
+    from app.config import settings
+    from app.models.document import Document
+
+    doc = await db.get(Document, doc_id)
+    if not doc:
+        raise HTTPException(404)
+    root = Path(settings.storage_dir) / "knowledge-originals"
+    files = list(root.glob(str(doc.id) + ".*"))
+    if not files:
+        raise HTTPException(404)
+    return FileResponse(
+        files[0],
+        filename=doc.file_original_name or files[0].name,
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get("", response_model=list[DocumentListOut], include_in_schema=False)
@@ -81,7 +110,7 @@ async def update_document(
 @router.delete("/{doc_id}", summary="删除文档（仅开发者）")
 async def delete_document(
     doc_id: str,
-    current_user: DevOnly,
+    current_user: AnyUser,
     db: AsyncSession = Depends(get_db),
 ):
     return await knowledge_service.delete_document(doc_id, db, current_user)

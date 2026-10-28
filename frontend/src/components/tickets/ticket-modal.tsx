@@ -27,6 +27,9 @@ import {
   ConfirmDialog,
 } from "@/components/catalog/catalog-ui";
 import { SearchSelect } from "@/components/catalog/search-select";
+import TicketAttachments, {
+  type PendingAttachment,
+} from "@/components/files/ticket-attachments";
 import { Button } from "@/components/ui/base/button";
 import {
   Collapsible,
@@ -60,6 +63,7 @@ import { translateLabels, useUiTranslations } from "@/i18n/client";
 import { systemMessage } from "@/i18n/system-messages";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
+import { uploadManager } from "@/lib/upload-manager";
 import {
   TICKET_PRIORITY_CONFIG,
   TICKET_SOURCES,
@@ -141,12 +145,32 @@ export default function TicketModal({
   const formRef = useRef<HTMLFormElement>(null);
   const focusInvalid = useRef(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletingComment, setDeletingComment] = useState("");
   const [tab, setTab] = useState("details");
   const [preview, setPreview] = useState(false);
   const [comment, setComment] = useState("");
+  const [pendingAttachments, setPendingAttachments] = useState<
+    PendingAttachment[]
+  >([]);
+  const [deletedAttachmentIds, setDeletedAttachmentIds] = useState<string[]>(
+    [],
+  );
+  const uploadsPending = pendingAttachments.some((p) => !p.taskId);
+  const discardAttachments = () => {
+    for (const p of pendingAttachments) {
+      void uploadManager.cancel(p.key);
+      if (p.taskId)
+        void api.delete(`/api/v1/uploads/${p.taskId}`).catch(() => {});
+    }
+    setPendingAttachments([]);
+    setDeletedAttachmentIds([]);
+  };
   const dirty =
     editing &&
-    JSON.stringify(form) !== JSON.stringify(draftOf(record, session?.user.id));
+    (JSON.stringify(form) !==
+      JSON.stringify(draftOf(record, session?.user.id)) ||
+      pendingAttachments.length > 0 ||
+      deletedAttachmentIds.length > 0);
   const set = <K extends keyof typeof form>(
     key: K,
     value: (typeof form)[K],
@@ -167,6 +191,13 @@ export default function TicketModal({
     }
   }, [fieldErrors]);
   const resetDraft = () => {
+    for (const p of pendingAttachments) {
+      void uploadManager.cancel(p.key);
+      if (p.taskId)
+        void api.delete(`/api/v1/uploads/${p.taskId}`).catch(() => {});
+    }
+    setPendingAttachments([]);
+    setDeletedAttachmentIds([]);
     setForm(draftOf(record, session?.user.id));
     setProjectName(record?.project_name ?? "");
     setEditing(false);
@@ -176,7 +207,12 @@ export default function TicketModal({
   };
   const close = () => {
     if (busy) return;
-    if (dirty || comment.trim()) {
+    if (
+      dirty ||
+      comment.trim() ||
+      pendingAttachments.length ||
+      deletedAttachmentIds.length
+    ) {
       setDiscardAction("close");
       setConfirmClose(true);
     } else onClose();
@@ -202,6 +238,7 @@ export default function TicketModal({
   }
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (uploadsPending) return;
     setError("");
     const errors: Record<string, string> = {};
     for (const key of ["title", "project_id", "assignee_id", "source"] as const)
@@ -228,8 +265,16 @@ export default function TicketModal({
         ? await api.patch(`/api/v1/tickets/${record.id}`, {
             ...form,
             revision: record.revision,
+            delete_attachment_ids: deletedAttachmentIds,
+            upload_ids: pendingAttachments.map((p) => p.taskId),
           })
-        : await api.post("/api/v1/tickets/", form);
+        : await api.post("/api/v1/tickets/", {
+            ...form,
+            upload_ids: pendingAttachments.map((p) => p.taskId),
+          });
+      setPendingAttachments([]);
+      setDeletedAttachmentIds([]);
+      window.dispatchEvent(new Event("file-storage-changed"));
       setRecord(data);
       setForm(draftOf(data));
       setProjectName(data.project_name);
@@ -271,6 +316,7 @@ export default function TicketModal({
       });
       onSuccess();
       onClose();
+      discardAttachments();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -287,6 +333,8 @@ export default function TicketModal({
           content: comment,
         });
         setComment("");
+        setDeletedAttachmentIds([]);
+        window.dispatchEvent(new Event("file-storage-changed"));
       } else await api.post(`/api/v1/ai/analyze-ticket/${record.id}`);
       await refreshRecord();
     } catch (e) {
@@ -669,6 +717,16 @@ export default function TicketModal({
                       </CollapsibleContent>
                     </Collapsible>
                   )}
+                  <TicketAttachments
+                    ticketId={record?.id}
+                    files={record?.attachments}
+                    disabled={busy}
+                    canEdit={editing && (!record || !!record.can_edit)}
+                    pending={pendingAttachments}
+                    onPending={setPendingAttachments}
+                    deletedIds={deletedAttachmentIds}
+                    onDeleted={setDeletedAttachmentIds}
+                  />
                 </form>
               </TabsContent>
               <TabsContent value="comments" className="space-y-4">
@@ -686,6 +744,16 @@ export default function TicketModal({
                     <p className="text-sm break-words whitespace-pre-wrap">
                       {c.content}
                     </p>
+                    {record.can_edit && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeletingComment(c.id)}
+                      >
+                        {locale === "zh-CN" ? "删除评论" : "Delete comment"}
+                      </Button>
+                    )}
                   </div>
                 ))}
                 {record?.can_edit && (
@@ -763,7 +831,7 @@ export default function TicketModal({
                 key="save"
                 type="submit"
                 form="ticket-form"
-                disabled={busy}
+                disabled={busy || uploadsPending}
               >
                 {busy && <Loader2 className="animate-spin" />}
                 {record ? t("ui.saveChanges") : t("ui.createTicket")}
@@ -811,7 +879,10 @@ export default function TicketModal({
         onConfirm={() => {
           setConfirmClose(false);
           if (discardAction === "cancel") resetDraft();
-          else onClose();
+          else {
+            discardAttachments();
+            onClose();
+          }
         }}
       />
       <ConfirmDialog
@@ -827,6 +898,36 @@ export default function TicketModal({
         confirmLabel={t("ui.confirmDeletion")}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={() => void remove()}
+      />
+      <ConfirmDialog
+        open={!!deletingComment}
+        confirmLabel={locale === "zh-CN" ? "确认删除" : "Confirm deletion"}
+        title={locale === "zh-CN" ? "删除评论" : "Delete comment"}
+        description={
+          locale === "zh-CN"
+            ? "此评论将永久删除，无法恢复。"
+            : "This comment will be permanently deleted."
+        }
+        destructive
+        busy={busy}
+        error={error}
+        onCancel={() => setDeletingComment("")}
+        onConfirm={() => {
+          if (!record) return;
+          setBusy(true);
+          void api
+            .delete(
+              `/api/v1/tickets/${record.id}/comments/${deletingComment}`,
+              { params: { revision: record.revision } },
+            )
+            .then(async () => {
+              setDeletingComment("");
+              await refreshRecord();
+              window.dispatchEvent(new Event("file-storage-changed"));
+            })
+            .catch((e) => setError(errorMessage(e)))
+            .finally(() => setBusy(false));
+        }}
       />
     </Dialog>
   );

@@ -13,7 +13,7 @@ export default function KnowledgeLayout({
   return (
     <div className="flex h-screen flex-col">
       <TopNav title={t("ui.knowledgeBase")} />
-      <main className="flex-1 overflow-hidden">{children}</main>
+      <main className="flex-1 overflow-auto">{children}</main>
     </div>
   );
 }

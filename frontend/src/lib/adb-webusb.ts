@@ -4,23 +4,6 @@
  * 兼容：Chrome / Edge 89+（需 HTTPS 或 localhost）
  */
 
-// ── CRC32 ─────────────────────────────────────────────────────
-const CRC32_TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    let c = i;
-    for (let j = 0; j < 8; j++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[i] = c;
-  }
-  return t;
-})();
-
-function crc32(data: Uint8Array): number {
-  let c = 0xffffffff;
-  for (const b of data) c = CRC32_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-
 // ── 协议常量 ──────────────────────────────────────────────────
 const A_CNXN = 0x4e584e43;
 const A_AUTH = 0x48545541;
@@ -45,7 +28,6 @@ const LS_PRIV_KEY = "fae-adb-private-jwk";
 const LS_PUB_KEY = "fae-adb-public-str";
 
 const te = (s: string) => new TextEncoder().encode(s);
-const td = (b: Uint8Array) => new TextDecoder().decode(b);
 
 // ── DER / ASN.1 解析（提取 RSA 模数）────────────────────────
 
@@ -257,7 +239,11 @@ function encodeMsg(
   dv.setUint32(4, arg0, true);
   dv.setUint32(8, arg1, true);
   dv.setUint32(12, data.length, true);
-  dv.setUint32(16, crc32(data), true);
+  dv.setUint32(
+    16,
+    data.reduce((sum, byte) => (sum + byte) >>> 0, 0),
+    true,
+  );
   dv.setUint32(20, (cmd ^ 0xffffffff) >>> 0, true);
   msg.set(data, 24);
   return msg;
@@ -269,6 +255,7 @@ interface Stream {
   remoteId: number;
   onData: (d: Uint8Array) => void;
   onClose?: () => void;
+  ready?: () => void;
 }
 
 // ── AdbDevice（主类）─────────────────────────────────────────
@@ -287,7 +274,12 @@ export class AdbDevice {
   private pubStr!: string;
   private lid = 1;
   private streams = new Map<number, Stream>();
-  private openWait = new Map<number, (rid: number) => void>();
+  private openWait = new Map<
+    number,
+    { resolve: (rid: number) => void; reject: (e: Error) => void }
+  >();
+  private sendQueue: Promise<void> = Promise.resolve();
+  private onStatus?: (s: AdbStatus, msg?: string) => void;
   private running = false;
 
   private constructor(dev: USBDevice, iface: AdbIface) {
@@ -310,16 +302,22 @@ export class AdbDevice {
     if (!iface)
       throw new Error("ADB interface not found. Enable USB debugging");
 
-    await dev.open();
-    if (dev.configuration === null) await dev.selectConfiguration(1);
-    await dev.claimInterface(iface.ifaceNum);
-    return new AdbDevice(dev, iface);
+    try {
+      await dev.open();
+      if (dev.configuration === null) await dev.selectConfiguration(1);
+      await dev.claimInterface(iface.ifaceNum);
+      return new AdbDevice(dev, iface);
+    } catch (error) {
+      await dev.close().catch(() => {});
+      throw error;
+    }
   }
 
   // 连接 & 认证
   async connect(
     onStatus?: (s: AdbStatus, msg?: string) => void,
   ): Promise<void> {
+    this.onStatus = onStatus;
     onStatus?.("connecting");
     const { privKey, pubStr } = await getOrCreateKey();
     this.privKey = privKey;
@@ -343,13 +341,38 @@ export class AdbDevice {
       throw new Error("Protocol error: expected AUTH TOKEN");
 
     // 签名挑战
-    const sig = new Uint8Array(
-      await crypto.subtle.sign(
-        "RSASSA-PKCS1-v1_5",
-        this.privKey,
-        new Uint8Array(msg.data),
-      ),
-    );
+    // ADB's token is already a SHA-1 digest. WebCrypto would hash it again.
+    const jwk = JSON.parse(localStorage.getItem(LS_PRIV_KEY)!) as JsonWebKey;
+    const decode = (s: string) =>
+      Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) =>
+        c.charCodeAt(0),
+      );
+    const modulus = decode(jwk.n!);
+    const prefix = Uint8Array.from([
+      0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05,
+      0x00, 0x04, 0x14,
+    ]);
+    const encoded = new Uint8Array(modulus.length).fill(0xff);
+    encoded[0] = 0;
+    encoded[1] = 1;
+    const offset = encoded.length - prefix.length - msg.data.length;
+    encoded[offset - 1] = 0;
+    encoded.set(prefix, offset);
+    encoded.set(msg.data, offset + prefix.length);
+    let base = bytesToBigInt(encoded),
+      power = bytesToBigInt(decode(jwk.d!)),
+      signed = 1n;
+    const n = bytesToBigInt(modulus);
+    while (power) {
+      if (power & 1n) signed = (signed * base) % n;
+      base = (base * base) % n;
+      power >>= 1n;
+    }
+    const sig = new Uint8Array(modulus.length);
+    for (let i = sig.length - 1; i >= 0; i--) {
+      sig[i] = Number(signed & 255n);
+      signed >>= 8n;
+    }
     await this.send(A_AUTH, AUTH_SIGNATURE, 0, sig);
 
     const resp = await this.readMsg();
@@ -378,7 +401,9 @@ export class AdbDevice {
           const res = this.openWait.get(localId);
           if (res) {
             this.openWait.delete(localId);
-            res(msg.arg0);
+            res.resolve(msg.arg0);
+          } else {
+            this.streams.get(localId)?.ready?.();
           }
         } else if (msg.cmd === A_WRTE) {
           const s = this.streams.get(localId);
@@ -387,30 +412,116 @@ export class AdbDevice {
             await this.send(A_OKAY, localId, msg.arg0, new Uint8Array(0));
           }
         } else if (msg.cmd === A_CLSE) {
+          this.openWait.get(localId)?.reject(new Error("ADB service closed"));
+          this.openWait.delete(localId);
           const s = this.streams.get(localId);
           s?.onClose?.();
+          s?.ready?.();
           this.streams.delete(localId);
+          if (s) await this.send(A_CLSE, localId, msg.arg0, new Uint8Array(0));
         }
-      } catch {
+      } catch (error) {
+        if (this.running) this.onStatus?.("error", String(error));
+        this.running = false;
+        this.closeStreams();
         break;
       }
     }
   }
 
+  private closeStreams() {
+    for (const waiter of this.openWait.values())
+      waiter.reject(new Error("ADB disconnected"));
+    this.openWait.clear();
+    for (const stream of this.streams.values()) {
+      stream.onClose?.();
+      stream.ready?.();
+    }
+    this.streams.clear();
+  }
+
+  async interactive(onData: (data: Uint8Array) => void, onClose: () => void) {
+    const lid = this.lid++;
+    let closed = false;
+    this.streams.set(lid, {
+      remoteId: 0,
+      onData,
+      onClose: () => {
+        closed = true;
+        onClose();
+      },
+    });
+    let rid: number;
+    try {
+      rid = await this.open(lid, "shell:");
+    } catch (error) {
+      this.streams.delete(lid);
+      throw error;
+    }
+    const active = this.streams.get(lid);
+    if (!active || closed) throw new Error("Shell closed");
+    active.remoteId = rid;
+    let queue = Promise.resolve();
+    return {
+      write: (data: Uint8Array) => {
+        const work = queue.then(async () => {
+          for (let offset = 0; offset < data.length; offset += 4096) {
+            if (closed || !this.running) throw new Error("Shell closed");
+            await new Promise<void>((resolve, reject) => {
+              const stream = this.streams.get(lid)!;
+              const timer = setTimeout(() => {
+                stream.ready = undefined;
+                reject(new Error("ADB write timeout"));
+              }, 15000);
+              stream.ready = () => {
+                clearTimeout(timer);
+                stream.ready = undefined;
+                if (closed || !this.running) reject(new Error("Shell closed"));
+                else resolve();
+              };
+              void this.send(
+                A_WRTE,
+                lid,
+                rid,
+                data.slice(offset, offset + 4096),
+              ).catch((error) => {
+                clearTimeout(timer);
+                reject(error);
+              });
+            });
+          }
+        });
+        queue = work.catch(() => {});
+        return work;
+      },
+      close: async () => {
+        closed = true;
+        await this.send(A_CLSE, lid, rid, new Uint8Array(0));
+      },
+    };
+  }
+
   // 执行 shell 命令（command 结束后 resolve）
   async shell(command: string, onData: (txt: string) => void): Promise<void> {
     const lid = this.lid++;
-    const rid = await this.open(lid, `shell:${command}`);
-    return new Promise((resolve) => {
-      this.streams.set(lid, {
-        remoteId: rid,
-        onData: (d) => onData(td(d)),
-        onClose: () => {
-          this.streams.delete(lid);
-          resolve();
-        },
-      });
+    const decoder = new TextDecoder();
+    let complete!: () => void;
+    const done = new Promise<void>((resolve) => {
+      complete = resolve;
     });
+    this.streams.set(lid, {
+      remoteId: 0,
+      onData: (data) => onData(decoder.decode(data, { stream: true })),
+      onClose: complete,
+    });
+    try {
+      const rid = await this.open(lid, `shell:${command}`);
+      const stream = this.streams.get(lid);
+      if (stream) stream.remoteId = rid;
+      await done;
+    } finally {
+      this.streams.delete(lid);
+    }
   }
 
   // 启动 Logcat（返回停止函数）
@@ -420,17 +531,25 @@ export class AdbDevice {
   ): Promise<() => void> {
     const lid = this.lid++;
     const cmd = filter ? `logcat -v time ${filter}` : "logcat -v time";
-    const rid = await this.open(lid, `shell:${cmd}`);
     let buf = "";
+    const decoder = new TextDecoder();
     this.streams.set(lid, {
-      remoteId: rid,
+      remoteId: 0,
       onData: (d) => {
-        buf += td(d);
+        buf += decoder.decode(d, { stream: true });
         const lines = buf.split("\n");
         buf = lines.pop() ?? "";
         for (const l of lines) onLine(l);
       },
     });
+    try {
+      const rid = await this.open(lid, `shell:${cmd}`);
+      const stream = this.streams.get(lid);
+      if (stream) stream.remoteId = rid;
+    } catch (error) {
+      this.streams.delete(lid);
+      throw error;
+    }
     return () => {
       const s = this.streams.get(lid);
       if (s) {
@@ -441,8 +560,27 @@ export class AdbDevice {
   }
 
   private async open(lid: number, service: string): Promise<number> {
-    await this.send(A_OPEN, lid, 0, te(service + "\0"));
-    return new Promise((resolve) => this.openWait.set(lid, resolve));
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.openWait.delete(lid);
+        reject(new Error("ADB service timeout"));
+      }, 15000);
+      this.openWait.set(lid, {
+        resolve: (rid) => {
+          clearTimeout(timer);
+          resolve(rid);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+      void this.send(A_OPEN, lid, 0, te(service + "\0")).catch((error) => {
+        this.openWait.delete(lid);
+        clearTimeout(timer);
+        reject(error);
+      });
+    });
   }
 
   private async send(
@@ -451,13 +589,31 @@ export class AdbDevice {
     arg1: number,
     data: Uint8Array,
   ): Promise<void> {
+    const work = this.sendQueue.then(() =>
+      this.sendPacket(cmd, arg0, arg1, data),
+    );
+    this.sendQueue = work.catch(() => {});
+    return work;
+  }
+
+  private async sendPacket(
+    cmd: number,
+    arg0: number,
+    arg1: number,
+    data: Uint8Array,
+  ): Promise<void> {
     const pkt = encodeMsg(cmd, arg0, arg1, data);
-    await this.dev.transferOut(this.iface.epOut, pkt.slice(0, 24));
+    const header = await this.dev.transferOut(
+      this.iface.epOut,
+      pkt.slice(0, 24),
+    );
+    if (header.status !== "ok") throw new Error("ADB USB write failed");
     for (let off = 24; off < pkt.length; off += this.iface.maxPacket) {
-      await this.dev.transferOut(
+      const result = await this.dev.transferOut(
         this.iface.epOut,
         pkt.slice(off, off + this.iface.maxPacket),
       );
+      if (result.status !== "ok") throw new Error("ADB USB write failed");
     }
   }
 
@@ -475,6 +631,11 @@ export class AdbDevice {
     const arg0 = dv.getUint32(4, true);
     const arg1 = dv.getUint32(8, true);
     const dlen = dv.getUint32(12, true);
+    if (
+      dv.getUint32(20, true) !== (cmd ^ 0xffffffff) >>> 0 ||
+      dlen > ADB_MAXDATA
+    )
+      throw new Error("Invalid ADB header");
 
     if (dlen === 0) return { cmd, arg0, arg1, data: new Uint8Array(0) };
 
@@ -485,7 +646,8 @@ export class AdbDevice {
         this.iface.epIn,
         Math.min(remaining, this.iface.maxPacket),
       );
-      if (!r.data) break;
+      if (!r.data || r.data.byteLength === 0)
+        throw new Error("Incomplete ADB payload");
       chunks.push(
         new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength),
       );
@@ -502,12 +664,13 @@ export class AdbDevice {
 
   async disconnect(): Promise<void> {
     this.running = false;
+    this.closeStreams();
     try {
       await this.dev.releaseInterface(this.iface.ifaceNum);
-      await this.dev.close();
     } catch {
       /* ignore */
     }
+    await this.dev.close().catch(() => {});
   }
 
   get isConnected() {
@@ -521,7 +684,7 @@ export function checkWebUsbSupport(): string | null {
   if (typeof navigator === "undefined") return "Not running in a browser";
   if (!("usb" in navigator))
     return "WebUSB is unavailable. Use Chrome or Edge 89+";
-  if (location.protocol !== "https:" && location.hostname !== "localhost") {
+  if (!window.isSecureContext) {
     return "WebUSB requires HTTPS or localhost";
   }
   return null;
@@ -531,7 +694,7 @@ export function checkWebSerialSupport(): string | null {
   if (typeof navigator === "undefined") return "Not running in a browser";
   if (!("serial" in navigator))
     return "Web Serial is unavailable. Use Chrome or Edge 89+";
-  if (location.protocol !== "https:" && location.hostname !== "localhost") {
+  if (!window.isSecureContext) {
     return "Web Serial requires HTTPS or localhost";
   }
   return null;

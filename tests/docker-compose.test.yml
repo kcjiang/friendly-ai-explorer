@@ -27,6 +27,7 @@ services:
       APP_MASTER_KEY: test-only-master-key-at-least-32-characters
       ENVIRONMENT: test
       UPLOAD_DIR: /tmp/fae-test/uploads
+      STORAGE_DIR: /tmp/fae-test/storage
       LOG_DIR: /tmp/fae-test/logs
     volumes:
       - ../backend/tests:/app/tests:ro

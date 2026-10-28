@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.embedding_config import load_embedding_config
 from app.ai.embeddings import EmbeddingUnavailable, embed_text, embedding_identity
-from app.models.document import Document, DocumentChunk, DocVisibility
+from app.models.document import Document, DocumentChunk
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +26,7 @@ SYSTEM_PROMPT = """你是 Friendly AI Explorer 的 AI 助手，支持通用对�
 
 
 def visible_documents(user=None):
-    visibility = Document.visibility == DocVisibility.public
-    if user is not None:
-        visibility = or_(visibility, Document.author_id == user.id)
-    return Document.is_published.is_(True) & visibility
+    return Document.is_published.is_(True)
 
 
 def search_terms(query):
@@ -210,7 +207,6 @@ async def _vector_candidates(query_embedding, db, user, top_k, config):
                 FROM document_chunks dc
                 JOIN documents d ON dc.document_id = d.id
                 WHERE d.is_published = true
-                  AND (d.visibility = 'public' OR d.author_id = :user_id)
                   AND dc.embedding IS NOT NULL
                   AND dc.metadata->>'embedding_model' = :embedding_model
                   AND 1 - (dc.embedding <=> CAST(:vec AS vector)) >= :min_similarity

@@ -1,0 +1,426 @@
+.remote {
+  --remote-line: color-mix(in srgb, var(--foreground) 35%, var(--card));
+  container-type: inline-size;
+  position: relative;
+  width: 100%;
+  max-width: 264px;
+  min-width: var(--remote-min-width, 160px);
+  aspect-ratio: 326 / 1080;
+  margin-inline: auto;
+  isolation: isolate;
+}
+/* Keep the complete silhouette; only the scroll viewport clips overflowing content. */
+.body {
+  position: absolute;
+  inset: 0 0 auto;
+  width: 100%;
+  aspect-ratio: 326 / 1080;
+}
+.shell {
+  position: absolute;
+  left: 0.27577%;
+  top: 0.1%;
+  width: 99.22117%;
+  height: 99.8%;
+  border: 0;
+  border-radius: 26.666% / 8%;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--card) 94%, white),
+    var(--card) 55%,
+    color-mix(in srgb, var(--card) 96%, black)
+  );
+  box-shadow:
+    inset 2px 3px 5px #ffffff1a,
+    inset -3px -5px 8px #00000020,
+    0 2px 3px #00000012,
+    0 4px 9px #00000018;
+  pointer-events: none;
+}
+.ring,
+.led {
+  position: absolute;
+  pointer-events: none;
+  border: max(1px, 0.55215cqw) solid var(--remote-line);
+  border-radius: 50%;
+}
+.ledSend {
+  animation: ledSend 110ms step-end;
+}
+.ledWarning {
+  animation: ledWarning 160ms step-end 3;
+}
+@keyframes ledSend {
+  0%,
+  95% {
+    background: #ef4444;
+    border-color: #f87171;
+    box-shadow: 0 0 6px #ef4444cc;
+  }
+}
+@keyframes ledWarning {
+  0%,
+  49% {
+    background: #facc15;
+    border-color: #fde047;
+    box-shadow: 0 0 6px #facc15cc;
+  }
+  50%,
+  100% {
+    background: var(--muted);
+    border-color: var(--remote-line);
+    box-shadow: none;
+  }
+}
+.ring {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--card) 93%, white),
+    var(--card)
+  );
+  box-shadow:
+    inset 0 1px 2px #ffffff16,
+    0 1px 2px #00000010;
+}
+.led {
+  border-radius: 999px;
+  background: var(--muted);
+}
+.key {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: max(1px, 0.55215cqw) solid var(--remote-line);
+  border-radius: 50%;
+  padding: 0;
+  font:
+    600 7.73cqw ui-sans-serif,
+    system-ui,
+    sans-serif;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition:
+    background 120ms,
+    color 120ms,
+    border-color 120ms,
+    box-shadow 120ms,
+    transform 120ms,
+    opacity 120ms;
+}
+.face {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.icon {
+  width: 11.04cqw;
+  height: 11.04cqw;
+  flex-shrink: 0;
+}
+/* Grow the invisible hit target without changing the traced button face. */
+.available:not(.direction)::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 40px);
+  height: max(100%, 40px);
+  transform: translate(-50%, -50%);
+}
+.available.rockerButton::before {
+  height: 100%;
+}
+.available {
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--card) 93%, white),
+    var(--card) 70%,
+    var(--muted)
+  );
+  color: var(--foreground);
+  box-shadow:
+    inset 0 1px 1px #ffffff24,
+    inset 0 -1px 2px #00000010,
+    0 2px 3px #00000014;
+}
+.available:not(:disabled) {
+  cursor: pointer;
+}
+.available:hover {
+  background: color-mix(in srgb, var(--foreground) 10%, var(--card));
+  border-color: var(--ring);
+  box-shadow:
+    inset 0 1px 1px #ffffff24,
+    0 0 0 2px color-mix(in srgb, var(--ring) 25%, transparent),
+    0 3px 5px #00000020;
+}
+.available:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+.available:not(:disabled):active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: inset 0 2px 4px #00000024;
+  transform: translateY(1px);
+}
+.available:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.available[data-connected="false"] {
+  opacity: 0.6;
+  cursor: pointer;
+}
+.available[data-connected="false"]:hover {
+  opacity: 0.8;
+}
+.unsupported {
+  color: var(--muted-foreground);
+  background: var(--muted);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+/* Direction buttons have separate half-circle bounds. Their centers are
+   clickable independently of OK, including accessibility-generated clicks. */
+.direction {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.direction:hover,
+.direction:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 14%, var(--card));
+  box-shadow: none;
+  transform: none;
+}
+.direction:not(:disabled):active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: none;
+  transform: none;
+}
+.direction .face {
+  width: auto;
+  height: auto;
+}
+.direction:focus-visible {
+  outline: none;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.up {
+  clip-path: polygon(
+    14.65% 29.3%,
+    22.2% 16.85%,
+    30.87% 7.61%,
+    40.25% 1.92%,
+    50% 0%,
+    59.75% 1.92%,
+    69.13% 7.61%,
+    77.8% 16.85%,
+    85.35% 29.3%,
+    64.14% 71.72%,
+    60.82% 66.96%,
+    57.66% 63.28%,
+    53.9% 61.16%,
+    50% 60%,
+    46.1% 61.16%,
+    42.34% 63.28%,
+    39.18% 66.96%,
+    35.86% 71.72%
+  );
+}
+.right {
+  clip-path: polygon(
+    70.7% 14.65%,
+    83.15% 22.2%,
+    92.39% 30.87%,
+    98.08% 40.25%,
+    100% 50%,
+    98.08% 59.75%,
+    92.39% 69.13%,
+    83.15% 77.8%,
+    70.7% 85.35%,
+    28.28% 64.14%,
+    33.04% 60.82%,
+    36.72% 57.66%,
+    38.84% 53.9%,
+    40% 50%,
+    38.84% 46.1%,
+    36.72% 42.34%,
+    33.04% 39.18%,
+    28.28% 35.86%
+  );
+}
+.down {
+  clip-path: polygon(
+    85.35% 70.7%,
+    77.8% 83.15%,
+    69.13% 92.39%,
+    59.75% 98.08%,
+    50% 100%,
+    40.25% 98.08%,
+    30.87% 92.39%,
+    22.2% 83.15%,
+    14.65% 70.7%,
+    35.86% 28.28%,
+    39.18% 33.04%,
+    42.34% 36.72%,
+    46.1% 38.84%,
+    50% 40%,
+    53.9% 38.84%,
+    57.66% 36.72%,
+    60.82% 33.04%,
+    64.14% 28.28%
+  );
+}
+.left {
+  clip-path: polygon(
+    29.3% 85.35%,
+    16.85% 77.8%,
+    7.61% 69.13%,
+    1.92% 59.75%,
+    0% 50%,
+    1.92% 40.25%,
+    7.61% 30.87%,
+    16.85% 22.2%,
+    29.3% 14.65%,
+    71.72% 35.86%,
+    66.96% 39.18%,
+    63.28% 42.34%,
+    61.16% 46.1%,
+    60% 50%,
+    61.16% 53.9%,
+    63.28% 57.66%,
+    66.96% 60.82%,
+    71.72% 64.14%
+  );
+}
+.upFace {
+  position: absolute;
+  top: 24%;
+  left: 0;
+  right: 0;
+}
+.rightFace {
+  position: absolute;
+  right: 24%;
+  top: 0;
+  bottom: 0;
+}
+.downFace {
+  position: absolute;
+  bottom: 24%;
+  left: 0;
+  right: 0;
+}
+.leftFace {
+  position: absolute;
+  left: 24%;
+  top: 0;
+  bottom: 0;
+}
+.rocker {
+  position: absolute;
+  pointer-events: none;
+  border: max(1px, 0.55215cqw) solid var(--remote-line);
+  border-radius: 50% / 20.5128%;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--card) 93%, white),
+    var(--card) 70%,
+    var(--muted)
+  );
+  box-shadow:
+    inset 0 1px 1px #ffffff24,
+    inset 0 -1px 2px #00000010,
+    0 2px 3px #00000014;
+}
+.disabledRocker {
+  opacity: 0.4;
+  background: var(--muted);
+}
+.rockerButton {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.volumeUp,
+.channelUp {
+  border-radius: 50% 50% 0 0 / 41.0256% 41.0256% 0 0;
+}
+.volumeDown,
+.channelDown {
+  border-radius: 0 0 50% 50% / 0 0 41.0256% 41.0256%;
+}
+.rockerButton:hover,
+.rockerButton:not(:disabled):hover,
+.rockerButton:not(:disabled):active {
+  box-shadow: none;
+  transform: none;
+}
+.fitted {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  container-type: size;
+}
+.scrollArea {
+  height: 100%;
+  width: 100%;
+}
+.remoteSpace {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100%;
+  /* A min-height (not fixed height) keeps the top reachable when scrolling. */
+  padding: 16px 24px;
+}
+.fitted .remote {
+  width: min(calc(100cqw - 48px), calc((100cqh - 32px) * 0.30185185));
+  flex-shrink: 0;
+  height: auto;
+  max-width: var(--remote-max-width, none);
+}
+@media (max-width: 1023px) {
+  .fitted {
+    --remote-min-width: 140px;
+    --remote-max-width: 200px;
+  }
+}
+.colorKey {
+  border-radius: 999px;
+  opacity: 1;
+  background: var(--muted);
+}
+.colorMark {
+  width: 54%;
+  height: 20%;
+  min-height: 2px;
+  border-radius: 999px;
+  background: var(--key-color);
+  opacity: 0.7;
+}
+.red {
+  --key-color: #b77878;
+}
+.blue {
+  --key-color: #788fae;
+}
+.yellow {
+  --key-color: #b2a16c;
+}
+.green {
+  --key-color: #7b9b82;
+}
+@media (prefers-reduced-motion: reduce) {
+  .key {
+    transition: none;
+  }
+}

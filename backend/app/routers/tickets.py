@@ -21,6 +21,29 @@ from app.services import ticket_service
 router = APIRouter()
 
 
+@router.delete("/{ticket_id}/comments/{comment_id}", response_model=TicketOut)
+async def delete_comment(
+    ticket_id: UUID,
+    comment_id: UUID,
+    current_user: AnyUser,
+    revision: int = Query(ge=1),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.ticket import TicketComment
+    from app.services import storage_service as storage
+
+    await storage.lock(db)
+    ticket = await ticket_service.locked_ticket(ticket_id, db, current_user, revision)
+    comment = await db.get(TicketComment, comment_id)
+    if not comment or comment.ticket_id != ticket.id:
+        storage.fail(404, "文件不存在")
+    await db.flush()
+    await db.delete(comment)
+    ticket_service.stamp(ticket, current_user)
+    await db.commit()
+    return await ticket_service.get_ticket(ticket_id, db, current_user)
+
+
 @router.get("/stats", summary="工单统计数据")
 async def get_stats(current_user: AnyUser, db: AsyncSession = Depends(get_db)):
     return await ticket_service.get_stats(db, current_user)

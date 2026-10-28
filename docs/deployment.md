@@ -15,7 +15,7 @@ The production stack runs PostgreSQL, the backend, the workbench worker, the fro
 2. Copy `.env.prod.example` to `.env.prod`. Set independent random values for `DB_PASSWORD`, `APP_MASTER_KEY`, and `AUTH_SECRET`. Restrict access to this file, for example with `chmod 600 .env.prod`.
 3. Set `APP_URL` to the public HTTPS URL, including any externally mapped port. Set `FAE_DATA_DIR` to the persistent data directory and set the bind address and HTTP/HTTPS ports for the host's network configuration.
 4. Prepare the hostname and TLS certificates. See [Nginx configuration](../nginx/README.md). The default configuration requires the host's `/etc/letsencrypt/live` and `/etc/letsencrypt/archive` directories.
-5. Ensure the uploads and logs directories under `FAE_DATA_DIR` are writable by the backend image's UID 10001.
+5. Ensure the uploads, storage and logs directories under `FAE_DATA_DIR` are writable by the backend image's UID 10001.
 6. Start the stack:
 
 ```sh
@@ -41,4 +41,4 @@ docker compose --env-file .env.prod -f docker-compose.prod.yml logs --tail 100 b
 
 ## Database initialization
 
-`db/init.sql` is the single fresh-installation schema. It does not perform incremental upgrades or clear an existing database. The project organization changes preserve the current schema and require no database reset. Do not run a fresh initialization script against a populated database.
+`db/init.sql` is the single fresh-installation schema, including file spaces, resumable uploads and immutable ticket attachments. This release rebaselines the schema: initialize an empty database and do not apply the initialization script to an existing populated database. Historical storage upgrade scripts and the legacy file migration command have been removed. Back up the database and persistent files before a reset; a reset database must not reuse orphaned old managed attachment files. See [file storage](file-storage.md) for the directory layout, quota and cleanup rules.

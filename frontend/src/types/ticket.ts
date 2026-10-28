@@ -1,3 +1,5 @@
+import type { TicketAttachment } from "@/components/files/ticket-attachments";
+
 export enum TicketStatus {
   open = "open",
   reproducing = "reproducing",
@@ -61,6 +63,7 @@ export interface Ticket {
   ai_suggestions?: string;
   tags?: string[];
   comments?: TicketComment[];
+  attachments?: TicketAttachment[];
 }
 export const TICKET_STATUS_CONFIG: Record<
   TicketStatus,

@@ -228,6 +228,7 @@ CREATE TABLE system_configs (
 
 
 CREATE TABLE uploaded_logs (
+    storage_entry_id uuid,
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
     device_type character varying(20) NOT NULL,
@@ -435,7 +436,6 @@ CREATE TABLE tickets (
     ai_analysis text,
     ai_suggestions text,
     tags text[],
-    attachments jsonb DEFAULT '[]'::jsonb,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
     resolved_at timestamp with time zone,
@@ -610,7 +610,58 @@ CREATE INDEX ix_workbench_mail_locations_folder_id ON workbench_mail_locations U
 CREATE INDEX ix_workbench_message_emails_message_id ON workbench_message_emails USING btree (message_id);
 CREATE INDEX ix_workbench_message_emails_mail_id ON workbench_message_emails USING btree (mail_id);
 
+-- Shared file storage, immutable ticket attachments and recoverable uploads.
+CREATE TABLE storage_entries (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), space varchar(80) NOT NULL,
+ path text NOT NULL, is_dir boolean NOT NULL DEFAULT false, size bigint NOT NULL DEFAULT 0 CHECK(size>=0),
+ ticket_id uuid REFERENCES tickets(id) ON DELETE RESTRICT,
+ media_type varchar(100), thumbnail_size bigint NOT NULL DEFAULT 0 CHECK(thumbnail_size>=0),
+ sha256 varchar(64), creator_id uuid REFERENCES users(id) ON DELETE SET NULL,
+ document_id uuid REFERENCES documents(id) ON DELETE SET NULL,
+ trash_id uuid, deleted_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX storage_active_path ON storage_entries(space, path) WHERE trash_id IS NULL;
+CREATE INDEX storage_trash ON storage_entries(trash_id);
+CREATE TABLE storage_shares (
+ entry_id uuid REFERENCES storage_entries(id) ON DELETE CASCADE,
+ user_id uuid REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(entry_id, user_id)
+);
+CREATE TABLE storage_settings (
+ id integer PRIMARY KEY CHECK(id=1), total_bytes bigint NOT NULL DEFAULT 107374182400 CHECK(total_bytes>=0),
+ default_personal_bytes bigint NOT NULL DEFAULT 5368709120 CHECK(default_personal_bytes>=0),
+ upload_limits jsonb NOT NULL DEFAULT '{}',
+ user_quotas jsonb NOT NULL DEFAULT '{}'
+);
+CREATE TABLE file_operations (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), entry_id uuid,
+ actor_id uuid REFERENCES users(id) ON DELETE SET NULL,
+ space varchar(80) NOT NULL, path text NOT NULL, action varchar(40) NOT NULL,
+ details jsonb NOT NULL DEFAULT '{}', created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX file_operation_entry ON file_operations(entry_id, created_at);
+ALTER TABLE uploaded_logs ADD CONSTRAINT uploaded_logs_storage_entry_fk FOREIGN KEY(storage_entry_id) REFERENCES storage_entries(id) ON DELETE SET NULL;
+CREATE INDEX storage_ticket ON storage_entries(ticket_id);
+CREATE INDEX storage_my_attachments ON storage_entries(creator_id, created_at DESC) WHERE ticket_id IS NOT NULL AND trash_id IS NULL;
+CREATE INDEX storage_space_path ON storage_entries(space, path);
+CREATE TABLE upload_tasks (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ purpose varchar(30) NOT NULL, space varchar(80) NOT NULL, parent text NOT NULL DEFAULT '',
+ filename varchar(255) NOT NULL, size bigint NOT NULL CHECK(size>=0), fingerprint varchar(64) NOT NULL,
+ chunk_size integer NOT NULL CHECK(chunk_size>0), parts jsonb NOT NULL DEFAULT '[]',
+ reserved_bytes bigint NOT NULL DEFAULT 0 CHECK(reserved_bytes>=0), status varchar(20) NOT NULL DEFAULT 'active',
+ conflict varchar(10) NOT NULL DEFAULT 'skip', entry_id uuid REFERENCES storage_entries(id) ON DELETE SET NULL,
+ created_at timestamptz NOT NULL DEFAULT now(), expires_at timestamptz NOT NULL, context jsonb NOT NULL DEFAULT '{}'
+);
+CREATE INDEX upload_owner_status ON upload_tasks(user_id,status);
+CREATE INDEX upload_expiry ON upload_tasks(expires_at);
+CREATE TABLE file_garbage (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(), path text NOT NULL, size bigint NOT NULL DEFAULT 0,
+ charged_user_id uuid, pooled boolean NOT NULL DEFAULT true, created_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- Bootstrap configuration only; business and provider tables start empty.
+INSERT INTO storage_settings(id) VALUES(1);
 
 INSERT INTO ai_routes (task, provider_id, fallback_provider_id, timeout_seconds, max_output_tokens) VALUES
     ('default', NULL, NULL, NULL, NULL),

@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
     upload_dir: str = "/app/uploads"
+    storage_dir: str = "/app/data"
+    storage_max_file_mb: int = 2048
+    storage_reserve_mb: int = 256
     max_file_size_mb: int = 50
     environment: str = "development"
     log_dir: str = "/app/logs"

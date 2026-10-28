@@ -35,12 +35,16 @@ services:
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
       UPLOAD_DIR: /app/uploads
+      STORAGE_DIR: /app/data
+      STORAGE_MAX_FILE_MB: ${STORAGE_MAX_FILE_MB:-2048}
+      STORAGE_RESERVE_MB: ${STORAGE_RESERVE_MB:-256}
       MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-50}
       ENVIRONMENT: development
       WATCHFILES_FORCE_POLLING: "true"
     volumes:
       - ./backend:/app
       - uploads_data:/app/uploads
+      - storage_data:/app/data
     ports:
       - "8000:8000"
     depends_on:
@@ -108,3 +112,4 @@ networks:
 volumes:
   postgres_data:
   uploads_data:
+  storage_data:
