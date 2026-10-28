@@ -10,12 +10,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/base/alert-dialog";
 import { Button } from "@/components/ui/base/button";
+import { Checkbox } from "@/components/ui/base/checkbox";
 import { Input } from "@/components/ui/base/input";
+import { Label } from "@/components/ui/base/label";
 import { NativeSelect } from "@/components/ui/base/native-select";
 import { useUiTranslations } from "@/i18n/client";
 import { systemMessage } from "@/i18n/system-messages";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
+import { useAdminChanges } from "./unsaved-changes";
 
 interface Config {
   id?: string;
@@ -56,10 +59,7 @@ const blank: Config = {
   reindex_required: false,
 };
 const endpoint = "/api/v1/admin/ai/embedding";
-const input =
-  "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
-const button =
-  "rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50";
+const input = "w-full";
 
 export default function EmbeddingSettings() {
   const t = useUiTranslations();
@@ -71,6 +71,7 @@ export default function EmbeddingSettings() {
   const [key, setKey] = useState("");
   const [clearKey, setClearKey] = useState(false);
   const [dirty, setDirty] = useState(false);
+  useAdminChanges("ai-embedding", dirty);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -230,7 +231,7 @@ export default function EmbeddingSettings() {
       </p>
       {active && (
         <div className="space-y-2">
-          <label className="block space-y-1 text-sm">
+          <Label className="block space-y-1 text-sm">
             {t("ui.activeEmbeddingService")}
             <NativeSelect
               className="w-full"
@@ -245,7 +246,7 @@ export default function EmbeddingSettings() {
                 </option>
               ))}
             </NativeSelect>
-          </label>
+          </Label>
           {active.protocol !== "disabled" && (
             <p className="text-muted-foreground text-xs">
               {t("ui.indexesReady")}
@@ -349,7 +350,7 @@ export default function EmbeddingSettings() {
                 ? t("ui.editEmbeddingService")
                 : t("ui.addEmbeddingService")}
             </h3>
-            <label className="block space-y-1 text-sm">
+            <Label className="block space-y-1 text-sm">
               {t("ui.embeddingServiceName")}
               <Input
                 required
@@ -358,9 +359,9 @@ export default function EmbeddingSettings() {
                 onChange={(e) => change({ name: e.target.value })}
                 placeholder={t("ui.eGQwenEmbeddingService")}
               />
-            </label>
+            </Label>
             <div className="grid gap-4 md:grid-cols-2">
-              <label className="block space-y-1 text-sm">
+              <Label className="block space-y-1 text-sm">
                 {t("ui.provider")}
                 <NativeSelect
                   className="w-full"
@@ -377,8 +378,8 @@ export default function EmbeddingSettings() {
                   <option value="deepseek">DeepSeek</option>
                   <option value="qwen">Qwen</option>
                 </NativeSelect>
-              </label>
-              <label className="space-y-1 text-sm">
+              </Label>
+              <Label className="block space-y-1 text-sm">
                 {t("ui.apiType")}
                 <NativeSelect
                   className="w-full"
@@ -393,8 +394,8 @@ export default function EmbeddingSettings() {
                   </option>
                   <option value="gemini">Google Gemini Embedding API</option>
                 </NativeSelect>
-              </label>
-              <label className="space-y-1 text-sm">
+              </Label>
+              <Label className="block space-y-1 text-sm">
                 {t("ui.model")}
                 <Input
                   required={config.protocol !== "disabled"}
@@ -405,8 +406,8 @@ export default function EmbeddingSettings() {
                   onChange={(e) => change({ model: e.target.value })}
                   placeholder="BAAI/bge-base-zh-v1.5"
                 />
-              </label>
-              <label className="space-y-1 text-sm">
+              </Label>
+              <Label className="block space-y-1 text-sm">
                 API Base URL
                 <Input
                   required={config.protocol !== "disabled"}
@@ -417,8 +418,8 @@ export default function EmbeddingSettings() {
                   onChange={(e) => change({ base_url: e.target.value })}
                   placeholder={t("ui.httpYourEmbeddingServerPortV1")}
                 />
-              </label>
-              <label className="space-y-1 text-sm">
+              </Label>
+              <Label className="block space-y-1 text-sm">
                 API Key
                 <Input
                   type="password"
@@ -438,8 +439,8 @@ export default function EmbeddingSettings() {
                       : t("ui.leaveBlankForLocalApisWithoutAuthentication")
                   }
                 />
-              </label>
-              <label className="space-y-1 text-sm">
+              </Label>
+              <Label className="block space-y-1 text-sm">
                 {t("ui.timeoutSeconds")}
                 <Input
                   type="number"
@@ -452,8 +453,8 @@ export default function EmbeddingSettings() {
                     change({ timeout_seconds: Number(e.target.value) })
                   }
                 />
-              </label>
-              <label className="space-y-1 text-sm">
+              </Label>
+              <Label className="block space-y-1 text-sm">
                 {t("ui.queryPrefix")}
                 <Input
                   className={input}
@@ -462,8 +463,8 @@ export default function EmbeddingSettings() {
                   onChange={(e) => change({ query_prefix: e.target.value })}
                   placeholder={t("ui.followTheModelDocumentationOptional")}
                 />
-              </label>
-              <label className="space-y-1 text-sm">
+              </Label>
+              <Label className="block space-y-1 text-sm">
                 {t("ui.documentPrefix")}
                 <Input
                   className={input}
@@ -472,8 +473,8 @@ export default function EmbeddingSettings() {
                   onChange={(e) => change({ document_prefix: e.target.value })}
                   placeholder={t("ui.followTheModelDocumentationOptional")}
                 />
-              </label>
-              <label className="space-y-1 text-sm">
+              </Label>
+              <Label className="block space-y-1 text-sm">
                 {t("ui.minimumVectorSimilarity")}
                 <Input
                   type="number"
@@ -487,49 +488,41 @@ export default function EmbeddingSettings() {
                     change({ min_similarity: Number(e.target.value) })
                   }
                 />
-              </label>
+              </Label>
             </div>
             <div className="flex flex-wrap gap-4 text-sm">
               {config.protocol === "openai" && (
-                <label>
-                  <input
-                    type="checkbox"
+                <Label>
+                  <Checkbox
                     checked={config.send_dimensions}
-                    onChange={(e) =>
-                      change({ send_dimensions: e.target.checked })
+                    onCheckedChange={(checked) =>
+                      change({ send_dimensions: checked === true })
                     }
                   />{" "}
                   {t("ui.requestDimensions768IfSupported")}
-                </label>
+                </Label>
               )}
-              <label>
-                <input
-                  type="checkbox"
+              <Label>
+                <Checkbox
                   checked={clearKey}
-                  onChange={(e) => {
-                    setClearKey(e.target.checked);
+                  onCheckedChange={(checked) => {
+                    setClearKey(checked === true);
                     setDirty(true);
                   }}
                 />{" "}
                 {t("ui.clearSavedKey")}
-              </label>
+              </Label>
             </div>
             <p className="text-muted-foreground text-xs">
               {t("ui.testsUseTheSavedConfigurationAndNeverReturnVectorsOrKeys")}
             </p>
             <div className="flex gap-2">
-              <Button
-                type="submit"
-                variant="outline"
-                className={button}
-                disabled={busy}
-              >
+              <Button type="submit" variant="outline" disabled={busy}>
                 {t("ui.saveEmbeddingService")}
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                className={button}
                 disabled={busy || dirty || !config.id}
                 onClick={() => config.id && void test(config.id)}
               >

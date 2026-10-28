@@ -997,7 +997,9 @@
     "deviceConsole": "Device Console",
     "storageSpace": "Storage",
     "sharedWithMe": "Shared with me",
-    "systemLogs": "System logs"
+    "systemLogs": "System logs",
+    "adminCallDiagnostics": "Call diagnostics",
+    "adminLocalApiOnly": "Only this site's /api/v1/ endpoints are allowed. Requests cannot redirect to another address."
   },
   "dynamic": {
     "deleteUser": "Delete user {p0}?",

@@ -1,27 +1,68 @@
 "use client";
 
 import {
+  ArrowUpDown,
   Edit2,
   Loader2,
   Plus,
   RefreshCw,
+  Search,
   Settings,
   Terminal,
   Trash2,
   Users,
-  X,
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AISettings from "@/components/admin/ai-settings";
 import AppLogs from "@/components/admin/app-logs";
+import {
+  useAdminChanges,
+  useAdminLeave,
+} from "@/components/admin/unsaved-changes";
+import Container from "@/components/container";
+import PageToolbar from "@/components/page-toolbar";
+import { Badge } from "@/components/ui/base/badge";
+import { Button } from "@/components/ui/base/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/base/dialog";
+import { Input } from "@/components/ui/base/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/base/input-group";
+import { Label } from "@/components/ui/base/label";
+import { NativeSelect } from "@/components/ui/base/native-select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/base/table";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/base/tabs";
+import { Textarea } from "@/components/ui/base/textarea";
+import { useFeedback } from "@/components/ui/feedback-provider";
 import { translateLabels, useUiTranslations } from "@/i18n/client";
+import { adminRequestUrl, validateUserDraft } from "@/lib/admin-request";
 import apiClient from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 
-type Tab = "users" | "configs" | "api-tester" | "ai" | "logs";
+type Tab = "users" | "api-tester" | "ai" | "logs";
 
 // ── 类型 ──────────────────────────────────────────────────────
 interface UserItem {
@@ -31,11 +72,6 @@ interface UserItem {
   role: string;
   is_active: boolean;
   created_at: string;
-}
-interface Config {
-  key: string;
-  value: string;
-  description: string;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -51,15 +87,13 @@ const ROLE_COLORS: Record<string, string> = {
     "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300",
 };
 
-const inputCls =
-  "w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm \
-focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors";
+const inputCls = "w-full";
 
 export default function AdminPage() {
   const t = useUiTranslations();
-
   const { data: session } = useSession();
   const router = useRouter();
+  const canLeave = useAdminLeave();
   const [tab, setTab] = useState<Tab>("users");
   const [logRequestId, setLogRequestId] = useState("");
 
@@ -71,18 +105,13 @@ export default function AdminPage() {
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: "users", label: t("ui.userManagement"), icon: <Users size={15} /> },
     {
-      key: "configs",
-      label: t("ui.systemSettings"),
-      icon: <Settings size={15} />,
-    },
-    {
       key: "ai",
       label: t("ui.aiServicesAndRouting"),
       icon: <Settings size={15} />,
     },
     {
       key: "logs",
-      label: t("ui.applicationLogs"),
+      label: t("ui.systemLogs"),
       icon: <Terminal size={15} />,
     },
     {
@@ -93,44 +122,50 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold">{t("ui.administration")}</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          {t("ui.developersOnly")}
-        </p>
-      </div>
-
-      {/* Tab 切换 */}
-      <div className="border-border mb-6 flex gap-1 overflow-x-auto border-b">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors ${
-              tab === t.key
-                ? "border-primary text-primary"
-                : "text-muted-foreground hover:text-foreground border-transparent"
-            }`}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === "users" && <UsersTab />}
-      {tab === "configs" && <ConfigsTab />}
-      {tab === "ai" && (
-        <AISettings
-          onInspectRequest={(id) => {
-            setLogRequestId(id);
-            setTab("logs");
-          }}
-        />
-      )}
-      {tab === "logs" && <AppLogs initialRequestId={logRequestId} />}
-      {tab === "api-tester" && <ApiTesterTab />}
+    <div className="min-h-full min-w-0">
+      <Tabs
+        value={tab}
+        onValueChange={async (value) => {
+          if (value !== tab && (await canLeave())) setTab(value as Tab);
+        }}
+      >
+        <PageToolbar label={t("ui.administration")}>
+          <div className="flex max-w-full min-w-0 overflow-x-auto overflow-y-hidden">
+            <TabsList aria-label={t("ui.administration")}>
+              {tabs.map((item) => (
+                <TabsTrigger key={item.key} value={item.key}>
+                  {item.icon}
+                  {item.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+          <p className="text-muted-foreground ml-auto text-xs">
+            {t("ui.developersOnly")}
+          </p>
+        </PageToolbar>
+        <Container className="min-w-0 py-6">
+          <TabsContent value="users" className="mt-0">
+            <UsersTab />
+          </TabsContent>
+          <TabsContent value="ai" className="mt-0">
+            <AISettings
+              onInspectRequest={async (id) => {
+                if (await canLeave()) {
+                  setLogRequestId(id);
+                  setTab("logs");
+                }
+              }}
+            />
+          </TabsContent>
+          <TabsContent value="logs" className="mt-0">
+            <AppLogs initialRequestId={logRequestId} />
+          </TabsContent>
+          <TabsContent value="api-tester" className="mt-0">
+            <ApiTesterTab />
+          </TabsContent>
+        </Container>
+      </Tabs>
     </div>
   );
 }
@@ -139,75 +174,200 @@ export default function AdminPage() {
 // 用户管理 Tab
 // ══════════════════════════════════════════════════════════════
 function UsersTab() {
+  const { confirm } = useFeedback();
+
   const locale = useLocale();
 
   const t = useUiTranslations();
   const localizedROLE_LABELS = translateLabels(ROLE_LABELS, t);
 
+  const chinese = locale === "zh-CN";
+  const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sort, setSort] = useState<keyof UserItem>("created_at");
+  const [ascending, setAscending] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busyUser, setBusyUser] = useState("");
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editingUser, setEditing] = useState<UserItem | null>(null);
 
-  async function fetchUsers() {
+  const fetchUsers = useCallback(async () => {
+    setError("");
     setLoading(true);
     try {
       const r = await apiClient.get("/api/v1/admin/users");
       setUsers(r.data);
     } catch (e) {
-      console.error(e);
+      setError(errorMessage(e, t("ui.operationFailed")));
     } finally {
       setLoading(false);
     }
-  }
+  }, [t]);
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    void fetchUsers();
+  }, [fetchUsers]);
 
-  async function toggleActive(u: UserItem) {
-    await apiClient.patch(`/api/v1/admin/users/${u.id}`, {
-      is_active: !u.is_active,
+  async function mutateUser(u: UserItem, remove = false) {
+    if (busyUser) return;
+    if (remove && !(await confirm(t("dynamic.deleteUser", { p0: u.name }))))
+      return;
+    setBusyUser(u.id);
+    setError("");
+    setNotice("");
+    try {
+      if (remove) await apiClient.delete(`/api/v1/admin/users/${u.id}`);
+      else
+        await apiClient.patch(`/api/v1/admin/users/${u.id}`, {
+          is_active: !u.is_active,
+        });
+      setNotice(t("ui.saved"));
+      await fetchUsers();
+    } catch (e) {
+      setError(errorMessage(e, t("ui.operationFailed")));
+    } finally {
+      setBusyUser("");
+    }
+  }
+  const filtered = users
+    .filter(
+      (u) =>
+        (!roleFilter || u.role === roleFilter) &&
+        (!statusFilter || String(u.is_active) === statusFilter) &&
+        `${u.name} ${u.email}`
+          .toLocaleLowerCase()
+          .includes(query.toLocaleLowerCase()),
+    )
+    .sort((a, b) => {
+      const result = String(a[sort]).localeCompare(String(b[sort]), locale, {
+        numeric: true,
+      });
+      return (ascending ? result : -result) || a.id.localeCompare(b.id);
     });
-    fetchUsers();
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pages);
+  const displayedUsers = filtered.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
+  );
+  const sortColumns: (keyof UserItem)[] = [
+    "name",
+    "email",
+    "role",
+    "is_active",
+    "created_at",
+  ];
+  function changeSort(key: keyof UserItem) {
+    setAscending(sort === key ? !ascending : true);
+    setSort(key);
+    setPage(1);
   }
-  async function deleteUser(u: UserItem) {
-    if (!confirm(t("dynamic.deleteUser", { p0: u.name }))) return;
-    await apiClient.delete(`/api/v1/admin/users/${u.id}`);
-    fetchUsers();
-  }
-
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <p className="text-muted-foreground text-sm">
           {t("ui.total2")}
           {users.length} {t("ui.users")}
         </p>
         <div className="flex gap-2">
-          <button
-            onClick={fetchUsers}
-            className="hover:bg-muted/50 text-muted-foreground rounded-lg p-2"
+          <Button
+            variant="outline"
+            onClick={() => void fetchUsers()}
+            disabled={loading || !!busyUser}
+            size="icon"
+            aria-label={t("ui.refresh")}
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          </button>
-          <button
+          </Button>
+          <Button
+            disabled={loading || !!busyUser}
             onClick={() => setShowCreate(true)}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm transition-colors"
           >
             <Plus size={14} /> {t("ui.createUser")}
-          </button>
+          </Button>
         </div>
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="max-w-80 min-w-40 flex-1">
+          <InputGroup>
+            <InputGroupInput
+              aria-label={chinese ? "搜索用户" : "Search users"}
+              placeholder={chinese ? "搜索姓名或邮箱" : "Search name or email"}
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+              }}
+            />
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+          </InputGroup>
+        </div>
+        <NativeSelect
+          aria-label={t("ui.role")}
+          value={roleFilter}
+          onChange={(e) => {
+            setRoleFilter(e.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">{chinese ? "全部角色" : "All roles"}</option>
+          {Object.entries(localizedROLE_LABELS).map(([key, label]) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
+        </NativeSelect>
+        <NativeSelect
+          aria-label={t("ui.status")}
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">{chinese ? "全部状态" : "All statuses"}</option>
+          <option value="true">{chinese ? "已启用" : "Active"}</option>
+          <option value="false">{chinese ? "已禁用" : "Disabled"}</option>
+        </NativeSelect>
+      </div>
+      {error && (
+        <div
+          role="alert"
+          className="text-destructive mb-4 flex flex-wrap items-center gap-2 text-sm"
+        >
+          <span>{error}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loading || !!busyUser}
+            onClick={() => void fetchUsers()}
+          >
+            {chinese ? "重新加载" : "Reload"}
+          </Button>
+        </div>
+      )}
+      {notice && (
+        <p role="status" className="text-muted-foreground mb-4 text-sm">
+          {notice}
+        </p>
+      )}
       {loading ? (
         <div className="text-muted-foreground flex justify-center py-20">
           <Loader2 size={20} className="animate-spin" />
         </div>
       ) : (
         <div className="border-border overflow-hidden rounded-xl border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-muted-foreground">
-              <tr>
+          <Table className="w-full text-sm">
+            <TableHeader className="bg-muted/40 text-muted-foreground">
+              <TableRow>
                 {[
                   t("ui.name"),
                   t("ui.email"),
@@ -215,68 +375,159 @@ function UsersTab() {
                   t("ui.status"),
                   t("ui.registered"),
                   t("ui.actions"),
-                ].map((h) => (
-                  <th
+                ].map((h, index) => (
+                  <TableHead
                     key={h}
+                    aria-sort={
+                      sortColumns[index] === sort
+                        ? ascending
+                          ? "ascending"
+                          : "descending"
+                        : undefined
+                    }
                     className="px-4 py-3 text-left text-xs font-medium"
                   >
-                    {h}
-                  </th>
+                    {sortColumns[index] ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => changeSort(sortColumns[index])}
+                      >
+                        {h}
+                        <ArrowUpDown className="size-3" />
+                      </Button>
+                    ) : (
+                      h
+                    )}
+                  </TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody className="divide-border divide-y">
-              {users.map((u) => (
-                <tr key={u.id} className="hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-3 font-medium">{u.name}</td>
-                  <td className="text-muted-foreground px-4 py-3">{u.email}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_COLORS[u.role]}`}
-                    >
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-border divide-y">
+              {displayedUsers.map((u) => (
+                <TableRow
+                  key={u.id}
+                  className="hover:bg-muted/20 transition-colors"
+                >
+                  <TableCell className="px-4 py-3 font-medium">
+                    {u.name}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground px-4 py-3">
+                    {u.email}
+                  </TableCell>
+                  <TableCell className="px-4 py-3">
+                    <Badge variant="secondary" className={ROLE_COLORS[u.role]}>
                       {localizedROLE_LABELS[u.role]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => toggleActive(u)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-4 py-3">
+                    <Button
+                      variant="outline"
+                      disabled={loading || !!busyUser}
+                      aria-label={`${u.is_active ? t("ui.disable") : t("ui.enable")} ${u.name}`}
+                      onClick={() => void mutateUser(u)}
                       className={`cursor-pointer rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${
                         u.is_active
                           ? "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-400"
                           : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
                       }`}
                     >
-                      {u.is_active ? t("ui.enable") : t("ui.disable")}
-                    </button>
-                  </td>
-                  <td className="text-muted-foreground px-4 py-3 text-xs">
+                      {u.is_active
+                        ? chinese
+                          ? "已启用"
+                          : "Active"
+                        : chinese
+                          ? "已禁用"
+                          : "Disabled"}
+                    </Button>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground px-4 py-3 text-xs">
                     {new Date(u.created_at).toLocaleDateString(locale)}
-                  </td>
-                  <td className="px-4 py-3">
+                  </TableCell>
+                  <TableCell className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <button
+                      <Button
+                        variant="outline"
+                        disabled={loading || !!busyUser}
+                        aria-label={`${t("ui.edit")} ${u.name}`}
                         onClick={() => setEditing(u)}
-                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        size="icon-sm"
                         title={t("ui.edit")}
                       >
                         <Edit2 size={14} />
-                      </button>
-                      <button
-                        onClick={() => deleteUser(u)}
-                        className="text-muted-foreground transition-colors hover:text-red-500"
+                      </Button>
+                      <Button
+                        variant="outline"
+                        disabled={loading || !!busyUser}
+                        aria-label={`${t("ui.delete")} ${u.name}`}
+                        onClick={() => void mutateUser(u, true)}
+                        size="icon-sm"
                         title={t("ui.delete")}
                       >
                         <Trash2 size={14} />
-                      </button>
+                      </Button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+              {!displayedUsers.length && (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    className="text-muted-foreground h-24 text-center"
+                  >
+                    {error
+                      ? chinese
+                        ? "用户加载失败，请重试"
+                        : "Could not load users. Please retry."
+                      : chinese
+                        ? "没有匹配的用户"
+                        : "No matching users"}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
       )}
 
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm">
+        <span className="text-muted-foreground">
+          {filtered.length} / {users.length} · {currentPage} / {pages}
+        </span>
+        <div className="flex items-center gap-2">
+          <NativeSelect
+            aria-label={chinese ? "每页数量" : "Rows per page"}
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+          >
+            {[20, 50, 100].map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </NativeSelect>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loading || currentPage <= 1}
+            onClick={() => setPage(currentPage - 1)}
+          >
+            {t("ui.previous")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loading || currentPage >= pages}
+            onClick={() => setPage(currentPage + 1)}
+          >
+            {t("ui.next")}
+          </Button>
+        </div>
+      </div>
       {showCreate && (
         <UserFormModal
           mode="create"
@@ -315,6 +566,8 @@ function UserFormModal({
   onSuccess: () => void;
 }) {
   const t = useUiTranslations();
+  const chinese = useLocale() === "zh-CN";
+  const canLeave = useAdminLeave();
 
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
@@ -324,31 +577,51 @@ function UserFormModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const dirty =
+    name !== (user?.name ?? "") ||
+    email !== (user?.email ?? "") ||
+    role !== (user?.role ?? "engineer") ||
+    !!password ||
+    !!newPwd;
+  useAdminChanges("user-form", dirty);
+  async function requestClose() {
+    if (!saving && (await canLeave())) onClose();
+  }
   async function handleSave() {
     setError("");
+    const invalid = validateUserDraft(
+      { name, email, role, password, newPassword: newPwd },
+      mode === "create",
+    );
+    if (invalid) {
+      setError(
+        invalid === "password"
+          ? t("ui.passwordMustBeAtLeast6Characters")
+          : invalid === "newPassword"
+            ? t("ui.newPasswordMustBeAtLeast6Characters")
+            : chinese
+              ? "请填写有效的姓名、邮箱和角色。"
+              : "Enter a valid name, email and role.",
+      );
+      return;
+    }
     setSaving(true);
+    let profileSaved = false;
     try {
       if (mode === "create") {
-        if (!password || password.length < 6) {
-          setError(t("ui.passwordMustBeAtLeast6Characters"));
-          return;
-        }
         await apiClient.post("/api/v1/admin/users", {
-          name,
-          email,
+          name: name.trim(),
+          email: email.trim(),
           role,
           password,
         });
       } else {
         await apiClient.patch(`/api/v1/admin/users/${user!.id}`, {
-          name,
+          name: name.trim(),
           role,
         });
+        profileSaved = true;
         if (newPwd) {
-          if (newPwd.length < 6) {
-            setError(t("ui.newPasswordMustBeAtLeast6Characters"));
-            return;
-          }
           await apiClient.post(
             `/api/v1/admin/users/${user!.id}/reset-password`,
             { new_password: newPwd },
@@ -357,34 +630,43 @@ function UserFormModal({
       }
       onSuccess();
     } catch (e: unknown) {
-      setError(errorMessage(e, t("ui.operationFailed")));
+      setError(
+        profileSaved && newPwd
+          ? chinese
+            ? "用户资料已保存，但密码重置未完成，请重试。"
+            : "User details were saved, but the password reset did not complete. Please retry."
+          : errorMessage(e, t("ui.operationFailed")),
+      );
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) void requestClose();
       }}
     >
-      <div className="bg-background border-border w-full max-w-md rounded-2xl border shadow-2xl">
-        <div className="border-border flex items-center justify-between border-b px-6 py-4">
-          <h2 className="font-semibold">
+      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
             {mode === "create" ? t("ui.createUser") : t("ui.editUser")}
-          </h2>
-          <button onClick={onClose}>
-            <X size={18} className="text-muted-foreground" />
-          </button>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
         <div className="space-y-4 p-6">
           <div>
-            <label className="mb-1.5 block text-sm font-medium">
+            <Label
+              htmlFor="admin-user-name"
+              className="mb-1.5 block text-sm font-medium"
+            >
               {t("ui.name")}
-            </label>
-            <input
+            </Label>
+            <Input
+              id="admin-user-name"
+              aria-label={t("ui.name")}
+              disabled={saving}
               value={name}
               onChange={(e) => setName(e.target.value)}
               className={inputCls}
@@ -393,11 +675,17 @@ function UserFormModal({
           </div>
           {mode === "create" && (
             <div>
-              <label className="mb-1.5 block text-sm font-medium">
+              <Label
+                htmlFor="admin-user-email"
+                className="mb-1.5 block text-sm font-medium"
+              >
                 {t("ui.email")}
-              </label>
-              <input
+              </Label>
+              <Input
                 type="email"
+                id="admin-user-email"
+                aria-label={t("ui.email")}
+                disabled={saving}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className={inputCls}
@@ -406,10 +694,16 @@ function UserFormModal({
             </div>
           )}
           <div>
-            <label className="mb-1.5 block text-sm font-medium">
+            <Label
+              htmlFor="admin-user-role"
+              className="mb-1.5 block text-sm font-medium"
+            >
               {t("ui.role")}
-            </label>
-            <select
+            </Label>
+            <NativeSelect
+              id="admin-user-role"
+              aria-label={t("ui.role")}
+              disabled={saving}
               value={role}
               onChange={(e) => setRole(e.target.value)}
               className={inputCls}
@@ -417,15 +711,21 @@ function UserFormModal({
               <option value="engineer">{t("ui.engineer")}</option>
               <option value="leader">{t("ui.leader")}</option>
               <option value="developer">{t("ui.developer")}</option>
-            </select>
+            </NativeSelect>
           </div>
           {mode === "create" ? (
             <div>
-              <label className="mb-1.5 block text-sm font-medium">
+              <Label
+                htmlFor="admin-user-password"
+                className="mb-1.5 block text-sm font-medium"
+              >
                 {t("ui.initialPassword")}
-              </label>
-              <input
+              </Label>
+              <Input
                 type="password"
+                id="admin-user-password"
+                aria-label={t("ui.initialPassword")}
+                disabled={saving}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className={inputCls}
@@ -434,11 +734,17 @@ function UserFormModal({
             </div>
           ) : (
             <div>
-              <label className="mb-1.5 block text-sm font-medium">
+              <Label
+                htmlFor="admin-user-newPwd"
+                className="mb-1.5 block text-sm font-medium"
+              >
                 {t("ui.resetPasswordLeaveBlankToKeepCurrent")}
-              </label>
-              <input
+              </Label>
+              <Input
                 type="password"
+                id="admin-user-newPwd"
+                aria-label={t("ui.resetPasswordLeaveBlankToKeepCurrent")}
+                disabled={saving}
                 value={newPwd}
                 onChange={(e) => setNewPwd(e.target.value)}
                 className={inputCls}
@@ -452,153 +758,31 @@ function UserFormModal({
             </p>
           )}
         </div>
-        <div className="border-border flex justify-end gap-3 border-t px-6 py-4">
-          <button
-            onClick={onClose}
+        <DialogFooter>
+          <Button
+            variant="outline"
+            disabled={saving}
+            onClick={() => void requestClose()}
             className="border-border hover:bg-muted/50 rounded-lg border px-4 py-2 text-sm"
           >
             {t("ui.cancel")}
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving || !name.trim()}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm disabled:opacity-50"
-          >
+          </Button>
+          <Button onClick={handleSave} disabled={saving || !name.trim()}>
             {saving && <Loader2 size={13} className="animate-spin" />}
             {mode === "create" ? t("ui.create") : t("ui.save")}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-// ══════════════════════════════════════════════════════════════
-// 系统配置 Tab
-// ══════════════════════════════════════════════════════════════
-function ConfigsTab() {
-  const t = useUiTranslations();
-
-  const [configs, setConfigs] = useState<Config[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [editVal, setEditVal] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    apiClient
-      .get("/api/v1/admin/configs")
-      .then((r) => setConfigs(r.data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
-
-  async function saveConfig(key: string) {
-    setSaving(true);
-    try {
-      await apiClient.patch(`/api/v1/admin/configs/${key}`, { value: editVal });
-      setConfigs((prev) =>
-        prev.map((c) => (c.key === key ? { ...c, value: editVal } : c)),
-      );
-      setEditing(null);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (loading)
-    return (
-      <div className="text-muted-foreground flex justify-center py-20">
-        <Loader2 size={20} className="animate-spin" />
-      </div>
-    );
-
-  return (
-    <div className="border-border overflow-hidden rounded-xl border">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/40 text-muted-foreground">
-          <tr>
-            {[
-              t("ui.setting"),
-              t("ui.currentValue"),
-              t("ui.description"),
-              t("ui.actions"),
-            ].map((h) => (
-              <th key={h} className="px-4 py-3 text-left text-xs font-medium">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-border divide-y">
-          {configs.map((c) => (
-            <tr key={c.key} className="hover:bg-muted/20">
-              <td className="text-muted-foreground px-4 py-3 font-mono text-xs">
-                {c.key}
-              </td>
-              <td className="px-4 py-3">
-                {editing === c.key ? (
-                  <input
-                    value={editVal}
-                    onChange={(e) => setEditVal(e.target.value)}
-                    className="border-border bg-muted/30 focus:ring-primary/40 w-48 rounded border px-2 py-1 text-sm focus:ring-1 focus:outline-none"
-                    autoFocus
-                  />
-                ) : (
-                  <span className="font-medium">{c.value}</span>
-                )}
-              </td>
-              <td className="text-muted-foreground px-4 py-3 text-xs">
-                {c.description}
-              </td>
-              <td className="px-4 py-3">
-                {editing === c.key ? (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => saveConfig(c.key)}
-                      disabled={saving}
-                      className="bg-primary text-primary-foreground hover:bg-primary/90 rounded px-2 py-1 text-xs disabled:opacity-50"
-                    >
-                      {saving ? t("ui.saving") : t("ui.save")}
-                    </button>
-                    <button
-                      onClick={() => setEditing(null)}
-                      className="border-border hover:bg-muted/50 rounded border px-2 py-1 text-xs"
-                    >
-                      {t("ui.cancel")}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setEditing(c.key);
-                      setEditVal(c.value);
-                    }}
-                    className="text-muted-foreground hover:text-foreground text-xs transition-colors"
-                  >
-                    <Edit2 size={13} />
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════
-// API 测试 Tab
-// ══════════════════════════════════════════════════════════════
 function ApiTesterTab() {
   const t = useUiTranslations();
 
   const { data: session } = useSession();
   const [method, setMethod] = useState("GET");
-  const [url, setUrl] = useState("/api/v1/health");
+  const [url, setUrl] = useState("/api/v1/admin/users");
   const [body, setBody] = useState("");
   const [response, setResponse] = useState("");
   const [status, setStatus] = useState<number | null>(null);
@@ -606,12 +790,6 @@ function ApiTesterTab() {
   const [elapsed, setElapsed] = useState<number | null>(null);
 
   const PRESETS = [
-    {
-      label: t("ui.healthCheck"),
-      method: "GET",
-      url: "/api/v1/health",
-      body: "",
-    },
     {
       label: t("ui.ticketList"),
       method: "GET",
@@ -636,12 +814,6 @@ function ApiTesterTab() {
       url: "/api/v1/admin/users",
       body: "",
     },
-    {
-      label: t("ui.systemSettings"),
-      method: "GET",
-      url: "/api/v1/admin/configs",
-      body: "",
-    },
     { label: "AI TODO", method: "GET", url: "/api/v1/ai/todos", body: "" },
     {
       label: t("ui.aiChat"),
@@ -658,11 +830,13 @@ function ApiTesterTab() {
     setElapsed(null);
     const t0 = Date.now();
     try {
-      const baseUrl =
-        process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-      const fullUrl = url.startsWith("http") ? url : `${baseUrl}${url}`;
+      const fullUrl = adminRequestUrl(url, window.location.origin);
+      if (["POST", "PUT", "PATCH"].includes(method) && body.trim())
+        JSON.parse(body);
       const res = await fetch(fullUrl, {
         method,
+        redirect: "error",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session?.accessToken ?? ""}`,
@@ -673,13 +847,14 @@ function ApiTesterTab() {
       setStatus(res.status);
       setElapsed(Date.now() - t0);
       const ct = res.headers.get("content-type") ?? "";
-      if (ct.includes("text/event-stream")) {
+      if (ct.includes("text/event-stream"))
         setResponse(t("ui.sseResponseUseTheAiAssistantPanel"));
-      } else {
+      else {
+        const text = await res.text();
         try {
-          setResponse(JSON.stringify(await res.json(), null, 2));
+          setResponse(JSON.stringify(JSON.parse(text), null, 2));
         } catch {
-          setResponse(await res.text());
+          setResponse(text);
         }
       }
     } catch (e: unknown) {
@@ -699,6 +874,9 @@ function ApiTesterTab() {
 
   return (
     <div className="space-y-4">
+      <p className="text-muted-foreground text-sm">
+        {t("ui.adminLocalApiOnly")}
+      </p>
       {/* 预设 */}
       <div>
         <p className="text-muted-foreground mb-2 text-xs">
@@ -706,7 +884,8 @@ function ApiTesterTab() {
         </p>
         <div className="flex flex-wrap gap-2">
           {PRESETS.map((p) => (
-            <button
+            <Button
+              variant="outline"
               key={p.label}
               onClick={() => {
                 setMethod(p.method);
@@ -716,14 +895,16 @@ function ApiTesterTab() {
               className="border-border hover:bg-muted/50 rounded-lg border px-2.5 py-1 text-xs transition-colors"
             >
               {p.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
 
       {/* 请求行 */}
-      <div className="flex gap-2">
-        <select
+      <div className="flex flex-wrap gap-2">
+        <NativeSelect
+          aria-label="HTTP method"
+          disabled={loading}
           value={method}
           onChange={(e) => setMethod(e.target.value)}
           className="border-border bg-muted/30 focus:ring-primary/30 w-28 rounded-lg border px-3 py-2 font-mono text-sm focus:ring-2 focus:outline-none"
@@ -731,30 +912,28 @@ function ApiTesterTab() {
           {["GET", "POST", "PATCH", "PUT", "DELETE"].map((m) => (
             <option key={m}>{m}</option>
           ))}
-        </select>
-        <input
+        </NativeSelect>
+        <Input
+          aria-label="API URL"
+          disabled={loading}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           className="border-border bg-muted/30 focus:ring-primary/30 flex-1 rounded-lg border px-3 py-2 font-mono text-sm focus:ring-2 focus:outline-none"
           placeholder="/api/v1/..."
         />
-        <button
-          onClick={handleSend}
-          disabled={loading}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-5 py-2 text-sm transition-colors disabled:opacity-50"
-        >
+        <Button onClick={handleSend} disabled={loading}>
           {loading && <Loader2 size={13} className="animate-spin" />}
           {t("ui.send")}
-        </button>
+        </Button>
       </div>
 
       {/* Body */}
       {["POST", "PUT", "PATCH"].includes(method) && (
         <div>
-          <label className="text-muted-foreground mb-1.5 block text-xs font-medium">
+          <Label className="text-muted-foreground mb-1.5 block text-xs font-medium">
             {t("ui.additionalRequestBodyJSON")}
-          </label>
-          <textarea
+          </Label>
+          <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
             rows={4}

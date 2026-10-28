@@ -62,7 +62,7 @@ export function VersionBadge() {
             size="sm"
             aria-label={t("dynamic.versionVViewReleaseNotes", { p0: version })}
             className={cn(
-              "group h-8 rounded-full px-3 text-xs tabular-nums shadow-none",
+              "group h-8 rounded-full px-2 text-xs tabular-nums shadow-none sm:px-3",
               channel.color,
             )}
           />
@@ -72,10 +72,10 @@ export function VersionBadge() {
           aria-hidden="true"
           className="h-1.5 w-1.5 rounded-full bg-current"
         />
-        v{version}
+        <span className="hidden sm:inline">v{version}</span>
         <ChevronDown
           aria-hidden="true"
-          className="!h-3 !w-3 transition-transform group-data-[state=open]:rotate-180"
+          className="hidden !h-3 !w-3 transition-transform group-data-[state=open]:rotate-180 sm:block"
         />
       </PopoverTrigger>
       <PopoverContent

@@ -60,28 +60,6 @@ async def reset_password(
     return await admin_service.reset_password(user_id, body.new_password, db)
 
 
-# ── 系统配置 ─────────────────────────────────────────────────
-
-
-class UpdateConfigRequest(BaseModel):
-    value: str
-
-
-@router.get("/configs", summary="获取系统配置")
-async def list_configs(current_user: DevOnly, db: AsyncSession = Depends(get_db)):
-    return await admin_service.list_configs(db)
-
-
-@router.patch("/configs/{key}", summary="更新系统配置")
-async def update_config(
-    key: str,
-    body: UpdateConfigRequest,
-    current_user: DevOnly,
-    db: AsyncSession = Depends(get_db),
-):
-    return await admin_service.update_config(key, body.value, str(current_user.id), db)
-
-
 # ── 审计日志 ─────────────────────────────────────────────────
 
 

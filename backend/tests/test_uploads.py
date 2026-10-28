@@ -254,6 +254,44 @@ class UploadTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status_code, 200, result.text)
         return result.json()
 
+    async def test_archive_sorting_uses_filename_and_precedes_pagination(self):
+        for name, value in [
+            ("zebra.txt", b"a"),
+            ("apple.txt", b"aaaa"),
+            ("middle.txt", b"aa"),
+        ]:
+            ticket = await self.ticket()
+            task = await self.begin(
+                value=value,
+                name=name,
+                purpose="attachment",
+                ticket_id=str(ticket.id),
+            )
+            await self.send(task, value)
+            await self.complete(task)
+            await self.attach(ticket, task)
+        for sort, direction, expected in [
+            ("name", "asc", ["apple.txt", "middle.txt", "zebra.txt"]),
+            ("name", "desc", ["zebra.txt", "middle.txt", "apple.txt"]),
+            ("size", "desc", ["apple.txt", "middle.txt", "zebra.txt"]),
+            ("updated_at", "desc", ["middle.txt", "apple.txt", "zebra.txt"]),
+        ]:
+            names = []
+            for page in range(1, 4):
+                r = await self.client.get(
+                    "/api/v1/files/ticket-archive",
+                    params={
+                        "sort": sort,
+                        "direction": direction,
+                        "page_size": 1,
+                        "page": page,
+                    },
+                )
+                self.assertEqual(r.status_code, 200, r.text)
+                self.assertEqual(r.json()["total"], 3)
+                names.extend(item["name"] for item in r.json()["items"])
+            self.assertEqual(names, expected)
+
     async def test_attachments_use_only_pool_and_archive_is_read_only(self):
         ticket = await self.ticket()
         config = await self.db.get(StorageSettings, 1)

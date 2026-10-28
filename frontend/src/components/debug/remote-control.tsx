@@ -20,6 +20,7 @@ import {
 import { useLocale } from "next-intl";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/base/button";
 import { ScrollArea } from "@/components/ui/base/scroll-area";
 import { remoteKeys } from "@/lib/remote-keys";
 import {
@@ -180,7 +181,8 @@ export default function RemoteControl({
       "channelDown",
     ].includes(id);
     return (
-      <button
+      <Button
+        variant="outline"
         key={id}
         type="button"
         disabled={!supported}
@@ -275,7 +277,7 @@ export default function RemoteControl({
             <span aria-hidden="true">{id === "ok" ? "OK" : "TV"}</span>
           )}
         </span>
-      </button>
+      </Button>
     );
   }
   return (

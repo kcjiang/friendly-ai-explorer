@@ -202,17 +202,6 @@ CREATE TABLE embedding_settings (
 
 
 
-CREATE TABLE system_configs (
-    key character varying(100) NOT NULL,
-    value text,
-    description text,
-    updated_by uuid,
-    updated_at timestamp with time zone DEFAULT now(),
-    PRIMARY KEY (key),
-    FOREIGN KEY (updated_by) REFERENCES users(id)
-);
-
-
 CREATE TABLE uploaded_logs (
     storage_entry_id uuid,
     id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -673,10 +662,6 @@ INSERT INTO catalog_options (category, value) VALUES
 
 INSERT INTO embedding_settings (id) VALUES (1);
 
-
-
-INSERT INTO system_configs (key, value, description, updated_by) VALUES
-    ('app_name', 'Friendly AI Explorer', 'Application name', NULL);
 
 
 INSERT INTO users (id, email, name, password_hash, role, avatar_url, is_active) VALUES

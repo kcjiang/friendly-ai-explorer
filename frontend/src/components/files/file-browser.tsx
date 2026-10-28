@@ -2,17 +2,23 @@
 
 import { isAxiosError } from "axios";
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
+  ArrowUpDown,
   Copy,
   Download,
   File,
   Folder,
   FolderPlus,
+  HardDrive,
   History,
   Loader2,
   Move,
+  PanelLeft,
   Pencil,
   RefreshCw,
+  Search,
   Settings2,
   Share2,
   Trash2,
@@ -23,19 +29,83 @@ import { useSession } from "next-auth/react";
 import { useLocale } from "next-intl";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  createColumnHelper,
+  rowPaginationFeature,
+  rowSelectionFeature,
+  tableFeatures,
+  useTable,
+} from "@tanstack/react-table";
+import Container from "@/components/container";
+import StorageWorkspace from "@/components/files/storage-workspace";
 import { TopNav } from "@/components/nav";
+import PageToolbar from "@/components/page-toolbar";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/base/breadcrumb";
 import { Button } from "@/components/ui/base/button";
+import { Checkbox } from "@/components/ui/base/checkbox";
 import { CodeBlock, CodeBlockContent } from "@/components/ui/base/code-block";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/base/context-menu";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/base/dialog";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/base/empty";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/base/hover-card";
 import { Input } from "@/components/ui/base/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/base/input-group";
+import {
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemTitle,
+} from "@/components/ui/base/item";
+import { Label } from "@/components/ui/base/label";
+import {
+  Menubar,
+  MenubarContent,
+  MenubarItem,
+  MenubarMenu,
+  MenubarSeparator,
+  MenubarTrigger,
+} from "@/components/ui/base/menubar";
+import { NativeSelect } from "@/components/ui/base/native-select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/base/popover";
+import { Progress } from "@/components/ui/base/progress";
+import { Skeleton } from "@/components/ui/base/skeleton";
 import {
   Table,
   TableBody,
@@ -44,10 +114,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/base/table";
+import { Textarea } from "@/components/ui/base/textarea";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import { enqueueUpload } from "@/lib/upload-manager";
 import type { Ticket } from "@/types/ticket";
+import workspaceStyles from "./storage-workspace.module.css";
 
 type Space =
   | "public"
@@ -75,6 +147,17 @@ type Entry = {
   created_at?: string;
   thumbnail_size?: number;
 };
+const fileTableFeatures = tableFeatures({
+  rowPaginationFeature,
+  rowSelectionFeature,
+});
+const fileColumn = createColumnHelper<typeof fileTableFeatures, Entry>();
+const fileColumns = fileColumn.columns([
+  fileColumn.accessor("name", { header: "Name" }),
+  fileColumn.accessor("size", { header: "Size" }),
+  fileColumn.accessor("creator", { header: "Creator" }),
+  fileColumn.accessor("updated_at", { header: "Modified" }),
+]);
 type User = { id: string; name: string; is_active: boolean };
 type Usage = {
   reserved_bytes: number;
@@ -111,6 +194,7 @@ type Modal =
   | "share"
   | "history"
   | "preview"
+  | "usage"
   | "capacity"
   | "purge"
   | "purge-all"
@@ -131,10 +215,8 @@ function bytes(n: number) {
 
 export default function FileBrowser({
   knowledge = false,
-  initialShared = false,
 }: {
   knowledge?: boolean;
-  initialShared?: boolean;
 }) {
   const locale = useLocale();
   const d = useCallback(
@@ -143,21 +225,33 @@ export default function FileBrowser({
   );
   const { data: session } = useSession();
   const developer = session?.user?.role === "developer";
-  const [space, setSpace] = useState<Space>(
-    knowledge ? "knowledge" : initialShared ? "shared" : "public",
-  );
+  const [space, setSpace] = useState<Space>(knowledge ? "knowledge" : "public");
   const [path, setPath] = useState("");
   const [sharedRoot, setSharedRoot] = useState<Entry | null>(null);
+  const [checkedIds, setCheckedIds] = useState<string[]>([]);
+  const [batchEntries, setBatchEntries] = useState<Entry[]>([]);
   const [items, setItems] = useState<Entry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [sort, setSort] = useState<"name" | "size" | "updated_at">("name");
+  const [direction, setDirection] = useState<"asc" | "desc">("asc");
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [spacePickerOpen, setSpacePickerOpen] = useState(false);
+  const columnDrag = useRef<{
+    key: string;
+    next: string;
+    start: number;
+    width: number;
+    widths: Record<string, number>;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [usage, setUsage] = useState<Usage | null>(null);
   const [reload, setReload] = useState(0);
   const [modal, setModal] = useState<Modal>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [archiveTicket, setArchiveTicket] = useState<Ticket | null>(null);
   const [selected, setSelected] = useState<Entry | null>(null);
   const [name, setName] = useState("");
@@ -211,6 +305,35 @@ export default function FileBrowser({
     trash: d("Public recycle bin", "公共回收站"),
     attachments: d("My attachments", "我的附件"),
   };
+  useEffect(() => {
+    setCheckedIds([]);
+  }, [space, path, sharedRoot?.id, query, page, reload, sort, direction]);
+  const rowSelection = Object.fromEntries(
+    checkedIds.map((id) => [id, true as const]),
+  );
+  const table = useTable({
+    features: fileTableFeatures,
+    columns: fileColumns,
+    data: items,
+    getRowId: (entry) => entry.id,
+    rowCount: total,
+    manualPagination: true,
+    autoResetPageIndex: false,
+    onRowSelectionChange: (updater) => {
+      const next =
+        typeof updater === "function" ? updater(rowSelection) : updater;
+      setCheckedIds(Object.keys(next).filter((id) => next[id]));
+    },
+    onPaginationChange: (updater) => {
+      const previous = { pageIndex: page - 1, pageSize: 50 };
+      const next = typeof updater === "function" ? updater(previous) : updater;
+      setPage(next.pageIndex + 1);
+    },
+    state: { rowSelection, pagination: { pageIndex: page - 1, pageSize: 50 } },
+  });
+  const checkedEntries = table
+    .getSelectedRowModel()
+    .rows.map((row) => row.original);
   const refresh = () => setReload((v) => v + 1);
   useEffect(() => {
     const changed = () => setReload((v) => v + 1);
@@ -250,8 +373,8 @@ export default function FileBrowser({
   };
 
   useEffect(() => {
-    if (!knowledge) changeSpace(initialShared ? "shared" : "public");
-  }, [initialShared, knowledge]);
+    if (!knowledge) changeSpace("public");
+  }, [knowledge]);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -261,7 +384,7 @@ export default function FileBrowser({
         if (space === "attachments") {
           const r = await api.get("/api/v1/files/ticket-archive", {
             signal: controller.signal,
-            params: { q: query, page, page_size: 50 },
+            params: { q: query, page, page_size: 50, sort, direction },
           });
           if (!controller.signal.aborted) {
             setItems(r.data.items);
@@ -277,6 +400,23 @@ export default function FileBrowser({
           const filtered = r.data.filter((e) =>
             e.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
           );
+          filtered.sort((a, b) => {
+            if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+            const delta =
+              sort === "name"
+                ? a.name.localeCompare(b.name, undefined, {
+                    numeric: false,
+                    sensitivity: "base",
+                  })
+                : sort === "size"
+                  ? a.size - b.size
+                  : new Date(a.deleted_at || a.updated_at).getTime() -
+                    new Date(b.deleted_at || b.updated_at).getTime();
+            return (
+              (direction === "desc" ? -delta : delta) ||
+              a.id.localeCompare(b.id)
+            );
+          });
           if (!controller.signal.aborted) {
             setItems(filtered.slice((page - 1) * 50, page * 50));
             setTotal(filtered.length);
@@ -288,6 +428,8 @@ export default function FileBrowser({
               path,
               page,
               q: query,
+              sort,
+              direction,
               shared_id: sharedRoot?.id,
             },
             signal: controller.signal,
@@ -312,7 +454,17 @@ export default function FileBrowser({
     };
     void load();
     return () => controller.abort();
-  }, [space, path, sharedRoot, page, query, reload, currentSpace]);
+  }, [
+    space,
+    path,
+    sharedRoot,
+    page,
+    query,
+    reload,
+    currentSpace,
+    sort,
+    direction,
+  ]);
   useEffect(() => {
     return () => {
       abortUpload.current?.abort();
@@ -347,6 +499,9 @@ export default function FileBrowser({
     if (busy) return;
     previewAbort.current?.abort();
     dialogAbort.current?.abort();
+    setModalOpen(false);
+  };
+  const clearClosedModal = () => {
     setModalLoading(false);
     setModal(null);
     setPreviewUrl("");
@@ -392,6 +547,7 @@ export default function FileBrowser({
     const controller = new AbortController();
     previewAbort.current = controller;
     setModal("preview");
+    setModalOpen(true);
     setModalLoading(true);
     setContent("");
     setFileConflict(false);
@@ -427,11 +583,13 @@ export default function FileBrowser({
       if (!controller.signal.aborted) setModalLoading(false);
     }
   }
-  async function show(action: Modal, entry?: Entry) {
+  async function show(action: Modal, entry?: Entry, targets?: Entry[]) {
+    setBatchEntries(targets ?? (entry ? [entry] : []));
     dialogAbort.current?.abort();
     const controller = new AbortController();
     dialogAbort.current = controller;
     setModal(action);
+    setModalOpen(!!action);
     setSelected(entry || null);
     setName(entry?.name || "");
     setContent("");
@@ -492,6 +650,8 @@ export default function FileBrowser({
     if (modal === "preview" && fileConflict) return;
     setBusy(true);
     setError("");
+    const completed: string[] = [];
+    const removed: string[] = [];
     try {
       if (modal === "folder")
         await api.post("/api/v1/files/folders", {
@@ -510,41 +670,57 @@ export default function FileBrowser({
         });
       else if (modal === "rename" && selected)
         await api.patch(`/api/v1/files/${selected.id}`, { name });
-      else if ((modal === "copy" || modal === "move") && selected) {
-        let choice: "skip" | "keep" | "replace" = "keep";
-        const existing = await api.get("/api/v1/files/exists", {
-          params: {
-            space: targetSpace,
-            parent: targetPath,
-            name: selected.name,
-          },
-        });
-        if (existing.data.exists) {
-          setAllowReplace(modal === "copy" && !selected.is_dir);
-          setConflictName(selected.name);
-          choice = await new Promise<"skip" | "keep" | "replace">((resolve) => {
-            conflictResolve.current = resolve;
-          });
-          conflictResolve.current = null;
-          setConflictName("");
-          setAllowReplace(false);
-        }
-        if (choice !== "skip")
-          await api.post(
-            `/api/v1/files/${selected.id}/transfer`,
-            {
+      else if ((modal === "copy" || modal === "move") && batchEntries.length) {
+        for (const selected of batchEntries) {
+          let choice: "skip" | "keep" | "replace" = "keep";
+          const existing = await api.get("/api/v1/files/exists", {
+            params: {
               space: targetSpace,
               parent: targetPath,
-              copy: modal === "copy",
-              conflict: choice,
+              name: selected.name,
             },
-            { timeout: 600000 },
+          });
+          if (existing.data.exists) {
+            setAllowReplace(modal === "copy" && !selected.is_dir);
+            setConflictName(selected.name);
+            choice = await new Promise<"skip" | "keep" | "replace">(
+              (resolve) => {
+                conflictResolve.current = resolve;
+              },
+            );
+            conflictResolve.current = null;
+            setConflictName("");
+            setAllowReplace(false);
+          }
+          if (choice !== "skip") {
+            await api.post(
+              `/api/v1/files/${selected.id}/transfer`,
+              {
+                space: targetSpace,
+                parent: targetPath,
+                copy: modal === "copy",
+                conflict: choice,
+              },
+              { timeout: 600000 },
+            );
+            if (modal === "move") removed.push(selected.id);
+          }
+          completed.push(selected.id);
+        }
+      } else if (
+        (modal === "delete" || modal === "purge") &&
+        batchEntries.length
+      ) {
+        for (const entry of batchEntries) {
+          await api.delete(
+            modal === "purge"
+              ? `/api/v1/files/trash/${entry.id}`
+              : `/api/v1/files/${entry.id}`,
           );
-      } else if (modal === "delete" && selected)
-        await api.delete(`/api/v1/files/${selected.id}`);
-      else if (modal === "purge" && selected)
-        await api.delete(`/api/v1/files/trash/${selected.id}`);
-      else if (modal === "purge-all") await api.delete("/api/v1/files/trash");
+          completed.push(entry.id);
+          removed.push(entry.id);
+        }
+      } else if (modal === "purge-all") await api.delete("/api/v1/files/trash");
       else if (modal === "share" && selected)
         await api.put(`/api/v1/files/${selected.id}/shares`, {
           user_ids: shareUsers,
@@ -556,11 +732,26 @@ export default function FileBrowser({
           content,
           revision: contentRevision,
         });
-      setModal(null);
-      setPreviewUrl("");
+      setModalOpen(false);
       setMessage(d("Saved", "操作完成"));
       refresh();
     } catch (e) {
+      if (completed.length) {
+        setBatchEntries((entries) =>
+          entries.filter((entry) => !completed.includes(entry.id)),
+        );
+        setCheckedIds((ids) => ids.filter((id) => !completed.includes(id)));
+        setItems((entries) =>
+          entries.filter((entry) => !removed.includes(entry.id)),
+        );
+        setTotal((total) => Math.max(0, total - removed.length));
+        setMessage(
+          d(
+            "Some items completed; retry will process only the remaining items.",
+            "部分项目已完成；重试仅处理剩余项目。",
+          ),
+        );
+      }
       if (modal === "preview" && isAxiosError(e) && e.response?.status === 409)
         setFileConflict(true);
       report(e);
@@ -662,121 +853,163 @@ export default function FileBrowser({
     share: d("Share with users", "共享给成员"),
     history: d("Operation history", "操作记录"),
     preview: selected?.name || d("Preview", "预览"),
+    usage: d("Storage usage", "容量详情"),
     capacity: d("Storage capacity", "容量设置"),
     purge: d("Permanently delete", "彻底删除"),
     "purge-all": d("Empty public recycle bin", "清空公共回收站"),
   };
 
-  return (
-    <div
-      className={`flex flex-col ${knowledge ? "min-h-[calc(100dvh-3rem)]" : "min-h-[100dvh]"}`}
-    >
-      {!knowledge && <TopNav title={d("Storage", "存储空间")} />}
-      <div
-        role="toolbar"
-        aria-label={d("File toolbar", "文件工具栏")}
-        className="flex min-h-14 flex-wrap items-center gap-2 border-b px-4 py-2"
-      >
-        {writable && (
+  const spaces: Space[] = [
+    "public",
+    "personal",
+    "attachments",
+    "shared",
+    "trash",
+  ];
+  const used = usage
+    ? space === "personal"
+      ? usage.personal_bytes
+      : usage.used_bytes
+    : 0;
+  const limit = usage
+    ? space === "personal"
+      ? usage.personal_limit
+      : usage.total_bytes
+    : 0;
+  const percent =
+    limit > 0
+      ? Math.min(100, Math.max(0, (used / limit) * 100))
+      : used > 0
+        ? 100
+        : 0;
+  const capacityLabel =
+    space === "personal" ? d("Personal", "个人空间") : d("Storage", "存储容量");
+  const capacityItem = (
+    <Item className="w-full p-0">
+      <ItemContent className="gap-2">
+        <ItemTitle>
+          <HardDrive className="size-4 shrink-0" />
+          {capacityLabel}
+        </ItemTitle>
+        {usage ? (
           <>
+            <Progress value={percent} aria-label={capacityLabel} />
+            <ItemDescription className="tabular-nums">
+              {bytes(used)} / {bytes(limit)}
+            </ItemDescription>
             <Button
-              variant="outline"
+              variant="link"
               size="sm"
-              disabled={!!upload || busy}
-              onClick={() => void show("folder")}
+              className="h-auto justify-start p-0 text-xs"
+              onClick={() => void show("usage")}
             >
-              <FolderPlus />
-              {d("New folder", "新建文件夹")}
+              {d("Storage usage", "容量详情")}
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!!upload || busy}
-              onClick={() => input.current?.click()}
-            >
-              <Upload />
-              {d("Upload", "上传")}
-            </Button>
-            {knowledge && (
+          </>
+        ) : (
+          <>
+            <Skeleton className="h-2 w-full" />
+            <Skeleton className="h-3 w-3/4" />
+          </>
+        )}
+      </ItemContent>
+    </Item>
+  );
+  // Context follows shadcn's Hover Card + Progress composition. A click also
+  // opens details so keyboard and touch users do not depend on hover.
+  const capacitySummary = !knowledge && (
+    <>
+      <div className={workspaceStyles.capacityFull}>{capacityItem}</div>
+      <div className={workspaceStyles.capacityCompact}>
+        <HoverCard>
+          <HoverCardTrigger
+            delay={10}
+            closeDelay={100}
+            render={
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => void show("markdown")}
-              >
-                <Pencil />
-                {d("New Markdown", "新建 Markdown")}
-              </Button>
+                className="w-full px-1 tabular-nums"
+                aria-label={d("Storage usage", "容量详情")}
+                onClick={() => void show("usage")}
+              />
+            }
+          >
+            {usage ? (
+              `${Math.round(percent)}%`
+            ) : (
+              <Skeleton className="h-4 w-6" />
             )}
-          </>
-        )}
-        <input
-          ref={input}
-          type="file"
-          multiple
-          accept={knowledge ? ".md,.markdown" : undefined}
-          className="hidden"
-          onChange={(e) => void uploadFiles(e.target.files)}
-        />
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title={d("Refresh", "刷新")}
-          aria-label={d("Refresh", "刷新")}
-          disabled={loading}
-          onClick={refresh}
-        >
-          <RefreshCw className={loading ? "animate-spin" : ""} />
-        </Button>
-        {knowledge && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            onClick={() => void sync()}
-          >
-            {d("Scan and sync", "扫描并同步")}
-          </Button>
-        )}
-        {developer && !knowledge && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto"
-            onClick={() => void show("capacity")}
-          >
-            <Settings2 />
-            {d("Capacity", "容量设置")}
-          </Button>
-        )}
-        {developer && space === "trash" && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy || !total}
-            onClick={() => void show("purge-all")}
-          >
-            <Trash2 />
-            {d("Empty recycle bin", "清空回收站")}
-          </Button>
-        )}
+          </HoverCardTrigger>
+          <HoverCardContent side="right">{capacityItem}</HoverCardContent>
+        </HoverCard>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        {!knowledge && (
-          <aside className="flex shrink-0 flex-wrap gap-1 border-b p-3 md:w-44 md:flex-col md:border-r md:border-b-0">
-            {(
-              [
-                "public",
-                "personal",
-                "attachments",
-                "shared",
-                "trash",
-              ] as Space[]
-            ).map((value) => (
+    </>
+  );
+  const navigation = (
+    <>
+      <nav
+        aria-label={d("Storage spaces", "存储空间分类")}
+        className="space-y-1"
+      >
+        {spaces.map((value) => (
+          <Button
+            key={value}
+            variant={space === value ? "secondary" : "ghost"}
+            aria-current={space === value ? "page" : undefined}
+            className="w-full min-w-0 justify-start"
+            aria-label={titles[value]}
+            title={titles[value]}
+            onClick={() => changeSpace(value)}
+          >
+            {value === "shared" ? (
+              <Share2 />
+            ) : value === "trash" ? (
+              <Trash2 />
+            ) : (
+              <Folder />
+            )}
+            <span className={`${workspaceStyles.fullLabel} truncate`}>
+              {titles[value]}
+            </span>
+            <span className={workspaceStyles.compactLabel} aria-hidden="true">
+              {Array.from(titles[value])[0]}...
+            </span>
+          </Button>
+        ))}
+      </nav>
+      <div className="mt-auto border-t pt-3">{capacitySummary}</div>
+    </>
+  );
+  const mobileNavigation = (
+    <div className="flex min-w-0 items-center justify-between gap-2 border-b pb-3">
+      <Button
+        variant="outline"
+        onClick={() => setSpacePickerOpen(true)}
+        aria-label={d("Choose storage space", "选择存储空间")}
+      >
+        <PanelLeft />
+        {titles[space]}
+      </Button>
+      <Dialog open={spacePickerOpen} onOpenChange={setSpacePickerOpen}>
+        <DialogContent className="top-auto bottom-4 max-h-[80dvh] -translate-y-0 overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{d("Storage spaces", "存储空间分类")}</DialogTitle>
+          </DialogHeader>
+          <nav
+            aria-label={d("Switch storage space", "切换存储空间")}
+            className="grid gap-2"
+          >
+            {spaces.map((value) => (
               <Button
                 key={value}
+                className="h-11 justify-start"
                 variant={space === value ? "secondary" : "ghost"}
-                className="justify-start"
-                onClick={() => changeSpace(value)}
+                aria-current={space === value ? "page" : undefined}
+                onClick={() => {
+                  changeSpace(value);
+                  setSpacePickerOpen(false);
+                }}
               >
                 {value === "shared" ? (
                   <Share2 />
@@ -788,440 +1021,856 @@ export default function FileBrowser({
                 {titles[value]}
               </Button>
             ))}
-            {usage && (
-              <div className="text-muted-foreground mt-3 space-y-2 px-2 text-xs md:mt-auto">
-                <p>
-                  {d("Total pool", "总池")}: {bytes(usage.used_bytes)} /{" "}
-                  {bytes(usage.total_bytes)}
-                </p>
-                <div className="bg-muted h-1 overflow-hidden rounded">
-                  <div
-                    className="bg-primary h-full"
-                    style={{
-                      width: `${Math.min(100, usage.total_bytes ? (usage.used_bytes / usage.total_bytes) * 100 : 100)}%`,
-                    }}
-                  />
-                </div>
-                <p>
-                  {d("My space", "个人")}: {bytes(usage.personal_bytes)} /{" "}
-                  {bytes(usage.personal_limit)}
-                </p>
-                <p>
-                  {d("Disk free", "磁盘可用")}: {bytes(usage.disk_free_bytes)}
-                </p>
-                {!!usage.reserved_bytes && (
-                  <p>
-                    {d("Reserved for uploads", "上传预留")}:{" "}
-                    {bytes(usage.reserved_bytes)} · {d("Mine", "本人")}:{" "}
-                    {bytes(usage.personal_reserved_bytes)}
-                  </p>
-                )}
-              </div>
-            )}
-          </aside>
+          </nav>
+        </DialogContent>
+      </Dialog>
+      <Popover>
+        <PopoverTrigger
+          render={
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={d("Storage usage", "容量详情")}
+            />
+          }
+        >
+          <HardDrive />
+          {usage ? `${Math.round(percent)}%` : "…"}
+        </PopoverTrigger>
+        <PopoverContent align="end">{capacityItem}</PopoverContent>
+      </Popover>
+    </div>
+  );
+  function entryActions(targets: Entry[], Item: typeof MenubarItem) {
+    const one = targets.length === 1 ? targets[0] : null;
+    const disabled = busy || loading || !targets.length;
+    return (
+      <>
+        <Item
+          disabled={disabled || !one || space === "trash"}
+          onClick={() => {
+            if (one) void open(one);
+          }}
+        >
+          <Folder />
+          {d("Open", "打开")}
+        </Item>
+        <Item
+          disabled={
+            disabled ||
+            targets.some((entry) => entry.is_dir) ||
+            space === "trash"
+          }
+          onClick={async () => {
+            for (const entry of targets) await download(entry);
+          }}
+        >
+          <Download />
+          {d("Download", "下载")}
+        </Item>
+        {space !== "attachments" && space !== "trash" && (
+          <Item
+            disabled={disabled}
+            onClick={() => void show("copy", targets[0], targets)}
+          >
+            <Copy />
+            {d("Copy to", "复制到")}
+          </Item>
         )}
-        <main className="min-w-0 flex-1 space-y-3 p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {(path || sharedRoot) && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={d("Parent folder", "返回上级")}
-                onClick={() => {
-                  if (!path) setSharedRoot(null);
-                  else setPath(path.split("/").slice(0, -1).join("/"));
-                  setPage(1);
-                  setQuery("");
-                }}
-              >
-                <ArrowLeft />
-              </Button>
-            )}
-            <nav
-              aria-label={d("Folder path", "文件夹路径")}
-              className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-sm"
+        {writable && (
+          <>
+            <Item
+              disabled={disabled}
+              onClick={() => void show("move", targets[0], targets)}
             >
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setPath("");
-                  setSharedRoot(null);
-                  setPage(1);
-                }}
-              >
-                {titles[space]}
-              </Button>
-              {sharedRoot && <span>/ {sharedRoot.name}</span>}
+              <Move />
+              {d("Move to", "移动到")}
+            </Item>
+            <Item
+              disabled={disabled || !one}
+              onClick={() => {
+                if (one) void show("rename", one);
+              }}
+            >
+              <Pencil />
+              {d("Rename", "重命名")}
+            </Item>
+          </>
+        )}
+        {space === "personal" && (
+          <Item
+            disabled={disabled || !one}
+            onClick={() => {
+              if (one) void show("share", one);
+            }}
+          >
+            <Share2 />
+            {d("Share", "共享")}
+          </Item>
+        )}
+        {one?.ticket_id && space === "attachments" && (
+          <Item
+            disabled={disabled}
+            onClick={() =>
+              void api
+                .get<Ticket>(`/api/v1/tickets/${one.ticket_id}`)
+                .then((r) => setArchiveTicket(r.data))
+                .catch(report)
+            }
+          >
+            {d("Open ticket", "打开工单")}
+          </Item>
+        )}
+        {space !== "attachments" && (
+          <Item
+            disabled={disabled || !one}
+            onClick={() => {
+              if (one) void show("history", one);
+            }}
+          >
+            <History />
+            {d("History", "操作记录")}
+          </Item>
+        )}
+        {writable && (
+          <Item
+            variant="destructive"
+            disabled={disabled}
+            onClick={() => void show("delete", targets[0], targets)}
+          >
+            <Trash2 />
+            {d("Delete", "删除")}
+          </Item>
+        )}
+        {space === "trash" && developer && (
+          <>
+            <Item
+              disabled={disabled || !one}
+              onClick={() => {
+                if (one) void restore(one);
+              }}
+            >
+              <Undo2 />
+              {d("Restore", "恢复")}
+            </Item>
+            <Item
+              variant="destructive"
+              disabled={disabled}
+              onClick={() => void show("purge", targets[0], targets)}
+            >
+              <Trash2 />
+              {d("Permanently delete", "彻底删除")}
+            </Item>
+          </>
+        )}
+      </>
+    );
+  }
+  const creationActions = (Item: typeof MenubarItem) => (
+    <>
+      {writable && (
+        <>
+          <Item
+            disabled={!!upload || busy}
+            onClick={() => input.current?.click()}
+          >
+            <Upload />
+            {d("Upload", "上传")}
+          </Item>
+          <Item disabled={!!upload || busy} onClick={() => void show("folder")}>
+            <FolderPlus />
+            {d("New folder", "新建文件夹")}
+          </Item>
+          {knowledge && (
+            <Item disabled={busy} onClick={() => void show("markdown")}>
+              <Pencil />
+              {d("New Markdown", "新建 Markdown")}
+            </Item>
+          )}
+        </>
+      )}
+      <Item disabled={loading || busy} onClick={refresh}>
+        <RefreshCw />
+        {d("Refresh", "刷新")}
+      </Item>
+    </>
+  );
+  const toolbar = (
+    <PageToolbar label={d("File toolbar", "文件工具栏")}>
+      <Menubar aria-label={d("File commands", "文件命令")}>
+        <MenubarMenu>
+          <MenubarTrigger>{d("File", "文件")}</MenubarTrigger>
+          <MenubarContent className="w-44">
+            {creationActions(MenubarItem)}
+            {knowledge && (
+              <MenubarItem disabled={busy} onClick={() => void sync()}>
+                {d("Scan and sync", "扫描并同步")}
+              </MenubarItem>
+            )}
+            {developer && space === "trash" && (
+              <>
+                <MenubarSeparator />
+                <MenubarItem
+                  variant="destructive"
+                  disabled={busy || !total}
+                  onClick={() => void show("purge-all")}
+                >
+                  <Trash2 />
+                  {d("Empty recycle bin", "清空回收站")}
+                </MenubarItem>
+              </>
+            )}
+          </MenubarContent>
+        </MenubarMenu>
+        <MenubarMenu>
+          <MenubarTrigger>{d("Edit", "编辑")}</MenubarTrigger>
+          <MenubarContent className="w-44">
+            {entryActions(checkedEntries, MenubarItem)}
+          </MenubarContent>
+        </MenubarMenu>
+        <MenubarMenu>
+          <MenubarTrigger>{d("Select", "选择")}</MenubarTrigger>
+          <MenubarContent>
+            <MenubarItem
+              disabled={loading || busy || !items.length}
+              onClick={() => table.toggleAllPageRowsSelected(true)}
+            >
+              {d("Select this page", "全选当前页")}
+            </MenubarItem>
+            <MenubarItem
+              disabled={!checkedIds.length}
+              onClick={() => table.resetRowSelection()}
+            >
+              {d("Clear selection", "取消选择")}
+            </MenubarItem>
+          </MenubarContent>
+        </MenubarMenu>
+      </Menubar>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={d("Refresh", "刷新")}
+        disabled={loading || busy}
+        onClick={refresh}
+      >
+        <RefreshCw className={loading ? "animate-spin" : ""} />
+      </Button>
+      <span role="status" className="text-muted-foreground text-xs">
+        {checkedEntries.length
+          ? `${d("Selected", "已选")} ${checkedEntries.length}`
+          : ""}
+      </span>
+      <div className="ml-auto w-full min-w-0 flex-1 basis-full sm:max-w-80 sm:min-w-40 sm:basis-0">
+        <InputGroup>
+          <InputGroupInput
+            aria-label={d("Search files", "搜索文件")}
+            placeholder={
+              space === "attachments"
+                ? d("Search filename or ticket", "搜索文件名或工单")
+                : d("Search this folder", "搜索当前文件夹")
+            }
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(1);
+            }}
+          />
+          <InputGroupAddon>
+            <Search />
+          </InputGroupAddon>
+        </InputGroup>
+      </div>
+      <input
+        ref={input}
+        type="file"
+        multiple
+        accept={knowledge ? ".md,.markdown" : undefined}
+        className="hidden"
+        onChange={(e) => void uploadFiles(e.target.files)}
+      />
+    </PageToolbar>
+  );
+  const columns =
+    space === "attachments"
+      ? [
+          { key: "name", label: d("Name", "名称"), ratio: 34 },
+          { key: "ticket", label: d("Ticket", "所属工单"), ratio: 20 },
+          { key: "size", label: d("Size", "大小"), ratio: 12 },
+          { key: "creator", label: d("Creator", "创建人"), ratio: 14 },
+          { key: "updated_at", label: d("Uploaded", "上传时间"), ratio: 20 },
+        ]
+      : [
+          { key: "name", label: d("Name", "名称"), ratio: 43 },
+          { key: "size", label: d("Size", "大小"), ratio: 13 },
+          { key: "creator", label: d("Creator", "创建人"), ratio: 17 },
+          { key: "updated_at", label: d("Modified", "修改时间"), ratio: 27 },
+        ];
+  const widthPrefix = space === "attachments" ? "archive-" : "files-";
+  const widths = Object.fromEntries(
+    columns.map((column) => [
+      column.key,
+      columnWidths[widthPrefix + column.key] ?? column.ratio,
+    ]),
+  );
+  function adjustColumns(
+    key: string,
+    next: string,
+    delta: number,
+    start = widths,
+  ) {
+    const minimum = (id: string) =>
+      id === "name" ? 24 : id === "updated_at" ? 18 : 10;
+    const amount = Math.max(
+      minimum(key) - start[key],
+      Math.min(start[next] - minimum(next), delta),
+    );
+    setColumnWidths((previous) => ({
+      ...previous,
+      [widthPrefix + key]: start[key] + amount,
+      [widthPrefix + next]: start[next] - amount,
+    }));
+  }
+  const contentView = (
+    <div className="space-y-4">
+      <div className="flex h-8 min-w-0 items-center gap-3" data-storage-path>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          {
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={d("Parent folder", "返回上级")}
+              disabled={!path && !sharedRoot}
+              onClick={() => {
+                if (!path) setSharedRoot(null);
+                else setPath(path.split("/").slice(0, -1).join("/"));
+                setPage(1);
+                setQuery("");
+              }}
+            >
+              <ArrowLeft />
+            </Button>
+          }
+          <Breadcrumb
+            aria-label={d("Folder path", "文件夹路径")}
+            className="min-w-0 overflow-x-auto whitespace-nowrap"
+          >
+            <BreadcrumbList className="flex-nowrap">
+              <BreadcrumbItem>
+                {!path && !sharedRoot ? (
+                  <BreadcrumbPage>{titles[space]}</BreadcrumbPage>
+                ) : (
+                  <Button
+                    variant="link"
+                    className="text-muted-foreground h-auto p-0"
+                    onClick={() => {
+                      setPath("");
+                      setSharedRoot(null);
+                      setPage(1);
+                      setQuery("");
+                    }}
+                  >
+                    {titles[space]}
+                  </Button>
+                )}
+              </BreadcrumbItem>
+              {sharedRoot && (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    {!path ? (
+                      <BreadcrumbPage>{sharedRoot.name}</BreadcrumbPage>
+                    ) : (
+                      <Button
+                        variant="link"
+                        className="text-muted-foreground h-auto max-w-64 truncate p-0"
+                        onClick={() => {
+                          setPath("");
+                          setPage(1);
+                          setQuery("");
+                        }}
+                      >
+                        {sharedRoot.name}
+                      </Button>
+                    )}
+                  </BreadcrumbItem>
+                </>
+              )}
               {path
                 .split("/")
                 .filter(Boolean)
-                .map((part, i) => (
-                  <span key={i} className="flex items-center">
-                    /
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setPath(
-                          path
-                            .split("/")
-                            .slice(0, i + 1)
-                            .join("/"),
-                        );
-                        setPage(1);
-                      }}
-                    >
-                      {part}
-                    </Button>
-                  </span>
-                ))}
-            </nav>
-            <Input
-              className="w-52"
-              placeholder={
-                space === "attachments"
-                  ? d("Search filename or ticket", "搜索文件名或工单")
-                  : d("Search this folder", "搜索当前文件夹")
-              }
-              aria-label={d("Search files", "搜索文件")}
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setPage(1);
-              }}
-            />
-          </div>
-          {error && (
-            <p role="alert" className="text-destructive text-sm">
-              {error}
-            </p>
-          )}
-          {message && (
-            <p role="status" className="text-muted-foreground text-sm">
-              {message}
-            </p>
-          )}
-          {upload && (
-            <div className="rounded-lg border p-3 text-sm" role="status">
-              <div className="flex items-center gap-2">
-                <Loader2 className="size-4 animate-spin" />
-                <span className="min-w-0 flex-1 truncate">
-                  {upload.index}/{upload.count} · {upload.name} ·{" "}
-                  {upload.percent ?? "…"}%
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    abortUpload.current?.abort();
-                    conflictResolve.current?.("skip");
-                  }}
-                >
-                  {d("Cancel", "取消")}
-                </Button>
-              </div>
-              <div
-                role="progressbar"
-                aria-label={d("Upload progress", "上传进度")}
-                aria-valuenow={upload.percent ?? undefined}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                className="bg-muted mt-2 h-1 rounded"
-              >
-                <div
-                  className="bg-primary h-full rounded"
-                  style={{ width: `${upload.percent ?? 30}%` }}
-                />
-              </div>
-            </div>
-          )}
-          {space === "trash" && (
-            <p className="text-muted-foreground text-xs">
-              {d(
-                "Deleted public files still count toward the pool. Only developers can restore or permanently delete them.",
-                "公共回收站仍占用总池容量，仅开发者可以恢复或彻底删除。",
-              )}
-            </p>
-          )}
-          {knowledge && usage && (
-            <p className="text-muted-foreground text-xs">
-              {d(
-                "Markdown only · AI indexes all knowledge content · Storage measured separately",
-                "仅支持 Markdown · AI 可检索全部知识库内容 · 容量独立统计",
-              )}
-              : {bytes(usage.knowledge_bytes)}
-            </p>
-          )}
-          <div className="overflow-hidden rounded-lg border">
-            <Table aria-label={d("Files", "文件列表")}>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{d("Name", "名称")}</TableHead>
-                  {space === "attachments" && (
-                    <TableHead>{d("Ticket", "所属工单")}</TableHead>
-                  )}
-                  <TableHead>{d("Size", "大小")}</TableHead>
-                  <TableHead>{d("Creator", "创建人")}</TableHead>
-                  <TableHead>
-                    {space === "attachments"
-                      ? d("Uploaded", "上传时间")
-                      : d("Modified", "修改时间")}
-                  </TableHead>
-                  <TableHead className="text-right">
-                    {d("Actions", "操作")}
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={space === "attachments" ? 6 : 5}
-                      className="h-32 text-center"
-                    >
-                      <Loader2 className="mx-auto size-5 animate-spin" />
-                    </TableCell>
-                  </TableRow>
-                ) : items.length ? (
-                  items.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell>
-                        <button
-                          className="flex max-w-80 items-center gap-2 text-left hover:underline"
+                .map((part, i, parts) => (
+                  <Fragment key={parts.slice(0, i + 1).join("/")}>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem className="max-w-full">
+                      {i === parts.length - 1 ? (
+                        <BreadcrumbPage className="truncate" title={part}>
+                          {part}
+                        </BreadcrumbPage>
+                      ) : (
+                        <Button
+                          variant="link"
+                          className="text-muted-foreground h-auto max-w-64 truncate p-0"
+                          title={part}
                           onClick={() => {
-                            if (space !== "trash") void open(entry);
+                            setPath(parts.slice(0, i + 1).join("/"));
+                            setPage(1);
+                            setQuery("");
                           }}
-                          disabled={space === "trash"}
-                          title={entry.path}
                         >
-                          {entry.is_dir ? (
-                            <Folder className="text-muted-foreground size-5 shrink-0" />
-                          ) : entry.thumbnail_size ? (
-                            <Image
-                              unoptimized
-                              alt=""
-                              width={32}
-                              height={32}
-                              className="size-8 shrink-0 rounded object-cover"
-                              src={`/api/files/${entry.id}/download?thumbnail=1`}
-                            />
-                          ) : (
-                            <File className="text-muted-foreground size-5 shrink-0" />
-                          )}
-                          <span className="truncate">{entry.name}</span>
-                        </button>
-                        {entry.index_status && (
-                          <p className="text-muted-foreground mt-1 text-xs">
-                            {indexLabels[entry.index_status] ||
-                              entry.index_status}
-                          </p>
-                        )}
-                        {space === "trash" && (
-                          <p className="text-muted-foreground mt-1 text-xs">
-                            {entry.path}
-                          </p>
-                        )}
-                      </TableCell>
-                      {space === "attachments" && (
-                        <TableCell
-                          className="max-w-64 truncate"
-                          title={entry.ticket_name}
-                        >
-                          {entry.ticket_name}
-                        </TableCell>
+                          {part}
+                        </Button>
                       )}
-                      <TableCell className="whitespace-nowrap">
-                        {entry.is_dir ? "—" : bytes(entry.size)}
-                      </TableCell>
-                      <TableCell>
-                        {entry.creator?.name ||
-                          d("Server import", "服务器导入")}
-                      </TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">
-                        {new Date(
-                          (space === "attachments"
-                            ? entry.created_at
-                            : entry.deleted_at) || entry.updated_at,
-                        ).toLocaleString(locale)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          {space === "attachments" && entry.ticket_id && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                void api
-                                  .get<Ticket>(
-                                    `/api/v1/tickets/${entry.ticket_id}`,
-                                  )
-                                  .then((r) => setArchiveTicket(r.data))
-                                  .catch(report)
-                              }
-                            >
-                              {d("Open ticket", "打开工单")}
-                            </Button>
-                          )}
-                          {space === "trash" && (
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              title={d("History", "操作记录")}
-                              aria-label={`${d("History", "操作记录")} ${entry.name}`}
-                              onClick={() => void show("history", entry)}
-                            >
-                              <History />
-                            </Button>
-                          )}
-                          {space === "trash" ? (
-                            developer && (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="icon-sm"
-                                  title={d("Restore", "恢复")}
-                                  aria-label={`${d("Restore", "恢复")} ${entry.name}`}
-                                  disabled={busy}
-                                  onClick={() => void restore(entry)}
-                                >
-                                  <Undo2 />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="icon-sm"
-                                  title={d("Permanently delete", "彻底删除")}
-                                  aria-label={`${d("Permanently delete", "彻底删除")} ${entry.name}`}
-                                  onClick={() => void show("purge", entry)}
-                                >
-                                  <Trash2 />
-                                </Button>
-                              </>
+                    </BreadcrumbItem>
+                  </Fragment>
+                ))}
+            </BreadcrumbList>
+          </Breadcrumb>
+        </div>
+      </div>
+      {error && (
+        <p role="alert" className="text-destructive text-sm">
+          {error}
+        </p>
+      )}
+      {message && (
+        <p role="status" className="text-muted-foreground text-sm">
+          {message}
+        </p>
+      )}
+      {upload && (
+        <div className="rounded-lg border p-3 text-sm" role="status">
+          <div className="flex items-center gap-2">
+            <Loader2 className="size-4 animate-spin" />
+            <span className="min-w-0 flex-1 truncate">
+              {upload.index}/{upload.count} · {upload.name} ·{" "}
+              {upload.percent ?? "…"}%
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                abortUpload.current?.abort();
+                conflictResolve.current?.("skip");
+              }}
+            >
+              {d("Cancel", "取消")}
+            </Button>
+          </div>
+          <Progress
+            className="mt-2"
+            value={upload.percent}
+            aria-label={d("Upload progress", "上传进度")}
+          />
+        </div>
+      )}
+      {space === "trash" && (
+        <p className="text-muted-foreground text-xs">
+          {d(
+            "Deleted public files still count toward the pool. Only developers can restore or permanently delete them.",
+            "公共回收站仍占用总池容量，仅开发者可以恢复或彻底删除。",
+          )}
+        </p>
+      )}
+      {knowledge && usage && (
+        <p className="text-muted-foreground text-xs">
+          {d(
+            "Markdown only · AI indexes all knowledge content · Storage measured separately",
+            "仅支持 Markdown · AI 可检索全部知识库内容 · 容量独立统计",
+          )}
+          : {bytes(usage.knowledge_bytes)}
+        </p>
+      )}
+      <ContextMenu>
+        <ContextMenuTrigger
+          render={<div className="overflow-hidden rounded-lg border" />}
+        >
+          <Table
+            aria-label={d("Files", "文件列表")}
+            aria-busy={loading}
+            className="table-fixed"
+            style={{ minWidth: space === "attachments" ? 900 : 700 }}
+          >
+            <colgroup>
+              <col style={{ width: 40 }} />
+              {columns.map((column) => (
+                <col
+                  key={column.key}
+                  style={{
+                    width: `${widths[column.key]}%`,
+                  }}
+                />
+              ))}
+            </colgroup>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    aria-label={d("Select this page", "全选当前页")}
+                    disabled={busy || loading || !items.length}
+                    checked={!!items.length && table.getIsAllPageRowsSelected()}
+                    indeterminate={
+                      table.getIsSomePageRowsSelected() &&
+                      !table.getIsAllPageRowsSelected()
+                    }
+                    onCheckedChange={(checked) =>
+                      table.toggleAllPageRowsSelected(checked)
+                    }
+                  />
+                </TableHead>
+                {columns.map((column, i) => {
+                  const sortable =
+                    column.key === "name" ||
+                    column.key === "size" ||
+                    column.key === "updated_at";
+                  const next = columns[i + 1]?.key;
+                  return (
+                    <TableHead
+                      key={column.key}
+                      className="relative pr-4"
+                      aria-sort={
+                        sortable
+                          ? sort === column.key
+                            ? direction === "asc"
+                              ? "ascending"
+                              : "descending"
+                            : "none"
+                          : undefined
+                      }
+                    >
+                      {sortable ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="-ml-2 h-8 max-w-full gap-1 px-2"
+                          onClick={() => {
+                            setDirection(
+                              sort === column.key && direction === "asc"
+                                ? "desc"
+                                : "asc",
+                            );
+                            setSort(column.key as typeof sort);
+                            setPage(1);
+                          }}
+                        >
+                          <span className="truncate">{column.label}</span>
+                          {sort === column.key ? (
+                            direction === "asc" ? (
+                              <ArrowUp className="size-3" />
+                            ) : (
+                              <ArrowDown className="size-3" />
                             )
                           ) : (
-                            <>
-                              {!entry.is_dir && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  disabled={busy}
-                                  title={d("Download", "下载")}
-                                  aria-label={`${d("Download", "下载")} ${entry.name}`}
-                                  onClick={() => void download(entry)}
-                                >
-                                  <Download />
-                                </Button>
-                              )}
-                              {space !== "attachments" && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  title={d("Copy", "复制")}
-                                  aria-label={`${d("Copy", "复制")} ${entry.name}`}
-                                  onClick={() => void show("copy", entry)}
-                                >
-                                  <Copy />
-                                </Button>
-                              )}
-                              {writable && (
-                                <>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    title={d("Move", "移动")}
-                                    aria-label={`${d("Move", "移动")} ${entry.name}`}
-                                    onClick={() => void show("move", entry)}
-                                  >
-                                    <Move />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    title={d("Rename", "重命名")}
-                                    aria-label={`${d("Rename", "重命名")} ${entry.name}`}
-                                    onClick={() => void show("rename", entry)}
-                                  >
-                                    <Pencil />
-                                  </Button>
-                                </>
-                              )}
-                              {space === "personal" && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  title={d("Share", "共享")}
-                                  aria-label={`${d("Share", "共享")} ${entry.name}`}
-                                  onClick={() => void show("share", entry)}
-                                >
-                                  <Share2 />
-                                </Button>
-                              )}
-                              {space !== "attachments" && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  title={d("History", "操作记录")}
-                                  aria-label={`${d("History", "操作记录")} ${entry.name}`}
-                                  onClick={() => void show("history", entry)}
-                                >
-                                  <History />
-                                </Button>
-                              )}
-                              {writable && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  title={d("Delete", "删除")}
-                                  aria-label={`${d("Delete", "删除")} ${entry.name}`}
-                                  onClick={() => void show("delete", entry)}
-                                >
-                                  <Trash2 />
-                                </Button>
-                              )}
-                            </>
+                            <ArrowUpDown className="text-muted-foreground size-3" />
                           )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
+                        </Button>
+                      ) : (
+                        <span className="block truncate">{column.label}</span>
+                      )}
+                      {next && (
+                        <div
+                          role="separator"
+                          aria-orientation="vertical"
+                          aria-label={`${d("Resize", "调整列宽")} ${column.label}`}
+                          aria-valuenow={Math.round(widths[column.key])}
+                          aria-valuemin={column.key === "name" ? 24 : 10}
+                          aria-valuemax={90}
+                          tabIndex={0}
+                          className="hover:bg-primary/30 focus-visible:bg-primary/30 absolute top-2 right-0 bottom-2 w-2 cursor-col-resize touch-none border-r select-none"
+                          onDoubleClick={() => setColumnWidths({})}
+                          onKeyDown={(event) => {
+                            if (
+                              event.key === "ArrowLeft" ||
+                              event.key === "ArrowRight"
+                            ) {
+                              event.preventDefault();
+                              adjustColumns(
+                                column.key,
+                                next,
+                                event.key === "ArrowRight" ? 2 : -2,
+                              );
+                            }
+                          }}
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            event.currentTarget.setPointerCapture(
+                              event.pointerId,
+                            );
+                            columnDrag.current = {
+                              key: column.key,
+                              next,
+                              start: event.clientX,
+                              width:
+                                (event.currentTarget
+                                  .closest("table")
+                                  ?.getBoundingClientRect().width ?? 740) - 40,
+                              widths,
+                            };
+                          }}
+                          onPointerMove={(event) => {
+                            const drag = columnDrag.current;
+                            if (
+                              drag &&
+                              event.currentTarget.hasPointerCapture(
+                                event.pointerId,
+                              )
+                            )
+                              adjustColumns(
+                                drag.key,
+                                drag.next,
+                                ((event.clientX - drag.start) / drag.width) *
+                                  100,
+                                drag.widths,
+                              );
+                          }}
+                          onPointerUp={() => {
+                            columnDrag.current = null;
+                          }}
+                          onPointerCancel={() => {
+                            columnDrag.current = null;
+                          }}
+                        />
+                      )}
+                    </TableHead>
+                  );
+                })}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                Array.from({ length: items.length || 4 }, (_, index) => (
+                  <TableRow key={index} aria-hidden="true">
                     <TableCell
-                      colSpan={space === "attachments" ? 6 : 5}
-                      className="text-muted-foreground h-32 text-center"
+                      className={items[index]?.thumbnail_size ? "h-12" : "h-9"}
                     >
-                      {d("No files", "暂无文件")}
+                      <Skeleton className="size-4" />
                     </TableCell>
+                    {columns.map((column) => (
+                      <TableCell key={column.key}>
+                        <Skeleton
+                          className={
+                            column.key === "name" ? "h-5 w-3/4" : "h-4 w-2/3"
+                          }
+                        />
+                      </TableCell>
+                    ))}
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span>
-              {total} · {page}/{Math.max(1, Math.ceil(total / 50))}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                {d("Previous", "上一页")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page * 50 >= total}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                {d("Next", "下一页")}
-              </Button>
-            </div>
-          </div>
-        </main>
+                ))
+              ) : items.length ? (
+                table.getRowModel().rows.map((row) => {
+                  const entry = row.original;
+                  return (
+                    <ContextMenu key={row.id}>
+                      <ContextMenuTrigger
+                        render={
+                          <TableRow
+                            tabIndex={0}
+                            data-state={
+                              checkedIds.includes(entry.id)
+                                ? "selected"
+                                : undefined
+                            }
+                            className="focus-visible:ring-ring data-[state=selected]:bg-muted cursor-pointer focus-visible:ring-2 focus-visible:outline-none"
+                            onClick={() => {
+                              if (space !== "trash" && !busy) void open(entry);
+                            }}
+                            onKeyDown={(event) => {
+                              if (
+                                event.target === event.currentTarget &&
+                                event.key === "Enter" &&
+                                space !== "trash" &&
+                                !busy
+                              ) {
+                                event.preventDefault();
+                                void open(entry);
+                              }
+                            }}
+                            onContextMenu={(event) => {
+                              event.stopPropagation();
+                              if (!checkedIds.includes(entry.id))
+                                setCheckedIds([entry.id]);
+                            }}
+                          />
+                        }
+                      >
+                        <TableCell
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => event.stopPropagation()}
+                        >
+                          <Checkbox
+                            aria-label={`${d("Select", "选择")} ${entry.name}`}
+                            disabled={busy || loading}
+                            checked={row.getIsSelected()}
+                            onCheckedChange={(checked) =>
+                              row.toggleSelected(checked)
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div
+                            className="flex min-w-0 items-center gap-2"
+                            title={entry.path}
+                          >
+                            {entry.is_dir ? (
+                              <Folder className="text-muted-foreground size-5 shrink-0" />
+                            ) : entry.thumbnail_size ? (
+                              <Image
+                                unoptimized
+                                alt=""
+                                width={32}
+                                height={32}
+                                className="size-8 shrink-0 rounded object-cover"
+                                src={`/api/files/${entry.id}/download?thumbnail=1`}
+                              />
+                            ) : (
+                              <File className="text-muted-foreground size-5 shrink-0" />
+                            )}
+                            <span className="truncate">{entry.name}</span>
+                          </div>
+                          {entry.index_status && (
+                            <p className="text-muted-foreground mt-1 text-xs">
+                              {indexLabels[entry.index_status] ||
+                                entry.index_status}
+                            </p>
+                          )}
+                          {space === "trash" && (
+                            <p className="text-muted-foreground mt-1 text-xs">
+                              {entry.path}
+                            </p>
+                          )}
+                        </TableCell>
+                        {space === "attachments" && (
+                          <TableCell
+                            className="max-w-64 truncate"
+                            title={entry.ticket_name}
+                          >
+                            {entry.ticket_name}
+                          </TableCell>
+                        )}
+                        <TableCell className="whitespace-nowrap">
+                          {entry.is_dir ? "—" : bytes(entry.size)}
+                        </TableCell>
+                        <TableCell
+                          className="truncate"
+                          title={
+                            entry.creator?.name ||
+                            d("Server import", "服务器导入")
+                          }
+                        >
+                          {entry.creator?.name ||
+                            d("Server import", "服务器导入")}
+                        </TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {new Date(
+                            (space === "attachments"
+                              ? entry.created_at
+                              : entry.deleted_at) || entry.updated_at,
+                          ).toLocaleString(locale)}
+                        </TableCell>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        {entryActions(
+                          checkedIds.includes(entry.id)
+                            ? checkedEntries
+                            : [entry],
+                          ContextMenuItem,
+                        )}
+                      </ContextMenuContent>
+                    </ContextMenu>
+                  );
+                })
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={space === "attachments" ? 6 : 5}
+                    className="text-muted-foreground h-32 text-center"
+                  >
+                    <Empty>
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <Folder />
+                        </EmptyMedia>
+                        <EmptyTitle>
+                          {query
+                            ? d("No matching files", "未找到匹配文件")
+                            : d("No files", "暂无文件")}
+                        </EmptyTitle>
+                        <EmptyDescription>
+                          {query
+                            ? d(
+                                "Try a different search.",
+                                "试试其他搜索关键词。",
+                              )
+                            : writable
+                              ? d(
+                                  "Upload a file or create a folder to get started.",
+                                  "上传文件或新建文件夹，开始整理内容。",
+                                )
+                              : d(
+                                  "Files will appear here when available.",
+                                  "有可访问的文件时会显示在这里。",
+                                )}
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          {creationActions(ContextMenuItem)}
+        </ContextMenuContent>
+      </ContextMenu>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span className="text-muted-foreground" role="status">
+          {table.getSelectedRowModel().rows.length} of {table.getRowCount()}{" "}
+          row(s) selected.
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground">
+            {page} / {table.getPageCount() || 1}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={loading || !table.getCanPreviousPage()}
+            onClick={() => table.previousPage()}
+          >
+            {d("Previous", "上一页")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={loading || !table.getCanNextPage()}
+            onClick={() => table.nextPage()}
+          >
+            {d("Next", "下一页")}
+          </Button>
+        </div>
       </div>
+    </div>
+  );
+  return (
+    <div
+      data-storage-page
+      className={`flex flex-col ${knowledge ? "min-h-[calc(100dvh-4rem)]" : "min-h-[100dvh]"}`}
+    >
+      {!knowledge && <TopNav title={d("Storage", "存储空间")} />}
+      {toolbar}
+      <Container className="min-w-0 flex-1 pb-6">
+        {knowledge ? (
+          <div className="pt-4">{contentView}</div>
+        ) : (
+          <StorageWorkspace
+            navigation={navigation}
+            mobileNavigation={mobileNavigation}
+            resizeLabel={d("Resize space navigation", "调整空间导航宽度")}
+          >
+            {contentView}
+          </StorageWorkspace>
+        )}
+      </Container>
       {archiveTicket && (
         <TicketModal
           ticket={archiveTicket}
@@ -1230,9 +1879,14 @@ export default function FileBrowser({
         />
       )}
       <Dialog
-        open={!!modal}
+        open={modalOpen}
         onOpenChange={(value) => {
           if (!value) close();
+        }}
+        onOpenChangeComplete={(value) => {
+          // Base UI keeps the popup mounted during its exit animation. Keep
+          // its type and contents intact until the popup has finished closing.
+          if (!value && !modalOpen) clearClosedModal();
         }}
       >
         <DialogContent
@@ -1245,6 +1899,11 @@ export default function FileBrowser({
           <DialogHeader>
             <DialogTitle>{modal ? modalTitles[modal] : ""}</DialogTitle>
           </DialogHeader>
+          {batchEntries.length > 1 && (
+            <p className="text-muted-foreground text-sm">
+              {d("Selected items", "选中项目")}: {batchEntries.length}
+            </p>
+          )}
           {error && (
             <p role="alert" className="text-destructive text-sm">
               {error}
@@ -1265,7 +1924,7 @@ export default function FileBrowser({
                 />
               )}
               {modal === "markdown" && (
-                <textarea
+                <Textarea
                   className="min-h-72 w-full rounded-lg border bg-transparent p-3 font-mono text-sm"
                   aria-label={d("File content", "文件正文")}
                   value={content}
@@ -1274,8 +1933,8 @@ export default function FileBrowser({
               )}
               {(modal === "copy" || modal === "move") && (
                 <div className="space-y-3">
-                  <select
-                    className="bg-background w-full rounded-lg border p-2 text-sm"
+                  <NativeSelect
+                    className="w-full"
                     aria-label={d("Destination space", "目标空间")}
                     value={targetSpace}
                     onChange={(e) => {
@@ -1295,7 +1954,7 @@ export default function FileBrowser({
                         )}
                       </>
                     )}
-                  </select>
+                  </NativeSelect>
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
@@ -1363,23 +2022,22 @@ export default function FileBrowser({
                   {users
                     .filter((u) => u.id !== session?.user?.id)
                     .map((u) => (
-                      <label
+                      <Label
                         key={u.id}
                         className="hover:bg-muted flex items-center gap-2 rounded p-2 text-sm"
                       >
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={shareUsers.includes(u.id)}
-                          onChange={(e) =>
+                          onCheckedChange={(checked) =>
                             setShareUsers((old) =>
-                              e.target.checked
+                              checked === true
                                 ? [...old, u.id]
                                 : old.filter((id) => id !== u.id),
                             )
                           }
                         />
                         {u.name}
-                      </label>
+                      </Label>
                     ))}
                   <p className="text-muted-foreground text-xs">
                     {d(
@@ -1517,7 +2175,7 @@ export default function FileBrowser({
                       </div>
                     )}
                     {editMarkdown ? (
-                      <textarea
+                      <Textarea
                         className="h-[55dvh] w-full rounded border bg-transparent p-3 font-mono text-sm"
                         disabled={busy}
                         aria-label={d("File content", "文件正文")}
@@ -1573,6 +2231,73 @@ export default function FileBrowser({
                   </div>
                 </>
               )}
+              {modal === "usage" && usage && (
+                <div className="space-y-5 text-sm">
+                  {[
+                    {
+                      label: d("Total pool", "总池"),
+                      used: usage.used_bytes,
+                      total: usage.total_bytes,
+                    },
+                    {
+                      label: d("My space", "个人空间"),
+                      used: usage.personal_bytes,
+                      total: usage.personal_limit,
+                    },
+                  ].map((item) => (
+                    <div key={item.label} className="space-y-2">
+                      <div className="flex flex-wrap justify-between gap-2">
+                        <span>{item.label}</span>
+                        <span className="text-muted-foreground">
+                          {bytes(item.used)} / {bytes(item.total)}
+                        </span>
+                      </div>
+                      <Progress
+                        value={
+                          item.total
+                            ? Math.min(100, (item.used / item.total) * 100)
+                            : 0
+                        }
+                        aria-label={item.label}
+                      />
+                    </div>
+                  ))}
+                  <dl className="space-y-2">
+                    {[
+                      [d("Disk free", "磁盘可用"), usage.disk_free_bytes],
+                      [
+                        d("Reserved for uploads", "上传预留"),
+                        usage.reserved_bytes,
+                      ],
+                      [
+                        d("My upload reservations", "本人上传预留"),
+                        usage.personal_reserved_bytes,
+                      ],
+                      [
+                        d("Knowledge storage", "知识库容量"),
+                        usage.knowledge_bytes,
+                      ],
+                    ].map(([label, value]) => (
+                      <div
+                        key={String(label)}
+                        className="flex flex-wrap justify-between gap-2"
+                      >
+                        <dt className="text-muted-foreground">{label}</dt>
+                        <dd>{bytes(Number(value))}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {developer && (
+                    <Button
+                      variant="outline"
+                      onClick={() => void show("capacity")}
+                    >
+                      <Settings2 />
+                      {d("Capacity settings", "容量设置")}
+                    </Button>
+                  )}
+                </div>
+              )}
               {modal === "capacity" && capacity && (
                 <div className="space-y-4 text-sm">
                   <p className="font-medium">
@@ -1580,7 +2305,7 @@ export default function FileBrowser({
                   </p>
                   {Object.entries(capacity.upload_limits || {}).map(
                     ([key, value]) => (
-                      <label
+                      <Label
                         key={key}
                         className="flex items-center justify-between gap-2"
                       >
@@ -1612,10 +2337,10 @@ export default function FileBrowser({
                             })
                           }
                         />
-                      </label>
+                      </Label>
                     ),
                   )}
-                  <label className="block space-y-1">
+                  <Label className="block space-y-1">
                     <span>{d("Total pool (GB)", "总池容量（GB）")}</span>
                     <Input
                       type="number"
@@ -1628,8 +2353,8 @@ export default function FileBrowser({
                         })
                       }
                     />
-                  </label>
-                  <label className="block space-y-1">
+                  </Label>
+                  <Label className="block space-y-1">
                     <span>
                       {d("Default personal limit (GB)", "默认个人上限（GB）")}
                     </span>
@@ -1646,7 +2371,7 @@ export default function FileBrowser({
                         })
                       }
                     />
-                  </label>
+                  </Label>
                   <p className="text-muted-foreground text-xs">
                     {d(
                       "Limits do not reserve disk space. Existing files remain when a limit is reduced. 1 GB here is 1024³ bytes.",
@@ -1654,7 +2379,7 @@ export default function FileBrowser({
                     )}
                   </p>
                   {users.map((u) => (
-                    <label
+                    <Label
                       key={u.id}
                       className="flex items-center justify-between gap-2"
                     >
@@ -1681,7 +2406,7 @@ export default function FileBrowser({
                           setCapacity({ ...capacity, user_quotas: quotas });
                         }}
                       />
-                    </label>
+                    </Label>
                   ))}
                 </div>
               )}
@@ -1691,23 +2416,26 @@ export default function FileBrowser({
             <Button variant="outline" disabled={busy} onClick={close}>
               {d("Close", "关闭")}
             </Button>
-            {modal !== "history" && (modal !== "preview" || editMarkdown) && (
-              <Button
-                disabled={
-                  busy ||
-                  modalLoading ||
-                  (modal === "preview" && fileConflict) ||
-                  ((modal === "folder" ||
-                    modal === "rename" ||
-                    modal === "markdown") &&
-                    !name.trim())
-                }
-                onClick={() => void submit()}
-              >
-                {busy && <Loader2 className="animate-spin" />}
-                {d("Confirm", "确定")}
-              </Button>
-            )}
+            {modal &&
+              modal !== "usage" &&
+              modal !== "history" &&
+              (modal !== "preview" || editMarkdown) && (
+                <Button
+                  disabled={
+                    busy ||
+                    modalLoading ||
+                    (modal === "preview" && fileConflict) ||
+                    ((modal === "folder" ||
+                      modal === "rename" ||
+                      modal === "markdown") &&
+                      !name.trim())
+                  }
+                  onClick={() => void submit()}
+                >
+                  {busy && <Loader2 className="animate-spin" />}
+                  {d("Confirm", "确定")}
+                </Button>
+              )}
           </div>
         </DialogContent>
       </Dialog>

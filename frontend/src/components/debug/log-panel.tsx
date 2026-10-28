@@ -7,10 +7,18 @@ import {
   Loader2,
   RefreshCw,
   Trash2,
-  X,
 } from "lucide-react";
 import { useLocale } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/base/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/base/dialog";
+import { Input } from "@/components/ui/base/input";
+import { useFeedback } from "@/components/ui/feedback-provider";
 import { useUiTranslations } from "@/i18n/client";
 import apiClient from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
@@ -38,6 +46,8 @@ function fmtSize(n: number) {
 }
 
 export default function LogPanel({ deviceType, lines }: Props) {
+  const { confirm, notify } = useFeedback();
+
   const locale = useLocale();
 
   const t = useUiTranslations();
@@ -70,7 +80,7 @@ export default function LogPanel({ deviceType, lines }: Props) {
 
   async function handleUpload() {
     if (lines.length === 0) {
-      alert(t("ui.noLogContent"));
+      void notify(t("ui.noLogContent"));
       return;
     }
     setUploading(true);
@@ -88,14 +98,14 @@ export default function LogPanel({ deviceType, lines }: Props) {
       setDesc("");
       loadLogs();
     } catch (e: unknown) {
-      alert(errorMessage(e, t("ui.uploadFailed")));
+      void notify(errorMessage(e, t("ui.uploadFailed")));
     } finally {
       setUploading(false);
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm(t("ui.deleteThisLogRecord"))) return;
+    if (!(await confirm(t("ui.deleteThisLogRecord")))) return;
     await apiClient.delete(`/api/v1/debug/logs/${id}`);
     loadLogs();
   }
@@ -132,7 +142,7 @@ export default function LogPanel({ deviceType, lines }: Props) {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
-      alert(errorMessage(e));
+      void notify(errorMessage(e));
     }
   }
 
@@ -143,13 +153,14 @@ export default function LogPanel({ deviceType, lines }: Props) {
         <p className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
           {t("ui.saveLogsToServer")}
         </p>
-        <input
+        <Input
           value={description}
           onChange={(e) => setDesc(e.target.value)}
           placeholder={t("ui.descriptionOptional")}
           className="border-border bg-muted/30 focus:ring-primary/30 w-full rounded-lg border px-2 py-1.5 text-xs focus:ring-1 focus:outline-none"
         />
-        <button
+        <Button
+          variant="outline"
           onClick={handleUpload}
           disabled={uploading || lines.length === 0}
           className="bg-primary text-primary-foreground hover:bg-primary/90 flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs transition-colors disabled:opacity-50"
@@ -162,7 +173,7 @@ export default function LogPanel({ deviceType, lines }: Props) {
           {uploading
             ? t("ui.uploading")
             : t("dynamic.saveOther", { p0: lines.length })}
-        </button>
+        </Button>
       </div>
 
       {/* 历史日志列表 */}
@@ -170,12 +181,13 @@ export default function LogPanel({ deviceType, lines }: Props) {
         <p className="text-muted-foreground text-xs font-semibold">
           {t("ui.logHistory")}
         </p>
-        <button
+        <Button
+          variant="outline"
           onClick={loadLogs}
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
           <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-        </button>
+        </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -210,27 +222,30 @@ export default function LogPanel({ deviceType, lines }: Props) {
                   </p>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-1">
-                  <button
+                  <Button
+                    variant="outline"
                     onClick={() => handleView(log)}
                     title={t("ui.viewOnline")}
                     className="text-muted-foreground hover:text-primary p-1 transition-colors"
                   >
                     <Eye size={12} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={() => void handleDownload(log)}
                     title={t("ui.download")}
                     className="text-muted-foreground hover:text-primary p-1 transition-colors"
                   >
                     <Download size={12} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={() => handleDelete(log.id)}
                     title={t("ui.delete")}
                     className="text-muted-foreground p-1 transition-colors hover:text-red-500"
                   >
                     <Trash2 size={12} />
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -240,29 +255,32 @@ export default function LogPanel({ deviceType, lines }: Props) {
 
       {/* 在线浏览弹窗 */}
       {viewing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-background border-border flex max-h-[85vh] w-full max-w-4xl flex-col rounded-2xl border shadow-2xl">
-            <div className="border-border flex items-center justify-between border-b px-5 py-3">
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setViewing(null);
+          }}
+        >
+          <DialogContent className="flex max-h-[85dvh] flex-col sm:max-w-4xl">
+            <DialogHeader className="flex-row items-center justify-between pr-8">
               <div>
-                <p className="text-sm font-semibold">{viewing.filename}</p>
+                <DialogTitle>{viewing.filename}</DialogTitle>
                 <p className="text-muted-foreground text-xs">
                   {viewing.uploader_name} · {fmtSize(viewing.file_size)} ·{" "}
                   {viewing.line_count} {t("ui.lines")}
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <button
+                <Button
+                  variant="outline"
                   onClick={() => void handleDownload(viewing)}
                   className="border-border hover:bg-muted/50 text-muted-foreground flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs transition-colors"
                 >
                   <Download size={12} /> {t("ui.download")}
-                </button>
-                <button onClick={() => setViewing(null)}>
-                  <X size={18} className="text-muted-foreground" />
-                </button>
+                </Button>
               </div>
-            </div>
-            <div className="flex-1 overflow-auto rounded-b-2xl bg-slate-950 p-4 font-mono text-xs leading-5">
+            </DialogHeader>
+            <div className="min-h-0 flex-1 overflow-auto rounded-b-2xl bg-slate-950 p-4 font-mono text-xs leading-5">
               {viewLoading ? (
                 <div className="flex justify-center py-10">
                   <Loader2 size={20} className="animate-spin text-slate-400" />
@@ -292,8 +310,8 @@ export default function LogPanel({ deviceType, lines }: Props) {
                 })
               )}
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

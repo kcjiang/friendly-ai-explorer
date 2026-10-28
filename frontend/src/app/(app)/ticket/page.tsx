@@ -13,6 +13,7 @@ import {
   copyCatalogText,
 } from "@/components/catalog/catalog-ui";
 import Container from "@/components/container";
+import PageToolbar from "@/components/page-toolbar";
 import TicketModal from "@/components/tickets/ticket-modal";
 import { TicketSelect } from "@/components/tickets/ticket-select";
 import {
@@ -177,10 +178,7 @@ export default function TicketPage() {
   });
   return (
     <>
-      <Container
-        data-page-toolbar
-        className="flex min-h-12 flex-wrap items-center gap-2 border-b py-2"
-      >
+      <PageToolbar label={t("ui.ticketBoard")}>
         <Tabs
           value={mine ? "mine" : "all"}
           onValueChange={(value) => setMine(value === "mine")}
@@ -251,7 +249,7 @@ export default function TicketPage() {
           <Plus />
           {t("ui.newTicket")}
         </Button>
-      </Container>
+      </PageToolbar>
       <Container className="py-4">
         {allTickets && usersError && (
           <p role="alert" className="text-destructive mb-3 text-sm">

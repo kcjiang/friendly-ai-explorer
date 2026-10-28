@@ -79,32 +79,6 @@ async def reset_password(user_id: str, new_password: str, db: AsyncSession) -> d
     return {"message": system_message("errors.passwordReset")}
 
 
-# ── 系统配置 ─────────────────────────────────────────────────
-
-
-async def list_configs(db: AsyncSession) -> list[dict]:
-    result = await db.execute(
-        text("SELECT key, value, description FROM system_configs ORDER BY key")
-    )
-    return [
-        {"key": r.key, "value": r.value, "description": r.description}
-        for r in result.fetchall()
-    ]
-
-
-async def update_config(
-    key: str, value: str, operator_id: str, db: AsyncSession
-) -> dict:
-    await db.execute(
-        text(
-            "UPDATE system_configs SET value = :value, updated_by = :uid, updated_at = NOW() WHERE key = :key"
-        ),
-        {"value": value, "key": key, "uid": operator_id},
-    )
-    await db.commit()
-    return {"key": key, "value": value}
-
-
 # ── 审计日志 ─────────────────────────────────────────────────
 
 

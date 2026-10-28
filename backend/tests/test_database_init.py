@@ -19,7 +19,7 @@ class DatabaseInitTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(
                     tables,
                     set(Base.metadata.tables)
-                    | {"audit_logs", "system_configs", "ticket_project_counters"},
+                    | {"audit_logs", "ticket_project_counters"},
                 )
                 self.assertFalse(
                     any(t.startswith("wb_") or "migration" in t for t in tables)

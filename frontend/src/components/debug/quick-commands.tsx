@@ -4,8 +4,11 @@ import { isAxiosError } from "axios";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/base/button";
+import { Checkbox } from "@/components/ui/base/checkbox";
 import { Input } from "@/components/ui/base/input";
+import { Label } from "@/components/ui/base/label";
 import { Textarea } from "@/components/ui/base/textarea";
+import { useFeedback } from "@/components/ui/feedback-provider";
 import apiClient from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
 import { useDeviceText } from "./device-tools";
@@ -53,6 +56,7 @@ type CommandProps = {
 export default function QuickCommands(props: CommandProps) {
   const { onEditingChange } = props;
   const d = useDeviceText();
+
   const { data: auth } = useSession();
   const [space, setSpace] = useState<"personal" | "public">("personal");
   const [locked, setLocked] = useState(false);
@@ -103,6 +107,7 @@ function CommandList({
   onLockChange: (locked: boolean) => void;
 }) {
   const d = useDeviceText();
+  const { confirm } = useFeedback();
   const { data: auth } = useSession();
   const developer = auth?.user?.role === "developer";
   const editable = space === "personal" || developer;
@@ -276,7 +281,7 @@ function CommandList({
       loading ||
       !!editing ||
       !editable ||
-      !confirm(`${d("Delete command", "删除命令")} “${item.name}”?`)
+      !(await confirm(`${d("Delete command", "删除命令")} “${item.name}”?`))
     )
       return;
     setBusy(true);
@@ -452,19 +457,18 @@ function CommandList({
               {d("Group", "分组")} {(editing.group || "").length}/100 ·{" "}
               {d("Content", "内容")} {(editing.command || "").length}/100000
             </p>
-            <label className="flex items-center gap-2 text-xs">
-              <input
-                type="checkbox"
+            <Label className="flex items-center gap-2 text-xs">
+              <Checkbox
                 checked={!!editing.confirmBeforeRun}
-                onChange={(e) =>
+                onCheckedChange={(checked) =>
                   updateDraft({
                     ...editing,
-                    confirmBeforeRun: e.target.checked,
+                    confirmBeforeRun: checked === true,
                   })
                 }
               />
               {d("Confirm before running", "执行前确认")}
-            </label>
+            </Label>
             <div className="flex gap-2">
               <Button
                 type="submit"
@@ -526,12 +530,12 @@ function CommandList({
                     variant="secondary"
                     disabled={disabled || loading}
                     title={item.command}
-                    onClick={() => {
+                    onClick={async () => {
                       if (
                         !item.confirmBeforeRun ||
-                        confirm(
+                        (await confirm(
                           `${d("Run command", "执行命令")} “${item.name}”?\n${item.command}`,
-                        )
+                        ))
                       )
                         onRun(item.command);
                     }}

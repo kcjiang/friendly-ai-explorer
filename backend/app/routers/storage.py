@@ -155,13 +155,24 @@ async def entries(
     q: str = Query("", max_length=100),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
+    sort: Literal["name", "size", "updated_at"] = "name",
+    direction: Literal["asc", "desc"] = "asc",
     db: AsyncSession = Depends(get_db),
 ):
     await s.lock(db)
     from app.services.storage_listing import page as list_page
 
     result = await list_page(
-        db, user, space_key(space, user), path, shared_id, q, page, page_size
+        db,
+        user,
+        space_key(space, user),
+        path,
+        shared_id,
+        q,
+        page,
+        page_size,
+        sort,
+        direction,
     )
     await db.commit()
     return result
@@ -200,11 +211,13 @@ async def ticket_archive(
     q: str = Query("", max_length=100),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
+    sort: Literal["name", "size", "updated_at"] = "name",
+    direction: Literal["asc", "desc"] = "asc",
     db: AsyncSession = Depends(get_db),
 ):
     from app.services.ticket_attachments import archive
 
-    return await archive(db, user, q, page, page_size)
+    return await archive(db, user, q, page, page_size, sort, direction)
 
 
 async def save_upload(file, space, parent, conflict, user, db, tasks):

@@ -172,7 +172,9 @@ async def delete_files(db, user, ticket, entry_ids):
     await queue_entries(db, user, entries, "delete_attachment")
 
 
-async def archive(db, user, query="", page=1, page_size=50):
+async def archive(
+    db, user, query="", page=1, page_size=50, sort="name", direction="asc"
+):
     from sqlalchemy import func, or_
 
     from app.models.ticket import Ticket
@@ -191,9 +193,16 @@ async def archive(db, user, query="", page=1, page_size=50):
             )
         )
     total = await db.scalar(select(func.count()).select_from(base.subquery()))
+    order = {
+        "name": func.lower(func.regexp_replace(StorageEntry.path, "^.*/", "")),
+        "size": StorageEntry.size,
+        "updated_at": StorageEntry.created_at,
+    }[sort]
     rows = (
         await db.execute(
-            base.order_by(StorageEntry.created_at.desc(), StorageEntry.id)
+            base.order_by(
+                order.desc() if direction == "desc" else order.asc(), StorageEntry.id
+            )
             .offset((page - 1) * page_size)
             .limit(page_size)
         )

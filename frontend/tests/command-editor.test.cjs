@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const ts = require("typescript");
 const vm = require("node:vm");
 
-function editor() {
+function editor({ confirm = async () => true } = {}) {
   const slots = [],
     effects = [];
   let cursor = 0;
@@ -80,7 +80,6 @@ function editor() {
       exports,
       console,
       crypto: { randomUUID: () => `new-id-${++nextId}` },
-      confirm: () => true,
       localStorage: { getItem: () => null, setItem() {} },
       require(name) {
         if (name === "react") return react;
@@ -93,6 +92,8 @@ function editor() {
           };
         if (name === "axios") return { isAxiosError: (value) => !!value.axios };
         if (name === "@/lib/api") return { default: api };
+        if (name === "@/components/ui/feedback-provider")
+          return { useFeedback: () => ({ confirm }) };
         if (name === "@/lib/errors")
           return { errorMessage: (value) => value.message };
         if (name === "./device-tools")
@@ -159,6 +160,31 @@ function editor() {
     },
   };
 }
+
+test("command deletion waits for confirmation and cancellation leaves commands intact", async () => {
+  let answer;
+  const view = editor({
+    confirm: () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+  });
+  view.render();
+  await view.settle();
+  const cancelled = view.button("Delete").props.onClick();
+  assert.equal(view.requestCount(), 0);
+  answer(false);
+  await cancelled;
+  await view.settle();
+  assert.equal(view.requestCount(), 0);
+  const accepted = view.button("Delete").props.onClick();
+  assert.equal(view.requestCount(), 0);
+  answer(true);
+  await accepted;
+  await view.settle();
+  assert.equal(view.requestCount(), 1);
+  assert.equal(view.saved().catalog.commands.length, 0);
+});
 
 test("editing locks list actions and a conflict preserves the draft plus unrelated remote commands", async () => {
   const view = editor();

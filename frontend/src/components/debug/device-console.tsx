@@ -16,6 +16,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Container from "@/components/container";
 import { Button } from "@/components/ui/base/button";
 import { Input } from "@/components/ui/base/input";
+import { Label } from "@/components/ui/base/label";
+import { NativeSelect } from "@/components/ui/base/native-select";
 import {
   Tabs,
   TabsContent,
@@ -353,9 +355,9 @@ export default function DeviceConsole() {
             </Tabs>
           </DeviceSettings>
           <DeviceSettings title={d("Capture settings", "采集设置")}>
-            <label className="grid gap-2 text-xs">
+            <Label className="grid gap-2 text-xs">
               {d("Capture device", "采集设备")}{" "}
-              <select
+              <NativeSelect
                 aria-label={d("Capture device", "采集设备")}
                 className="bg-background max-w-64 rounded border p-1"
                 disabled={recording}
@@ -368,8 +370,8 @@ export default function DeviceConsole() {
                     {device.label || device.deviceId}
                   </option>
                 ))}
-              </select>
-            </label>
+              </NativeSelect>
+            </Label>
             <p className="text-muted-foreground text-xs">
               {d(
                 "Select an input, then connect or reconnect to apply. Device names appear after permission is granted.",
@@ -378,7 +380,7 @@ export default function DeviceConsole() {
             </p>
           </DeviceSettings>
           <DeviceSettings title={d("Relay control", "继电器控制")}>
-            <label className="grid gap-2 text-xs">
+            <Label className="grid gap-2 text-xs">
               {d("Relay address", "继电器地址")}{" "}
               <Input
                 aria-label={d("Relay address", "继电器地址")}
@@ -386,7 +388,7 @@ export default function DeviceConsole() {
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
               />
-            </label>
+            </Label>
             <p className="text-muted-foreground text-xs">
               {d(
                 "Default: 192.168.111.211. Applied to the next relay request.",

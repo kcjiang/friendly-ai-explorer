@@ -5,9 +5,7 @@ import {
   Gauge,
   type LucideIcon,
   PanelsTopLeft,
-  ScrollText,
   Settings,
-  Share2,
   SlidersHorizontal,
   SquareKanban,
   Terminal,
@@ -54,13 +52,6 @@ export const navigations: Navigation[] = [
     href: "/knowledge",
   },
   { icon: FolderOpen, name: "Storage", href: "/storage" },
-  { icon: Share2, name: "Shared with me", href: "/shared" },
-  {
-    icon: ScrollText,
-    name: "System logs",
-    href: "/system-logs",
-    accessible: ["developer"],
-  },
   {
     icon: Terminal,
     name: "Device Terminal",
@@ -75,6 +66,6 @@ export const navigations: Navigation[] = [
     icon: Settings,
     name: "Admin",
     href: "/admin",
-    accessible: ["developer", "leader"],
+    accessible: ["developer"],
   },
 ];

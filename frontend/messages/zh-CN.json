@@ -997,7 +997,9 @@
     "deviceConsole": "设备控制台",
     "storageSpace": "存储空间",
     "sharedWithMe": "共享给我",
-    "systemLogs": "系统运行日志"
+    "systemLogs": "系统运行日志",
+    "adminCallDiagnostics": "调用诊断",
+    "adminLocalApiOnly": "仅允许访问本站 /api/v1/ 接口，请求不允许重定向到其他地址。"
   },
   "dynamic": {
     "deleteUser": "确定删除用户 {p0}？",

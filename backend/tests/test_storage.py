@@ -104,6 +104,38 @@ class StorageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(r.status_code, 201, r.text)
         return r.json()
 
+    async def test_listing_sorts_before_pagination_and_validates_sort(self):
+        await self.upload("zebra.txt", b"a", "public")
+        await self.upload("apple.txt", b"aaaa", "public")
+        await self.upload("middle.txt", b"aa", "public")
+        for sort, direction, expected in [
+            ("name", "asc", ["apple.txt", "middle.txt", "zebra.txt"]),
+            ("name", "desc", ["zebra.txt", "middle.txt", "apple.txt"]),
+            ("size", "asc", ["zebra.txt", "middle.txt", "apple.txt"]),
+            ("size", "desc", ["apple.txt", "middle.txt", "zebra.txt"]),
+            ("updated_at", "desc", ["middle.txt", "apple.txt", "zebra.txt"]),
+        ]:
+            names = []
+            for page in range(1, 4):
+                r = await self.client.get(
+                    "/api/v1/files/entries",
+                    params={
+                        "sort": sort,
+                        "direction": direction,
+                        "page_size": 1,
+                        "page": page,
+                    },
+                )
+                self.assertEqual(r.status_code, 200, r.text)
+                self.assertEqual(r.json()["total"], 3)
+                names.extend(item["name"] for item in r.json()["items"])
+            self.assertEqual(names, expected)
+        for endpoint in ["entries", "ticket-archive"]:
+            r = await self.client.get(
+                f"/api/v1/files/{endpoint}", params={"sort": "invalid"}
+            )
+            self.assertEqual(r.status_code, 422)
+
     async def test_personal_files_are_private_even_from_developer(self):
         item = await self.upload()
         for user in (self.other, self.dev):

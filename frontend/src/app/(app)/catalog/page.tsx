@@ -23,6 +23,7 @@ import { ConfirmDialog } from "@/components/catalog/catalog-ui";
 import { RecordDialog } from "@/components/catalog/record-dialog";
 import Container from "@/components/container";
 import { TopNav } from "@/components/nav";
+import PageToolbar from "@/components/page-toolbar";
 import { Button } from "@/components/ui/base/button";
 import {
   InputGroup,
@@ -272,7 +273,7 @@ export default function CatalogPageView() {
             setData({ items: [], total: 0 });
           }}
         >
-          <Container className="flex flex-wrap items-center gap-2 border-b py-2">
+          <PageToolbar label={t("ui.dataManagement")}>
             <TabsList aria-label={t("ui.catalog")}>
               {(Object.keys(localizedLabels) as Kind[]).map((key) => {
                 const Icon = localizedConfigs[key].icon;
@@ -349,7 +350,7 @@ export default function CatalogPageView() {
                 {t("ui.clearRecentlyDeleted")}
               </Button>
             )}
-          </Container>
+          </PageToolbar>
           <Container className="overflow-x-auto py-6">
             {notice && (
               <p role="status" className="text-muted-foreground mb-3 text-sm">

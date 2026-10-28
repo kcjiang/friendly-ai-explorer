@@ -14,8 +14,12 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import Container from "@/components/container";
 import { TopNav } from "@/components/nav";
+import PageToolbar from "@/components/page-toolbar";
 import { Button } from "@/components/ui/base/button";
+import { Checkbox } from "@/components/ui/base/checkbox";
 import { Input } from "@/components/ui/base/input";
+import { Label } from "@/components/ui/base/label";
+import { NativeSelect } from "@/components/ui/base/native-select";
 import {
   Popover,
   PopoverContent,
@@ -56,16 +60,7 @@ export function DeviceToolbar({
   children: React.ReactNode;
   label: string;
 }) {
-  return (
-    <Container
-      role="toolbar"
-      aria-label={label}
-      data-page-toolbar
-      className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b py-2"
-    >
-      {children}
-    </Container>
-  );
+  return <PageToolbar label={label}>{children}</PageToolbar>;
 }
 
 export function DeviceSettings({
@@ -180,9 +175,9 @@ export function ConnectionBar({
                 )
               : d("Applied on the next connection.", "参数在下次连接时生效。")}
           </p>
-          <label className="grid gap-1 text-xs">
+          <Label className="grid gap-1 text-xs">
             {d("Baud rate", "波特率")}
-            <select
+            <NativeSelect
               aria-label={d("Baud rate", "波特率")}
               disabled={busy}
               className="bg-background h-8 rounded-md border px-2"
@@ -196,12 +191,12 @@ export function ConnectionBar({
                   <option key={value}>{value}</option>
                 ),
               )}
-            </select>
-          </label>
+            </NativeSelect>
+          </Label>
           <div className="grid grid-cols-2 gap-3">
-            <label className="grid gap-1 text-xs">
+            <Label className="grid gap-1 text-xs">
               {d("Data bits", "数据位")}
-              <select
+              <NativeSelect
                 aria-label={d("Data bits", "数据位")}
                 disabled={busy}
                 className="bg-background h-8 rounded-md border px-2"
@@ -216,11 +211,11 @@ export function ConnectionBar({
                 {[7, 8].map((v) => (
                   <option key={v}>{v}</option>
                 ))}
-              </select>
-            </label>
-            <label className="grid gap-1 text-xs">
+              </NativeSelect>
+            </Label>
+            <Label className="grid gap-1 text-xs">
               {d("Stop bits", "停止位")}
-              <select
+              <NativeSelect
                 aria-label={d("Stop bits", "停止位")}
                 disabled={busy}
                 className="bg-background h-8 rounded-md border px-2"
@@ -235,12 +230,12 @@ export function ConnectionBar({
                 {[1, 2].map((v) => (
                   <option key={v}>{v}</option>
                 ))}
-              </select>
-            </label>
+              </NativeSelect>
+            </Label>
           </div>
-          <label className="grid gap-1 text-xs">
+          <Label className="grid gap-1 text-xs">
             {d("Parity", "校验位")}
-            <select
+            <NativeSelect
               aria-label={d("Parity", "校验位")}
               disabled={busy}
               className="bg-background h-8 rounded-md border px-2"
@@ -255,22 +250,21 @@ export function ConnectionBar({
               {["none", "even", "odd"].map((v) => (
                 <option key={v}>{v}</option>
               ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
+            </NativeSelect>
+          </Label>
+          <Label className="flex items-center gap-2 text-xs">
+            <Checkbox
               disabled={busy}
               checked={shown.flowControl === "hardware"}
-              onChange={(e) =>
+              onCheckedChange={(checked) =>
                 setConfig({
                   ...config,
-                  flowControl: e.target.checked ? "hardware" : "none",
+                  flowControl: checked === true ? "hardware" : "none",
                 })
               }
             />
             RTS/CTS
-          </label>
+          </Label>
         </SerialParameters>
       )}
       <Button
@@ -384,10 +378,10 @@ function DeviceTerminal() {
     <div className="flex h-full min-h-0 flex-col">
       <DeviceToolbar label={d("Terminal toolbar", "终端工具栏")}>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="text-sm">
+          <Label className="text-sm">
             {d("Connection", "连接方式")}{" "}
-            <select
-              className="bg-background h-8 rounded-md border px-2 text-sm"
+            <NativeSelect
+              className="w-full"
               disabled={commandEditing}
               value={kind}
               onChange={(e) => {
@@ -397,8 +391,8 @@ function DeviceTerminal() {
             >
               <option value="adb">USB ADB</option>
               <option value="serial">{d("Serial", "串口")}</option>
-            </select>
-          </label>
+            </NativeSelect>
+          </Label>
         </div>
         <ConnectionBar kind={kind} compact />
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
@@ -448,20 +442,19 @@ function DeviceTerminal() {
           )}
           {kind === "serial" && (
             <DeviceSettings title={d("Terminal settings", "终端设置")}>
-              <label className="flex items-center gap-1 text-sm">
-                <input
-                  type="checkbox"
+              <Label className="flex items-center gap-1 text-sm">
+                <Checkbox
                   checked={hex}
-                  onChange={(e) => {
-                    setHex(e.target.checked);
-                    session.hex = e.target.checked;
+                  onCheckedChange={(checked) => {
+                    setHex(checked === true);
+                    session.hex = checked === true;
                   }}
                 />{" "}
                 HEX
-              </label>
-              <label className="grid gap-1 text-xs">
+              </Label>
+              <Label className="grid gap-1 text-xs">
                 {d("Line ending", "换行符")}
-                <select
+                <NativeSelect
                   aria-label={d("Line ending", "换行符")}
                   className="bg-background h-8 rounded-md border px-2"
                   value={ending}
@@ -471,8 +464,8 @@ function DeviceTerminal() {
                   <option value={"\r"}>CR</option>
                   <option value={"\n"}>LF</option>
                   <option value={"\r\n"}>CRLF</option>
-                </select>
-              </label>
+                </NativeSelect>
+              </Label>
             </DeviceSettings>
           )}
         </div>

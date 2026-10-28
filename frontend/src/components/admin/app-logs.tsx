@@ -3,6 +3,19 @@
 import { Loader2, RefreshCw, Search } from "lucide-react";
 import { useLocale } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/base/button";
+import { Checkbox } from "@/components/ui/base/checkbox";
+import { Input } from "@/components/ui/base/input";
+import { Label } from "@/components/ui/base/label";
+import { NativeSelect } from "@/components/ui/base/native-select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/base/table";
 import { useUiTranslations } from "@/i18n/client";
 import api from "@/lib/api";
 import { errorMessage } from "@/lib/errors";
@@ -23,10 +36,7 @@ interface LogPage {
   page_size: number;
   truncated: boolean;
 }
-const field =
-  "rounded-lg border border-border bg-background px-3 py-2 text-sm w-full";
-const button =
-  "rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted/50 disabled:opacity-50";
+const field = "w-full";
 
 export default function AppLogs({
   initialRequestId = "",
@@ -110,26 +120,26 @@ export default function AppLogs({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold">{t("ui.applicationLogs")}</h2>
+          <h2 className="font-semibold">{t("ui.systemLogs")}</h2>
           <p className="text-muted-foreground mt-1 text-xs">
             {t(
               "ui.viewRequestsAiRetriesFallbacksAndExceptionsCorrelateOperationsByRequestId",
             )}
           </p>
         </div>
-        <button className={button} disabled={busy} onClick={() => void load()}>
+        <Button variant="outline" disabled={busy} onClick={() => void load()}>
           <RefreshCw className="mr-1 inline" size={14} />
           {t("ui.refresh")}
-        </button>
+        </Button>
       </div>
       <form
         onSubmit={search}
         className="border-border space-y-3 rounded-xl border p-4"
       >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="space-y-1 text-xs">
+          <Label className="block space-y-1 text-xs">
             {t("ui.level")}
-            <select
+            <NativeSelect
               className={field}
               value={level}
               onChange={(e) => setLevel(e.target.value)}
@@ -138,55 +148,55 @@ export default function AppLogs({
               {["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"].map((l) => (
                 <option key={l}>{l}</option>
               ))}
-            </select>
-          </label>
-          <label className="space-y-1 text-xs">
+            </NativeSelect>
+          </Label>
+          <Label className="block space-y-1 text-xs">
             {t("ui.keyword")}
-            <input
+            <Input
               className={field}
               maxLength={100}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("ui.eGTodoTimeoutEmbeddings")}
             />
-          </label>
-          <label className="space-y-1 text-xs">
+          </Label>
+          <Label className="block space-y-1 text-xs">
             {t("ui.requestId2")}
-            <input
+            <Input
               className={field}
               maxLength={64}
               value={requestId}
               onChange={(e) => setRequestId(e.target.value)}
               placeholder={t("ui.pasteXRequestId")}
             />
-          </label>
-          <label className="space-y-1 text-xs">
+          </Label>
+          <Label className="block space-y-1 text-xs">
             {t("ui.startTime")}
-            <input
+            <Input
               type="datetime-local"
               className={field}
               value={since}
               onChange={(e) => setSince(e.target.value)}
             />
-          </label>
-          <label className="space-y-1 text-xs">
+          </Label>
+          <Label className="block space-y-1 text-xs">
             {t("ui.endTime")}
-            <input
+            <Input
               type="datetime-local"
               className={field}
               value={until}
               onChange={(e) => setUntil(e.target.value)}
             />
-          </label>
+          </Label>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button className={button} disabled={busy}>
+          <Button type="submit" variant="outline" disabled={busy}>
             <Search size={14} className="mr-1 inline" />
             {t("ui.search")}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
             type="button"
-            className={button}
             disabled={busy}
             onClick={() => {
               setLevel("");
@@ -205,15 +215,14 @@ export default function AppLogs({
             }}
           >
             {t("ui.clearFilters")}
-          </button>
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
+          </Button>
+          <Label className="flex items-center gap-2 text-xs">
+            <Checkbox
               checked={auto}
-              onChange={(e) => setAuto(e.target.checked)}
+              onCheckedChange={(checked) => setAuto(checked === true)}
             />
             {t("ui.refreshFirstPageEvery10Seconds")}
-          </label>
+          </Label>
           {busy && <Loader2 size={16} className="animate-spin" />}
         </div>
       </form>
@@ -231,25 +240,25 @@ export default function AppLogs({
           t("ui.thereAreManyLogsResultsCoverOnlyTheMostRecentlyScannedEntries")}
       </p>
       <div className="border-border overflow-x-auto rounded-xl border">
-        <table className="w-full table-fixed text-xs">
-          <thead className="bg-muted/40">
-            <tr>
+        <Table className="w-full table-fixed text-xs">
+          <TableHeader className="bg-muted/40">
+            <TableRow>
               {[
                 t("ui.timeLevel"),
                 t("ui.event"),
                 t("ui.sourceRequestId"),
                 t("ui.details"),
               ].map((h) => (
-                <th
+                <TableHead
                   className={`p-3 text-left ${h === t("ui.details") ? "w-16" : ""}`}
                   key={h}
                 >
                   {h}
-                </th>
+                </TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {result?.items.map((row) => (
               <LogRow
                 key={row.id}
@@ -264,17 +273,17 @@ export default function AppLogs({
               />
             ))}
             {!result?.items.length && !busy && (
-              <tr>
-                <td
+              <TableRow>
+                <TableCell
                   colSpan={4}
                   className="text-muted-foreground p-8 text-center"
                 >
                   {t("ui.noMatchingLogs")}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       <div className="flex items-center justify-between gap-3 text-xs">
         <span>
@@ -283,20 +292,20 @@ export default function AppLogs({
           {page} {t("ui.page")}
         </span>
         <div className="flex gap-2">
-          <button
-            className={button}
+          <Button
+            variant="outline"
             disabled={busy || page <= 1}
             onClick={() => setPage((p) => p - 1)}
           >
             {t("ui.previous")}
-          </button>
-          <button
-            className={button}
+          </Button>
+          <Button
+            variant="outline"
             disabled={busy || page * 50 >= (result?.total ?? 0)}
             onClick={() => setPage((p) => p + 1)}
           >
             {t("ui.next")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -325,41 +334,43 @@ function LogRow({
       : "text-muted-foreground";
   return (
     <>
-      <tr className="border-border border-t align-top">
-        <td className="p-3 break-words">
+      <TableRow className="border-border border-t align-top">
+        <TableCell className="p-3 break-words">
           {new Date(row.timestamp).toLocaleString(locale)}
           <p className={`mt-1 font-medium ${color}`}>{row.level}</p>
-        </td>
-        <td className="p-3 break-words">{row.message}</td>
-        <td className="text-muted-foreground p-3 break-all">
+        </TableCell>
+        <TableCell className="p-3 break-words">{row.message}</TableCell>
+        <TableCell className="text-muted-foreground p-3 break-all">
           {row.logger}
           {row.request_id && (
-            <button
+            <Button
+              variant="outline"
               className="text-primary mt-1 block text-left font-mono hover:underline"
               onClick={onRequest}
               title={t("ui.filterByThisRequest")}
             >
               {row.request_id}
-            </button>
+            </Button>
           )}
-        </td>
-        <td className="p-3">
-          <button
+        </TableCell>
+        <TableCell className="p-3">
+          <Button
+            variant="outline"
             className="text-primary whitespace-nowrap hover:underline"
             onClick={onToggle}
           >
             {expanded ? t("ui.collapse") : t("ui.expand")}
-          </button>
-        </td>
-      </tr>
+          </Button>
+        </TableCell>
+      </TableRow>
       {expanded && (
-        <tr>
-          <td colSpan={4} className="bg-muted/20 p-4">
+        <TableRow>
+          <TableCell colSpan={4} className="bg-muted/20 p-4">
             <pre className="max-h-96 overflow-auto text-xs break-all whitespace-pre-wrap">
               {JSON.stringify(row.details, null, 2)}
             </pre>
-          </td>
-        </tr>
+          </TableCell>
+        </TableRow>
       )}
     </>
   );

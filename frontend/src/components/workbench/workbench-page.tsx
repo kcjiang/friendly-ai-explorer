@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/catalog/catalog-ui";
 import Container from "@/components/container";
 import { TopNav } from "@/components/nav";
+import PageToolbar from "@/components/page-toolbar";
 import {
   Alert,
   AlertAction,
@@ -521,7 +522,7 @@ export default function WorkbenchPage() {
         )}
       >
         <TopNav title={t("ui.workbench")} />
-        <Container className="flex shrink-0 flex-wrap items-center gap-2 border-b py-2">
+        <PageToolbar label={t("ui.workbench")}>
           <Tabs
             value={period}
             onValueChange={(value) => {
@@ -605,7 +606,7 @@ export default function WorkbenchPage() {
             <Terminal data-icon="inline-start" />
             {t("ui.liveAiOutput")}
           </Button>
-        </Container>
+        </PageToolbar>
         <Container className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 py-6">
           <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-xs">
             <span>
