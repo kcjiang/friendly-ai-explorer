@@ -682,6 +682,7 @@
     "signOut": "Sign out",
     "reportABugOpensInANewTab": "Report a bug (opens in a new tab)",
     "reportABug": "Report a bug",
+    "technicalForum": "Tech Forum",
     "failedToLoadAccountsCloseAndTryAgain": "Failed to load accounts. Close and try again.",
     "enterAValidHttpOrHttpsUrl": "Enter a valid http:// or https:// URL.",
     "ticketSaved": "Ticket saved",
@@ -999,7 +1000,11 @@
     "sharedWithMe": "Shared with me",
     "systemLogs": "System logs",
     "adminCallDiagnostics": "Call diagnostics",
-    "adminLocalApiOnly": "Only this site's /api/v1/ endpoints are allowed. Requests cannot redirect to another address."
+    "adminLocalApiOnly": "Only this site's /api/v1/ endpoints are allowed. Requests cannot redirect to another address.",
+    "release050Title": "Beta release",
+    "release050Knowledge": "Improved the knowledge base with unified Markdown document management and AI retrieval.",
+    "release050Storage": "Added file management with public and personal spaces, file sharing and ticket attachments.",
+    "release050Devices": "Upgraded device diagnostics with integrated terminal and console tools, more reliable connections and unified log management."
   },
   "dynamic": {
     "deleteUser": "Delete user {p0}?",

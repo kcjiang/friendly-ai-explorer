@@ -1,0 +1,85 @@
+.backdrop {
+  position: absolute;
+  inset: 5px -8px -10px;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 1;
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--foreground) 30%, transparent) 0.9px,
+    transparent 1px
+  );
+  mask-image: radial-gradient(
+    ellipse 75% 65% at 50% 48%,
+    #000 25%,
+    transparent 100%
+  );
+}
+
+.device {
+  --device-surface: var(--color-slate-100);
+  position: relative;
+  width: 88px;
+  height: 32px;
+  color: color-mix(in srgb, var(--foreground) 90%, var(--device-surface));
+}
+
+:global(.dark) .device {
+  --device-surface: var(--color-slate-900);
+}
+
+.body {
+  position: absolute;
+  box-sizing: border-box;
+  inset: 0 4px;
+  border: 2px solid currentColor;
+  background: var(--device-surface);
+}
+
+.side {
+  position: absolute;
+  inset: 0;
+}
+
+.mirrored {
+  transform: scaleX(-1);
+  transform-origin: center;
+}
+
+.edge {
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  box-sizing: border-box;
+  width: 4px;
+  border: 2px solid currentColor;
+  border-right: 0;
+  background: var(--device-surface);
+}
+
+.light {
+  position: absolute;
+  box-sizing: border-box;
+  left: 12.75px;
+  top: 6.5px;
+  width: 7.5px;
+  height: 19px;
+  border: 1px solid color-mix(in srgb, var(--foreground) 35%, var(--card));
+  border-radius: 999px;
+  background: #d1d5db;
+}
+
+.left {
+  --lamp: #f97316;
+  --lamp-border: #fdba74;
+}
+.right {
+  --lamp: #22c55e;
+  --lamp-border: #86efac;
+}
+
+.light[data-lit="true"] {
+  background: var(--lamp);
+  border-color: var(--lamp-border);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--lamp) 80%, transparent);
+}

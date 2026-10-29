@@ -7,7 +7,7 @@ on:
       version:
         description: 'Version to publish (existing v-prefixed Git tag, without v here)'
         required: true
-        default: '0.3.1-dev.3'
+        default: '0.5.0-beta.1'
         type: string
 
 permissions:

@@ -682,6 +682,7 @@
     "signOut": "退出登录",
     "reportABugOpensInANewTab": "提报 Bug（新标签页打开）",
     "reportABug": "提报 Bug",
+    "technicalForum": "技术论坛",
     "failedToLoadAccountsCloseAndTryAgain": "账户列表加载失败，请关闭后重试。",
     "enterAValidHttpOrHttpsUrl": "请填写有效的 http:// 或 https:// 地址。",
     "ticketSaved": "工单已保存",
@@ -999,7 +1000,11 @@
     "sharedWithMe": "共享给我",
     "systemLogs": "系统运行日志",
     "adminCallDiagnostics": "调用诊断",
-    "adminLocalApiOnly": "仅允许访问本站 /api/v1/ 接口，请求不允许重定向到其他地址。"
+    "adminLocalApiOnly": "仅允许访问本站 /api/v1/ 接口，请求不允许重定向到其他地址。",
+    "release050Title": "发布测试版",
+    "release050Knowledge": "优化知识库，统一 Markdown 文档管理与 AI 检索。",
+    "release050Storage": "新增文件管理，支持公共与个人空间、文件共享及工单附件。",
+    "release050Devices": "升级设备诊断工具，整合终端与控制台，提升连接稳定性并统一日志管理。"
   },
   "dynamic": {
     "deleteUser": "确定删除用户 {p0}？",

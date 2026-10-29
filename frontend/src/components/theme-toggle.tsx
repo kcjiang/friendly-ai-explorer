@@ -1,10 +1,10 @@
 "use client";
 
-import { Bug, Moon, Sun } from "lucide-react";
+import { ArrowUpRight, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import * as React from "react";
 import { LanguageToggle } from "@/components/language-toggle";
-import { Button } from "@/components/ui/base/button";
+import { Button, buttonVariants } from "@/components/ui/base/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,24 +22,32 @@ export function ThemeToggle() {
   const hydrated = useHydration();
 
   return (
-    <div className="flex shrink-0 items-center gap-3">
-      <VersionBadge />
-      <Button
-        variant="outline"
-        size="icon"
-        nativeButton={false}
-        render={
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1 sm:gap-3">
+      <div className="flex items-center gap-0.5">
+        {[
+          { label: "AI API", href: "http://116.6.18.118:10443/" },
+          {
+            label: t("ui.technicalForum"),
+            href: "https://fae.kaicheng.me:8443/",
+          },
+        ].map(({ label, href }) => (
           <a
-            href="https://github.com/kcjiang/friendly-ai-explorer/issues/new/choose"
+            key={href}
+            href={href}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={t("ui.reportABugOpensInANewTab")}
-            title={t("ui.reportABug")}
-          />
-        }
-      >
-        <Bug className="h-[1.2rem] w-[1.2rem]" />
-      </Button>
+            className={buttonVariants({
+              variant: "ghost",
+              size: "sm",
+              className: "text-muted-foreground px-1.5 text-xs sm:px-2.5",
+            })}
+          >
+            {label}
+            <ArrowUpRight className="size-3" aria-hidden="true" />
+          </a>
+        ))}
+      </div>
+      <VersionBadge />
       <LanguageToggle />
       <DropdownMenu>
         <DropdownMenuTrigger

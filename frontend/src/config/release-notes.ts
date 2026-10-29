@@ -2,6 +2,14 @@
 // Keep all published entries and insert new versions at the top (newest first).
 export const releaseNotes: Record<string, { title: string; items: string[] }> =
   {
+    "0.5.0-beta.1": {
+      title: "Beta release",
+      items: [
+        "Improved the knowledge base with unified Markdown document management and AI retrieval.",
+        "Added file management with public and personal spaces, file sharing and ticket attachments.",
+        "Upgraded device diagnostics with integrated terminal and console tools, more reliable connections and unified log management.",
+      ],
+    },
     "0.3.1-dev.3": {
       title: "English and Simplified Chinese interfaces",
       items: [

@@ -991,5 +991,9 @@
   "Device Console": "ui.deviceConsole",
   "Storage": "ui.storageSpace",
   "Shared with me": "ui.sharedWithMe",
-  "System logs": "ui.systemLogs"
+  "System logs": "ui.systemLogs",
+  "Beta release": "ui.release050Title",
+  "Improved the knowledge base with unified Markdown document management and AI retrieval.": "ui.release050Knowledge",
+  "Added file management with public and personal spaces, file sharing and ticket attachments.": "ui.release050Storage",
+  "Upgraded device diagnostics with integrated terminal and console tools, more reliable connections and unified log management.": "ui.release050Devices"
 }
