@@ -32,18 +32,24 @@ import {
 } from "@/components/ui/base/table";
 import { FloatingWindow } from "@/components/workbench/floating-window";
 import api from "@/lib/api";
+import { downloadDeviceBlob } from "@/lib/device-download";
 import { errorMessage } from "@/lib/errors";
-import { useConsoleLogUpload } from "./console-log-upload";
-import { downloadDeviceBlob } from "./device-tools";
+import { useDeviceLogHistoryRevision } from "./device-log-upload";
 
 type LogEntry = {
   id: string;
   filename: string;
   file_size: number;
-  line_count: number;
+  line_count: number | null;
+  storage_entry_id?: string;
   created_at: string;
   uploader_name: string;
 };
+function logDownloadUrl(log: LogEntry) {
+  return log.storage_entry_id
+    ? `/api/v1/files/${log.storage_entry_id}/download`
+    : `/api/v1/debug/logs/${log.id}/download`;
+}
 const historyFeatures = tableFeatures({
   rowPaginationFeature,
   columnVisibilityFeature,
@@ -56,7 +62,7 @@ function size(bytes: number) {
       : `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
-export default function ConsoleLogHistory({
+export default function DeviceLogHistory({
   open,
   onClose,
 }: {
@@ -68,7 +74,7 @@ export default function ConsoleLogHistory({
     (en: string, zh: string) => (locale === "zh-CN" ? zh : en),
     [locale],
   );
-  const { revision } = useConsoleLogUpload();
+  const revision = useDeviceLogHistoryRevision();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -96,7 +102,6 @@ export default function ConsoleLogHistory({
     void api
       .get<{ items: LogEntry[]; total: number }>("/api/v1/debug/logs", {
         params: {
-          device_type: "serial",
           page: pagination.pageIndex + 1,
           page_size: pagination.pageSize,
           q: query,
@@ -135,7 +140,7 @@ export default function ConsoleLogHistory({
     const controller = new AbortController();
     setPreviewLoading(true);
     void api
-      .get<string>(`/api/v1/debug/logs/${viewing.id}/download`, {
+      .get<string>(logDownloadUrl(viewing), {
         responseType: "text",
         transformResponse: [(data) => data],
         signal: controller.signal,
@@ -162,10 +167,9 @@ export default function ConsoleLogHistory({
       setDownloading(entry.id);
       setDownloadError("");
       try {
-        const response = await api.get<Blob>(
-          `/api/v1/debug/logs/${entry.id}/download`,
-          { responseType: "blob" },
-        );
+        const response = await api.get<Blob>(logDownloadUrl(entry), {
+          responseType: "blob",
+        });
         downloadDeviceBlob(response.data, entry.filename);
       } catch (e) {
         setDownloadError(errorMessage(e, d("Download failed", "日志下载失败")));
@@ -200,7 +204,11 @@ export default function ConsoleLogHistory({
         header: d("Size", "大小"),
         cell: ({ row }) => size(row.original.file_size),
       },
-      { accessorKey: "line_count", header: d("Lines", "行数") },
+      {
+        accessorKey: "line_count",
+        header: d("Lines", "行数"),
+        cell: ({ getValue }) => getValue() ?? "—",
+      },
       { accessorKey: "uploader_name", header: d("Uploader", "上传者") },
       {
         id: "actions",

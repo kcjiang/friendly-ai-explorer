@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useLocale } from "next-intl";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Container from "@/components/container";
 import { TopNav } from "@/components/nav";
 import PageToolbar from "@/components/page-toolbar";
@@ -26,31 +26,30 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/base/popover";
+import { downloadDeviceBlob } from "@/lib/device-download";
+import { deviceLogName } from "@/lib/device-log-name";
 import {
   type ConnectionKind,
   type DeviceSession,
-  defaultSerial,
   deviceSessions,
   useDeviceSession,
 } from "@/lib/device-session";
-import { DeviceLogToaster } from "./console-log-upload";
 import DeviceConsole from "./device-console";
-import LogPanel from "./log-panel";
+import {
+  DeviceLogHistoryButton,
+  DeviceLogUploadButton,
+} from "./device-log-controls";
+import { DeviceLogToaster } from "./device-log-upload";
 import PresetPanel from "./quick-commands";
+import TerminalDiagnostics from "./terminal-diagnostics";
+import TerminalProfiles from "./terminal-profiles";
+import TerminalRecordingControls from "./terminal-recording-controls";
 import TerminalView from "./terminal-view";
 
 export function useDeviceText() {
   const locale = useLocale();
   return (english: string, chinese: string) =>
     locale === "zh-CN" ? chinese : english;
-}
-export function downloadDeviceBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function DeviceToolbar({
@@ -123,16 +122,17 @@ export function ConnectionBar({
   inlineSettings?: boolean;
 }) {
   const d = useDeviceText();
-  const { session, status, error } = useDeviceSession(kind);
-  const [config, setConfig] = useState({
-    ...defaultSerial,
-    baudRate: kind === "remote" ? 9600 : 115200,
-  });
+  const { session, status, error, warning, detail } = useDeviceSession(kind);
+  const baudRatesId = useId();
+  const config = session.serialSettings;
+  const setConfig = (serialSettings: typeof config) =>
+    session.configure({ serialSettings });
   const busy = status !== "disconnected" && status !== "error";
   const shown = busy ? session.serialSettings : config;
   const labels: Record<string, string> = {
     disconnected: d("Disconnected", "未连接"),
     connecting: d("Connecting", "连接中"),
+    reconnecting: d("Waiting for device to return", "等待设备恢复"),
     auth: d("Allow USB debugging on the device", "请在设备上允许 USB 调试"),
     connected: d("Connected", "已连接"),
     disconnecting: d("Disconnecting", "断开中"),
@@ -155,6 +155,7 @@ export function ConnectionBar({
       }
     >
       {label && <span className="text-xs font-medium">{label}</span>}
+      {kind !== "remote" && <TerminalProfiles session={session} />}
       <span
         role="status"
         className={
@@ -177,7 +178,12 @@ export function ConnectionBar({
           </p>
           <Label className="grid gap-1 text-xs">
             {d("Baud rate", "波特率")}
-            <NativeSelect
+            <Input
+              type="number"
+              min={1}
+              max={4294967295}
+              step={1}
+              list={baudRatesId}
               aria-label={d("Baud rate", "波特率")}
               disabled={busy}
               className="bg-background h-8 rounded-md border px-2"
@@ -185,13 +191,15 @@ export function ConnectionBar({
               onChange={(e) =>
                 setConfig({ ...config, baudRate: Number(e.target.value) })
               }
-            >
-              {[9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600].map(
-                (value) => (
-                  <option key={value}>{value}</option>
-                ),
-              )}
-            </NativeSelect>
+            />
+            <datalist id={baudRatesId}>
+              {[
+                9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600,
+                1500000, 2000000, 3000000,
+              ].map((value) => (
+                <option key={value} value={value} />
+              ))}
+            </datalist>
           </Label>
           <div className="grid grid-cols-2 gap-3">
             <Label className="grid gap-1 text-xs">
@@ -265,10 +273,54 @@ export function ConnectionBar({
             />
             RTS/CTS
           </Label>
+          {kind === "serial" && (
+            <Label className="grid gap-1 text-xs">
+              {d("Receive encoding", "接收编码")}
+              <NativeSelect
+                aria-label={d("Receive encoding", "接收编码")}
+                value={session.receiveEncoding}
+                onChange={(e) =>
+                  session.setReceiveEncoding(
+                    e.target.value as "utf-8" | "gb18030",
+                  )
+                }
+              >
+                <option value="utf-8">UTF-8</option>
+                <option value="gb18030">GB18030 / GBK</option>
+              </NativeSelect>
+            </Label>
+          )}
+          {kind === "serial" && (
+            <Label className="grid gap-1 text-xs">
+              {d("Send encoding", "发送编码")}
+              <NativeSelect
+                aria-label={d("Send encoding", "发送编码")}
+                value={session.sendEncoding}
+                onChange={(e) =>
+                  session.setSendEncoding(e.target.value as "utf-8" | "gbk")
+                }
+              >
+                <option value="utf-8">UTF-8</option>
+                <option value="gbk">GBK</option>
+              </NativeSelect>
+              <span className="text-muted-foreground">
+                {d(
+                  "GBK sending rejects characters outside its character set.",
+                  "GBK 无法表示的字符将提示错误，不会替换发送。",
+                )}
+              </span>
+            </Label>
+          )}
         </SerialParameters>
       )}
       <Button
-        disabled={status === "disconnecting"}
+        disabled={
+          status === "disconnecting" ||
+          (!busy &&
+            (!Number.isInteger(config.baudRate) ||
+              config.baudRate <= 0 ||
+              config.baudRate > 4294967295))
+        }
         variant={busy ? "outline" : "default"}
         onClick={() => {
           void (busy ? session.disconnect() : session.connect(config));
@@ -284,6 +336,36 @@ export function ConnectionBar({
       {error && (
         <p className="text-destructive w-full text-xs break-words" role="alert">
           {error}
+          {kind !== "adb" &&
+            /NetworkError|Failed to open serial port/i.test(error) && (
+              <span className="mt-1 block">
+                {d(
+                  "The system could not open the serial port. Close other serial tools and browser tabs using it, and disconnect this port from the other console connection. On Windows, check Device Manager → Ports (COM & LPT): Code 10 means the device failed to start. Unplug and reconnect the board, try another USB port, then repair its manufacturer's driver if needed. Retry once the device is working normally.",
+                  "系统无法打开串口。请关闭占用它的串口工具或浏览器标签页，并断开控制台中使用同一端口的另一连接。Windows 下请查看设备管理器 → 端口（COM 和 LPT）：代码 10 表示设备无法启动。请拔插小板、更换 USB 接口，必要时修复厂商驱动，待设备正常后重新连接。",
+                )}
+              </span>
+            )}
+        </p>
+      )}
+      {detail && !error && (
+        <p
+          className="text-muted-foreground w-full text-xs break-words"
+          role="status"
+        >
+          {detail}
+        </p>
+      )}
+      {warning && (
+        <p className="w-full text-xs text-amber-600" role="status">
+          {warning === "decode"
+            ? d(
+                "Received bytes do not match the selected encoding. Check baud rate, data/parity/stop bits and the selected port first; then check receive encoding or use HEX to inspect binary data.",
+                "接收数据与所选编码不符。请先核对波特率、数据位/校验位/停止位及所选串口，再检查接收编码；二进制数据可用 HEX 查看。",
+              )
+            : d(
+                `Serial read error (${warning}); reading resumed, some data may be lost. Check serial parameters and wiring.`,
+                `串口读取异常（${warning}），已恢复读取，部分数据可能丢失。请检查串口参数及接线。`,
+              )}
         </p>
       )}
     </div>
@@ -320,13 +402,19 @@ export function SessionToolbar({
             new Blob([session.transcript], {
               type: "text/plain;charset=utf-8",
             }),
-            `${session.kind}-${Date.now()}.log`,
+            deviceLogName(session.kind),
           )
         }
       >
         <Download />
         {!compact && d("Save log", "保存日志")}
       </Button>
+      {session.kind !== "remote" && (
+        <TerminalRecordingControls session={session} compact={compact} />
+      )}
+      {session.kind !== "remote" && (
+        <TerminalDiagnostics session={session} compact={compact} />
+      )}
     </div>
   );
 }
@@ -335,14 +423,17 @@ function DeviceTerminal() {
   const d = useDeviceText();
   const [commandEditing, setCommandEditing] = useState(false);
   const [kind, setKind] = useState<"adb" | "serial">("adb");
-  const { session, status } = useDeviceSession(kind);
+  const { session, status, warning } = useDeviceSession(kind);
   const [error, setError] = useState("");
+  useEffect(() => {
+    if (status === "connecting" || (status === "connected" && !warning))
+      setError("");
+  }, [session, status, warning]);
   const [hex, setHex] = useState(false);
   const [input, setInput] = useState("");
-  const [ending, setEnding] = useState("\r\n");
+  const ending = session.lineEnding;
+  const setEnding = (lineEnding: string) => session.configure({ lineEnding });
   const [uploading, setUploading] = useState(false);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [showLogs, setShowLogs] = useState(false);
   const [logcat, setLogcat] = useState(false);
   const stopLogcat = useRef<(() => void) | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -394,19 +485,11 @@ function DeviceTerminal() {
             </NativeSelect>
           </Label>
         </div>
-        <ConnectionBar kind={kind} compact />
+        <ConnectionBar key={kind} kind={kind} compact />
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
           <SessionToolbar session={session} />
-          <Button
-            variant="outline"
-            onClick={() => {
-              setLogs(session.transcript.split("\n"));
-              setShowLogs(!showLogs);
-            }}
-          >
-            <Upload />
-            {d("Uploaded logs", "上传与管理日志")}
-          </Button>
+          <DeviceLogUploadButton session={session} />
+          <DeviceLogHistoryButton />
           <Button
             variant="outline"
             disabled={status !== "connected"}
@@ -553,7 +636,6 @@ function DeviceTerminal() {
               onRun={run}
               disabled={status !== "connected"}
             />
-            {showLogs && <LogPanel deviceType={kind} lines={logs} />}
           </aside>
         </div>
       </Container>
@@ -577,8 +659,8 @@ export default function DeviceTools() {
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       if (
-        Object.values(deviceSessions).some(
-          (s) => s.snapshot().status === "connected",
+        Object.values(deviceSessions).some((s) =>
+          ["connected", "reconnecting"].includes(s.snapshot().status),
         )
       )
         event.preventDefault();

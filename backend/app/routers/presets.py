@@ -44,17 +44,18 @@ async def upload_log(
     file: UploadFile = File(...),
     device_type: str = Form(...),
     description: str = Form(""),
+    client_timezone_offset_minutes: int = Form(-480, ge=-840, le=840),
     db: AsyncSession = Depends(get_db),
 ):
     return await preset_service.upload_log(
-        file, device_type, description, db, current_user
+        file, device_type, description, db, current_user, client_timezone_offset_minutes
     )
 
 
 @router.get("/logs", summary="获取日志列表")
 async def list_logs(
-    device_type: str,
     current_user: AnyUser,
+    device_type: Literal["adb", "serial"] | None = None,
     page: int | None = Query(None, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     q: str = Query("", max_length=100),

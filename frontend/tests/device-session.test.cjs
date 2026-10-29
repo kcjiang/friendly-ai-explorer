@@ -24,11 +24,18 @@ function moduleFrom(file, mocks = {}, globals = {}, suffix = "") {
     }).outputText,
     {
       exports,
-      require: (name) => mocks[name],
+      require: (name) =>
+        mocks[name] ||
+        (["./serial-text", "./terminal-paste", "./adb-shell-protocol"].includes(
+          name,
+        )
+          ? moduleFrom(`${name.slice(2)}.ts`)
+          : undefined),
       TextDecoder,
       TextEncoder,
       Uint8Array,
       DataView,
+      AbortController,
       setTimeout,
       clearTimeout,
       crypto: webcrypto,
@@ -230,6 +237,453 @@ test("transmission feedback follows the serial queue and never fires for disconn
     /disconnected/,
   );
   assert.ok(!events.includes("invalid"));
+});
+
+test("serial decoding diagnoses invalid UTF-8, supports split GBK, and resets across HEX", () => {
+  const { DeviceSession } = moduleFrom("device-session.ts", {
+    react: {},
+    "./adb-webusb": {},
+  });
+  const session = new DeviceSession("serial");
+  assert.equal(session.serialSettings.baudRate, 921600);
+  assert.equal(new DeviceSession("remote").serialSettings.baudRate, 9600);
+  let revisions = 0;
+  session.subscribe(() => revisions++);
+  session.setReceiveEncoding("gb18030");
+  assert.equal(
+    revisions,
+    1,
+    "encoding changes notify both settings panels even without a warning",
+  );
+  session.setReceiveEncoding("utf-8");
+  session.bytes(new Uint8Array([0xff]));
+  assert.equal(session.snapshot().warning, "decode");
+  session.setReceiveEncoding("gb18030");
+  session.clear();
+  session.bytes(new Uint8Array([0xd6]));
+  session.bytes(new Uint8Array([0xd0]));
+  assert.equal(session.transcript, "中");
+  assert.equal(session.snapshot().warning, "");
+  session.setReceiveEncoding("utf-8");
+  session.bytes(new Uint8Array([0xe4]));
+  session.hex = true;
+  session.bytes(new Uint8Array([0xff, 0x00]));
+  session.hex = false;
+  session.bytes(new TextEncoder().encode("OK"));
+  assert.equal(session.transcript, "中ff 00\r\nOK");
+});
+
+for (const name of [
+  "FramingError",
+  "ParityError",
+  "BufferOverrunError",
+  "BreakError",
+]) {
+  test(`serial recovers ${name} and keeps keyboard writes available`, async () => {
+    let firstController, nextController;
+    const writes = [];
+    let opened;
+    const port = {
+      open: async (settings) => {
+        opened = settings;
+      },
+      readable: new ReadableStream({
+        start: (c) => {
+          firstController = c;
+        },
+      }),
+      writable: new WritableStream({
+        write: (data) => writes.push(Array.from(data)),
+      }),
+      close: async () => {
+        assert.equal(port.readable.locked, false);
+        assert.equal(port.writable.locked, false);
+      },
+    };
+    const { DeviceSession, defaultSerial } = moduleFrom(
+      "device-session.ts",
+      {
+        react: {},
+        "./adb-webusb": { checkWebSerialSupport: () => null },
+      },
+      { navigator: { serial: { requestPort: async () => port } } },
+    );
+    const session = new DeviceSession("serial");
+    await session.connect({ ...defaultSerial, baudRate: 1500000 });
+    assert.equal(opened.baudRate, 1500000);
+    assert.equal(opened.bufferSize, 65536);
+    firstController.enqueue(new Uint8Array([0xe4]));
+    await new Promise((resolve) => setImmediate(resolve));
+    port.readable = new ReadableStream({
+      start: (c) => {
+        nextController = c;
+      },
+    });
+    firstController.error(Object.assign(new Error(name), { name }));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(session.snapshot().status, "connected");
+    assert.equal(session.snapshot().warning, name);
+    nextController.enqueue(new TextEncoder().encode("ready> "));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(session.transcript, "ready> ");
+    assert.equal(session.snapshot().warning, "");
+    await session.write("help\r\x03");
+    assert.deepEqual(writes, [[104, 101, 108, 112, 13, 3]]);
+    await session.disconnect();
+    assert.equal(session.snapshot().status, "disconnected");
+  });
+}
+
+test("fatal serial removal releases locks, preserves history and waits until manually stopped", async () => {
+  let controller;
+  const readable = new ReadableStream({
+    start: (c) => {
+      controller = c;
+    },
+  });
+  const writable = new WritableStream();
+  let closed = false;
+  const port = {
+    open: async () => {},
+    readable,
+    writable,
+    close: async () => {
+      closed = true;
+    },
+  };
+  const { DeviceSession } = moduleFrom(
+    "device-session.ts",
+    {
+      react: {},
+      "./adb-webusb": { checkWebSerialSupport: () => null },
+    },
+    { navigator: { serial: { requestPort: async () => port } } },
+  );
+  const session = new DeviceSession("serial");
+  await session.connect();
+  session.output("boot log\r\n");
+  port.readable = null;
+  controller.error(
+    Object.assign(new Error("Device removed"), { name: "NetworkError" }),
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(session.snapshot().status, "reconnecting");
+  assert.equal(session.snapshot().error, "");
+  assert.equal(session.transcript, "boot log\r\n");
+  assert.equal(readable.locked, false);
+  assert.equal(writable.locked, false);
+  assert.equal(closed, true);
+  await assert.rejects(session.write("do not replay\r"), /disconnected/);
+  await session.disconnect();
+  assert.equal(session.snapshot().status, "disconnected");
+});
+
+function fakeClock() {
+  const timers = new Map();
+  let id = 0;
+  return {
+    timers,
+    setTimeout: (fn, ms) => {
+      timers.set(++id, { fn, ms });
+      return id;
+    },
+    clearTimeout: (key) => timers.delete(key),
+    tick: async () => {
+      const [key, timer] = timers.entries().next().value;
+      timers.delete(key);
+      timer.fn();
+      await new Promise((resolve) => setImmediate(resolve));
+    },
+  };
+}
+
+test("serial reopens only its original port with backoff and never replays offline commands", async () => {
+  const clock = fakeClock();
+  let controller,
+    requests = 0,
+    opens = 0;
+  const writes = [];
+  const port = {
+    open: async () => {
+      opens++;
+      if (opens === 2) throw new Error("Still absent");
+      port.readable = new ReadableStream({
+        start: (c) => {
+          controller = c;
+        },
+      });
+      port.writable = new WritableStream({
+        write: (data) => writes.push(new TextDecoder().decode(data)),
+      });
+    },
+    close: async () => {},
+  };
+  const { DeviceSession } = moduleFrom(
+    "device-session.ts",
+    {
+      react: {},
+      "./adb-webusb": { checkWebSerialSupport: () => null },
+    },
+    {
+      ...clock,
+      navigator: {
+        serial: {
+          requestPort: async () => {
+            requests++;
+            return port;
+          },
+        },
+      },
+    },
+  );
+  const session = new DeviceSession("serial");
+  await session.connect();
+  session.output("history");
+  let releaseQueue;
+  session.queue = new Promise((resolve) => {
+    releaseQueue = resolve;
+  });
+  const pendingWrite = session.write("queued-before-offline");
+  const rejectedWrite = assert.rejects(pendingWrite, /disconnected/);
+  port.readable = null;
+  controller.error(new Error("removed"));
+  await new Promise((resolve) => setImmediate(resolve));
+  await assert.rejects(session.write("offline"), /disconnected/);
+  releaseQueue();
+  await rejectedWrite;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(clock.timers.values().next().value.ms, 500);
+  await clock.tick();
+  assert.equal(session.snapshot().status, "reconnecting");
+  assert.equal(clock.timers.values().next().value.ms, 1000);
+  await clock.tick();
+  assert.equal(session.snapshot().status, "connected");
+  assert.equal(session.transcript, "history");
+  assert.equal(requests, 1);
+  assert.deepEqual(writes, []);
+  await session.write("fresh\r");
+  assert.deepEqual(writes, ["fresh\r"]);
+  await session.disconnect();
+  assert.equal(clock.timers.size, 0);
+});
+
+function adbHandshakeHarness(messages, globals = {}) {
+  const clock = fakeClock();
+  const events = [];
+  const dev = {
+    configuration: {},
+    open: async () => events.push("open"),
+    close: async () => events.push("close"),
+    claimInterface: async () => events.push("claim"),
+    releaseInterface: async () => {},
+  };
+  const { AdbDevice } = moduleFrom(
+    "adb-webusb.ts",
+    {},
+    { ...clock, ...globals },
+    '\ngetOrCreateKey = async () => ({ privKey: {}, pubStr: "test" });',
+  );
+  const device = new AdbDevice(dev, { ifaceNum: 1 });
+  device.send = async (cmd) => events.push(cmd);
+  device.readMsg = async () => {
+    const msg = messages.shift();
+    if (msg instanceof Error) throw msg;
+    return msg;
+  };
+  device.loop = async () => {};
+  return { device, dev, clock, events };
+}
+
+test("manual serial disconnect waits for an in-flight reopen and cannot be undone by it", async () => {
+  const clock = fakeClock();
+  let controller,
+    finishOpen,
+    opens = 0;
+  const port = {
+    open: async () => {
+      opens++;
+      if (opens > 1)
+        await new Promise((resolve) => {
+          finishOpen = resolve;
+        });
+      port.readable = new ReadableStream({
+        start: (c) => {
+          controller = c;
+        },
+      });
+      port.writable = new WritableStream();
+    },
+    close: async () => {},
+  };
+  const { DeviceSession } = moduleFrom(
+    "device-session.ts",
+    {
+      react: {},
+      "./adb-webusb": { checkWebSerialSupport: () => null },
+    },
+    { ...clock, navigator: { serial: { requestPort: async () => port } } },
+  );
+  const session = new DeviceSession("serial");
+  await session.connect();
+  port.readable = null;
+  controller.error(new Error("removed"));
+  await new Promise((resolve) => setImmediate(resolve));
+  await clock.tick();
+  const stopping = session.disconnect();
+  finishOpen();
+  await stopping;
+  assert.equal(session.snapshot().status, "disconnected");
+  assert.equal(session.port, undefined);
+  assert.equal(session.writer, undefined);
+  assert.equal(clock.timers.size, 0);
+});
+
+test("ADB authorization wait uses a longer timeout and never retries the approval prompt", async () => {
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const jwk = privateKey.export({ format: "jwk" });
+  const token = { cmd: 0x48545541, arg0: 1, data: new Uint8Array(20).fill(1) };
+  const h = adbHandshakeHarness([token, token], {
+    atob,
+    localStorage: { getItem: () => JSON.stringify(jwk) },
+  });
+  const originalRead = h.device.readMsg;
+  let reads = 0,
+    rejectRead;
+  h.device.readMsg = () =>
+    ++reads <= 2
+      ? originalRead()
+      : new Promise((_, reject) => {
+          rejectRead = reject;
+        });
+  h.dev.close = async () => rejectRead?.(new Error("closed"));
+  const connecting = h.device.connect();
+  const failed = assert.rejects(
+    connecting,
+    /authorization timed out.*Allow USB debugging/,
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.clock.timers.values().next().value.ms, 60000);
+  await h.clock.tick();
+  await failed;
+  assert.equal(h.events.includes("open"), false);
+  assert.equal(h.clock.timers.size, 0);
+});
+
+test("canceling a device picker prevents its late result from reconnecting", async () => {
+  let pick,
+    opens = 0;
+  const { DeviceSession } = moduleFrom(
+    "device-session.ts",
+    {
+      react: {},
+      "./adb-webusb": { checkWebSerialSupport: () => null },
+    },
+    {
+      navigator: {
+        serial: {
+          requestPort: () =>
+            new Promise((resolve) => {
+              pick = resolve;
+            }),
+        },
+      },
+    },
+  );
+  const session = new DeviceSession("serial");
+  const connecting = session.connect();
+  await session.disconnect();
+  pick({
+    open: async () => {
+      opens++;
+    },
+  });
+  await connecting;
+  assert.equal(session.snapshot().status, "disconnected");
+  assert.equal(opens, 0);
+});
+
+test("ADB retries stale stream packets on the same device and connects without another picker", async () => {
+  const h = adbHandshakeHarness([
+    { cmd: 0x45545257, arg0: 4, arg1: 5 },
+    { cmd: 0x4e584e43 },
+  ]);
+  const statuses = [];
+  await h.device.connect((status, detail) => statuses.push({ status, detail }));
+  assert.equal(h.device.isConnected, true);
+  assert.deepEqual(
+    h.events.filter((x) => typeof x === "string"),
+    ["close", "open", "claim"],
+  );
+  assert.match(
+    statuses.find((s) => s.status === "connecting" && s.detail).detail,
+    /WRTE.*arg0=4/,
+  );
+  assert.equal(h.clock.timers.size, 0);
+});
+
+test("ADB stops after three stale handshake responses and reports the last packet", async () => {
+  const h = adbHandshakeHarness(
+    Array.from({ length: 3 }, () => ({ cmd: 0x45534c43, arg0: 7, arg1: 8 })),
+  );
+  await assert.rejects(
+    h.device.connect(),
+    /attempt 3\/3.*initial response.*CLSE.*arg0=7/,
+  );
+  assert.equal(h.events.filter((x) => x === "open").length, 2);
+  assert.equal(h.device.isConnected, false);
+  assert.equal(h.clock.timers.size, 0);
+});
+
+test("ADB never retries unknown packets or physical USB errors", async () => {
+  for (const msg of [
+    { cmd: 0x12345678, arg0: 0, arg1: 0 },
+    new Error("USB disconnected"),
+  ]) {
+    const h = adbHandshakeHarness([msg]);
+    await assert.rejects(h.device.connect(), /handshake failed/);
+    assert.equal(h.events.includes("open"), false);
+    assert.equal(h.clock.timers.size, 0);
+  }
+});
+
+test("ADB handshake timeout closes pending reads before reopening", async () => {
+  const h = adbHandshakeHarness([]);
+  let rejectRead,
+    reads = 0;
+  h.device.readMsg = () =>
+    ++reads === 1
+      ? new Promise((_, reject) => {
+          rejectRead = reject;
+        })
+      : Promise.resolve({ cmd: 0x4e584e43 });
+  h.dev.close = async () => {
+    h.events.push("canceled-read");
+    rejectRead?.(new Error("closed"));
+  };
+  const connecting = h.device.connect();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(h.clock.timers.values().next().value.ms, 10000);
+  await h.clock.tick();
+  await connecting;
+  assert.ok(h.events.indexOf("canceled-read") < h.events.indexOf("open"));
+  assert.equal(h.device.isConnected, true);
+});
+
+test("ADB disconnect during handshake cancels retries and clears the timeout", async () => {
+  const h = adbHandshakeHarness([]);
+  let rejectRead;
+  h.device.readMsg = () =>
+    new Promise((_, reject) => {
+      rejectRead = reject;
+    });
+  h.dev.close = async () => rejectRead?.(new Error("closed"));
+  const connecting = h.device.connect();
+  const canceled = assert.rejects(connecting, /canceled/);
+  await new Promise((resolve) => setImmediate(resolve));
+  await h.device.disconnect();
+  await canceled;
+  assert.equal(h.events.includes("open"), false);
+  assert.equal(h.clock.timers.size, 0);
 });
 
 test("script upload normalizes CRLF, uses unique paths, and runs via persistent shell", async () => {

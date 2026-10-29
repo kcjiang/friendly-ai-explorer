@@ -1,5 +1,3 @@
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
@@ -9,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.i18n import message as system_message
 from app.models.preset import UploadedLog
 from app.models.user import User
+from app.services import device_logs
 
 # ── 日志上传 ──────────────────────────────────────────────────
 
@@ -19,27 +18,25 @@ async def upload_log(
     description: str,
     db: AsyncSession,
     user: User,
+    client_timezone_offset_minutes: int = -480,
 ) -> UploadedLog:
     from app.services import storage_service as storage
 
+    filename = device_logs.log_name(
+        device_type, file.filename, offset=client_timezone_offset_minutes
+    )
     staged, size, digest = await storage.stage_upload(file, db=db, purpose="log")
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{device_type}_{ts}_{uuid.uuid4().hex[:6]}.txt"
     target = None
     try:
         if device_type not in ("adb", "serial"):
             raise HTTPException(400, "Unsupported device type")
         await storage.lock(db)
         space = storage.personal(user)
-        root = storage.disk_path(space)
-        root.mkdir(parents=True, exist_ok=True)
-        folder = root / "DeviceLogs"
-        if folder.exists() and not folder.is_dir():
-            storage.fail(409, "个人空间中“设备日志”已被同名文件占用")
-        if not folder.exists():
-            await storage.create_folder(db, user, space, "", "DeviceLogs")
+        parent, filename = await device_logs.destination(
+            db, user, space, device_type, filename
+        )
         entry = await storage.commit_upload(
-            db, user, space, "DeviceLogs", filename, staged, size, digest, "keep"
+            db, user, space, parent, filename, staged, size, digest, "keep"
         )
         target = storage.disk_path(entry.space, entry.path)
         content = target.read_text(encoding="utf-8", errors="replace")
@@ -67,21 +64,33 @@ async def upload_log(
 
 
 async def list_logs(
-    device_type: str, db: AsyncSession, user: User, page=None, page_size=10, query=""
+    device_type: str | None,
+    db: AsyncSession,
+    user: User,
+    page=None,
+    page_size=10,
+    query="",
 ):
     """Personal logs remain private, including from developers."""
     from app.models.storage import StorageEntry
 
     q = (
         select(UploadedLog, StorageEntry)
-        .join(StorageEntry, UploadedLog.storage_entry_id == StorageEntry.id)
+        .select_from(StorageEntry)
+        .outerjoin(
+            UploadedLog,
+            (UploadedLog.storage_entry_id == StorageEntry.id)
+            & (UploadedLog.user_id == user.id),
+        )
         .where(
-            UploadedLog.device_type == device_type,
-            UploadedLog.user_id == user.id,
             StorageEntry.space == f"personal/{user.id}",
             StorageEntry.trash_id.is_(None),
+            StorageEntry.is_dir.is_(False),
+            StorageEntry.path.startswith("DeviceLogs/"),
         )
     )
+    if device_type:
+        q = q.where(UploadedLog.device_type == device_type)
     if query:
         q = q.where(
             func.regexp_replace(StorageEntry.path, "^.*/", "").ilike(
@@ -92,19 +101,23 @@ async def list_logs(
             )
         )
     total = await db.scalar(select(func.count()).select_from(q.subquery()))
-    q = q.order_by(UploadedLog.created_at.desc(), UploadedLog.id)
+    q = q.order_by(
+        func.coalesce(UploadedLog.created_at, StorageEntry.created_at).desc(),
+        StorageEntry.id,
+    )
     if page:
         q = q.offset((page - 1) * page_size).limit(page_size)
     rows = (await db.execute(q)).all()
     items = [
         {
-            "id": str(log.id),
-            "device_type": log.device_type,
+            "id": str(log.id if log else entry.id),
+            "storage_entry_id": str(entry.id),
+            "device_type": log.device_type if log else None,
             "filename": Path(entry.path).name,
             "file_size": entry.size,
-            "line_count": log.line_count,
-            "description": log.description,
-            "created_at": log.created_at.isoformat(),
+            "line_count": log.line_count if log else None,
+            "description": log.description if log else None,
+            "created_at": (log.created_at if log else entry.created_at).isoformat(),
             "uploader_name": user.name,
         }
         for log, entry in rows

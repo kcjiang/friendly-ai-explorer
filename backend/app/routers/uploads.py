@@ -30,6 +30,7 @@ class BeginUpload(BaseModel):
     conflict: Literal["skip", "keep"] = "skip"
     ticket_id: uuid.UUID | None = None
     device_type: Literal["adb", "serial"] | None = None
+    client_timezone_offset_minutes: int = Field(default=-480, ge=-840, le=840)
 
 
 @router.get("/policy")

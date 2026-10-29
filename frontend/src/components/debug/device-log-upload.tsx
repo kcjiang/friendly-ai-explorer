@@ -16,6 +16,7 @@ import {
   createToastManager,
   useToastManager,
 } from "@/components/ui/base/toast";
+import { deviceLogName } from "@/lib/device-log-name";
 import { errorMessage } from "@/lib/errors";
 import {
   type LogUploadNotice,
@@ -23,44 +24,59 @@ import {
 } from "@/lib/log-upload-task";
 import { uploadManager } from "@/lib/upload-manager";
 
-const manager = createToastManager<{ upload: LogUploadNotice }>();
-function noticeOptions(notice: LogUploadNotice) {
+export type DeviceLogKind = "adb" | "serial";
+type UploadToastData = { upload: LogUploadNotice; deviceType: DeviceLogKind };
+const manager = createToastManager<UploadToastData>();
+function noticeOptions(deviceType: DeviceLogKind, notice: LogUploadNotice) {
   return {
     title: "Log upload",
     type: notice.phase === "uploading" ? "loading" : notice.phase,
     timeout: notice.phase === "uploading" ? 0 : 7000,
-    data: { upload: notice },
+    data: { upload: notice, deviceType },
     onClose: notice.onClose,
   };
 }
-export const consoleLogUpload = createLogUploadTask({
-  upload: async (text, signal, progress) => {
-    const file = new File([text], `serial_${Date.now()}.txt`, {
-      type: "text/plain;charset=utf-8",
-    });
-    const task = await uploadManager.enqueue(
-      file,
-      { purpose: "log", device_type: "serial", conflict: "keep" },
-      { signal, progress },
-    ).promise;
-    return { filename: task.filename };
-  },
-  notices: {
-    add: (notice) => manager.add(noticeOptions(notice)),
-    update: (id, notice) => manager.update(id, noticeOptions(notice)),
-  },
-});
-export function useConsoleLogUpload() {
+function createDeviceLogUpload(deviceType: DeviceLogKind) {
+  return createLogUploadTask({
+    upload: async (text, signal, progress) => {
+      const file = new File([text], deviceLogName(deviceType), {
+        type: "text/plain;charset=utf-8",
+      });
+      const task = await uploadManager.enqueue(
+        file,
+        {
+          purpose: "log",
+          device_type: deviceType,
+          conflict: "keep",
+          client_timezone_offset_minutes: new Date().getTimezoneOffset(),
+        },
+        { signal, progress },
+      ).promise;
+      return { filename: task.filename };
+    },
+    notices: {
+      add: (notice) => manager.add(noticeOptions(deviceType, notice)),
+      update: (id, notice) =>
+        manager.update(id, noticeOptions(deviceType, notice)),
+    },
+  });
+}
+export const deviceLogUploads = {
+  adb: createDeviceLogUpload("adb"),
+  serial: createDeviceLogUpload("serial"),
+};
+export function useDeviceLogUpload(deviceType: DeviceLogKind) {
+  const task = deviceLogUploads[deviceType];
   return useSyncExternalStore(
-    consoleLogUpload.subscribe,
-    consoleLogUpload.getSnapshot,
-    consoleLogUpload.getSnapshot,
+    task.subscribe,
+    task.getSnapshot,
+    task.getSnapshot,
   );
 }
 function UploadNotices() {
   const locale = useLocale();
   const d = (en: string, zh: string) => (locale === "zh-CN" ? zh : en);
-  const { toasts } = useToastManager<{ upload: LogUploadNotice }>();
+  const { toasts } = useToastManager<UploadToastData>();
   return toasts.map((item) => {
     const n = item.data?.upload;
     if (!n) return null;
@@ -100,7 +116,12 @@ function UploadNotices() {
             <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
           )}
           <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <ToastTitle>{title}</ToastTitle>
+            <ToastTitle>
+              {item.data?.deviceType === "adb"
+                ? "USB ADB"
+                : d("Serial", "串口")}{" "}
+              · {title}
+            </ToastTitle>
             <ToastDescription className="break-words">
               {active
                 ? n.progress === 100
@@ -159,4 +180,10 @@ export function DeviceLogToaster() {
       </ToastPortal>
     </ToastProvider>
   );
+}
+
+export function useDeviceLogHistoryRevision() {
+  const adb = useDeviceLogUpload("adb").revision;
+  const serial = useDeviceLogUpload("serial").revision;
+  return `${adb}:${serial}`;
 }

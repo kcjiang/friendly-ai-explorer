@@ -1,17 +1,6 @@
 "use client";
 
-import {
-  Camera,
-  Circle,
-  History,
-  Loader2,
-  Square,
-  Upload,
-  Video,
-  VideoOff,
-} from "lucide-react";
-import dynamic from "next/dynamic";
-import { usePathname } from "next/navigation";
+import { Camera, Circle, Square, Video, VideoOff } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Container from "@/components/container";
 import { Button } from "@/components/ui/base/button";
@@ -24,31 +13,28 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/base/tabs";
+import { downloadDeviceBlob } from "@/lib/device-download";
 import { useDeviceSession } from "@/lib/device-session";
-import { consoleLogUpload, useConsoleLogUpload } from "./console-log-upload";
 import DeviceConsoleWorkspace from "./device-console-workspace";
 import styles from "./device-console.module.css";
 import DeviceLogActions from "./device-log-actions";
+import {
+  DeviceLogHistoryButton,
+  DeviceLogUploadButton,
+} from "./device-log-controls";
 import DeviceMediaStage from "./device-media-stage";
 import {
   ConnectionBar,
   DeviceSettings,
   DeviceToolbar,
   SessionToolbar,
-  downloadDeviceBlob,
   useDeviceText,
 } from "./device-tools";
 import RemoteControl from "./remote-control";
 import TerminalView from "./terminal-view";
 
-const ConsoleLogHistory = dynamic(() => import("./console-log-history"), {
-  ssr: false,
-});
-
 export default function DeviceConsole() {
   const d = useDeviceText();
-  const pathname = usePathname();
-  const upload = useConsoleLogUpload();
   const remote = useDeviceSession("remote");
   const serial = useDeviceSession("serial");
   const [error, setError] = useState("");
@@ -76,10 +62,6 @@ export default function DeviceConsole() {
   const [address, setAddress] = useState("192.168.111.211");
   const [relayBusy, setRelayBusy] = useState(false);
   const [relayMessage, setRelayMessage] = useState("");
-  const [historyOpen, setHistoryOpen] = useState(false);
-  useEffect(() => {
-    setHistoryOpen(false);
-  }, [pathname]);
   const relayAbort = useRef<AbortController | null>(null);
   useEffect(() => {
     const saved = localStorage.getItem("fae-relay-address");
@@ -331,10 +313,7 @@ export default function DeviceConsole() {
           </Button>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          <Button variant="outline" onClick={() => setHistoryOpen(true)}>
-            <History />
-            {d("Log history", "历史日志")}
-          </Button>
+          <DeviceLogHistoryButton />
           <DeviceSettings title={d("Serial settings", "串口设置")} keepMounted>
             <Tabs defaultValue="remote">
               <TabsList
@@ -473,45 +452,20 @@ export default function DeviceConsole() {
               >
                 <DeviceLogActions>
                   <SessionToolbar session={serial.session} compact />
-                  <Button
-                    variant="outline"
-                    size="icon-sm"
-                    title={
-                      upload.phase === "uploading"
-                        ? d("Show upload progress", "查看上传进度")
-                        : d("Upload log", "上传日志")
-                    }
-                    aria-label={
-                      upload.phase === "uploading"
-                        ? d("Show upload progress", "查看上传进度")
-                        : d("Upload log", "上传日志")
-                    }
-                    aria-busy={upload.phase === "uploading"}
-                    onClick={() => {
-                      void consoleLogUpload.start(serial.session.transcript);
-                    }}
-                  >
-                    {upload.phase === "uploading" ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <Upload />
-                    )}
-                  </Button>
+                  <DeviceLogUploadButton session={serial.session} compact />
                 </DeviceLogActions>
                 <div className="h-full min-h-0 overflow-hidden">
-                  <TerminalView session={serial.session} report={report} />
+                  <TerminalView
+                    session={serial.session}
+                    report={report}
+                    overlayActions
+                  />
                 </div>
               </section>
             </div>
           }
         />
       </Container>
-      {historyOpen && (
-        <ConsoleLogHistory
-          open={historyOpen}
-          onClose={() => setHistoryOpen(false)}
-        />
-      )}
     </div>
   );
 }

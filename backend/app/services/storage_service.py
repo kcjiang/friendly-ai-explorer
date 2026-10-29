@@ -451,12 +451,18 @@ async def serialize(db, e):
 async def write_text(db, user, entry, content, revision=None):
     """Edit an ordinary text file, including quota, metadata and rollback."""
     assert_write(entry.space, user)
-    if entry.is_dir or Path(entry.path).suffix.lower() not in (".md", ".markdown", ".json", ".sh"):
+    if entry.is_dir or Path(entry.path).suffix.lower() not in (
+        ".md",
+        ".markdown",
+        ".json",
+        ".sh",
+    ):
         fail(400, "Unsupported editable file type")
     target = disk_path(entry.space, entry.path)
     original = target.read_bytes()
     if revision is not None and hashlib.sha256(original).hexdigest() != revision:
         from app.i18n import message as system_message
+
         raise HTTPException(409, system_message("errors.fileContentChanged"))
     value = content.encode("utf-8")
     if len(value) > 2_000_000:
@@ -654,7 +660,11 @@ async def guard_upload_target(db, entry):
         )
     ).all()
     for task in rows:
-        parent = "DeviceLogs" if task.purpose == "log" else task.parent
+        parent = (
+            f"DeviceLogs/{task.context['device_type']}"
+            if task.purpose == "log"
+            else task.parent
+        )
         if parent == entry.path or parent.startswith(entry.path + "/"):
             fail(409, "文件夹存在上传任务，请完成或取消后再操作")
 
@@ -671,8 +681,10 @@ async def replace_copy(db, user, source_entry, destination):
     old_thumb = thumb.read_bytes() if thumb.exists() else None
     delta = max(
         0,
-        source.stat().st_size + source_entry.thumbnail_size
-        - destination.size - destination.thumbnail_size,
+        source.stat().st_size
+        + source_entry.thumbnail_size
+        - destination.size
+        - destination.thumbnail_size,
     )
     await check_quota(db, user, destination.space, delta, staged=True)
     if (

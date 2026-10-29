@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.models.storage import StorageEntry, UploadTask
+from app.services import device_logs
 from app.services import storage_service as s
 from app.services.storage_media import IMAGE_FORMATS, thumbnail_path, validate_image
 
@@ -159,6 +160,13 @@ async def create(db, user, body):
             "ticket_id": str(body.ticket_id) if body.ticket_id else None,
             "device_type": body.device_type,
             "description": body.description,
+            "log_filename": device_logs.log_name(
+                body.device_type,
+                body.filename,
+                offset=body.client_timezone_offset_minutes,
+            )
+            if body.purpose == "log"
+            else None,
         },
     )
     await authorize_context(db, user, task)
@@ -290,12 +298,12 @@ async def finish(db, user, task_id):
             parent = str(task.id)
             s.disk_path(task.space, parent).mkdir(parents=True, exist_ok=True)
         if task.purpose == "log":
-            parent = "DeviceLogs"
-            root = s.disk_path(task.space)
-            root.mkdir(parents=True, exist_ok=True)
-            if not s.disk_path(task.space, parent).exists():
-                await s.create_folder(db, user, task.space, "", parent)
-            name = f"{task.context['device_type']}_{datetime.now(timezone.utc):%Y%m%d_%H%M%S}_{task.id.hex[:6]}.txt"
+            name = task.context.get("log_filename") or device_logs.log_name(
+                task.context["device_type"], task.filename, at=task.created_at
+            )
+            parent, name = await device_logs.destination(
+                db, user, task.space, task.context["device_type"], name
+            )
         # Reservation becomes actual usage within the same locked transaction.
         task.reserved_bytes = 0
         await db.flush()

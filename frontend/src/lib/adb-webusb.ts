@@ -1,3 +1,5 @@
+import { ShellOutputDecoder, shellPacket } from "./adb-shell-protocol";
+
 /**
  * ADB over WebUSB — 完整实现
  * 支持：设备连接、RSA 认证、Shell 执行、Logcat 流
@@ -18,7 +20,7 @@ const AUTH_RSAPUBLICKEY = 3;
 
 const ADB_VERSION = 0x01000000;
 const ADB_MAXDATA = 256 * 1024;
-const ADB_BANNER = "host::";
+const ADB_BANNER = "host::features=shell_v2\0";
 
 const ADB_CLASS = 0xff;
 const ADB_SUBCLASS = 0x42;
@@ -26,6 +28,15 @@ const ADB_PROTOCOL = 0x01;
 
 const LS_PRIV_KEY = "fae-adb-private-jwk";
 const LS_PUB_KEY = "fae-adb-public-str";
+
+class AdbHandshakeError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+  }
+}
 
 const te = (s: string) => new TextEncoder().encode(s);
 
@@ -281,6 +292,17 @@ export class AdbDevice {
   private sendQueue: Promise<void> = Promise.resolve();
   private onStatus?: (s: AdbStatus, msg?: string) => void;
   private running = false;
+  private stopped = false;
+  private shellV2 = false;
+  interactiveProtocol = "legacy";
+  private acceptConnection(msg: { cmd: number; data?: Uint8Array }) {
+    if (msg.cmd !== A_CNXN) return false;
+    const banner = msg.data ? new TextDecoder().decode(msg.data) : "";
+    this.shellV2 = (banner.match(/(?:^|[;:])features=([^;\0]*)/)?.[1] || "")
+      .split(",")
+      .includes("shell_v2");
+    return true;
+  }
 
   private constructor(dev: USBDevice, iface: AdbIface) {
     this.dev = dev;
@@ -318,15 +340,46 @@ export class AdbDevice {
     onStatus?: (s: AdbStatus, msg?: string) => void,
   ): Promise<void> {
     this.onStatus = onStatus;
+    this.stopped = false;
     onStatus?.("connecting");
     const { privKey, pubStr } = await getOrCreateKey();
     this.privKey = privKey;
     this.pubStr = pubStr;
 
-    await this.send(A_CNXN, ADB_VERSION, ADB_MAXDATA, te(ADB_BANNER));
-
-    onStatus?.("auth", "Waiting for authentication...");
-    await this.doAuth();
+    for (let attempt = 1; ; attempt++) {
+      try {
+        if (this.stopped) throw new Error("ADB connection canceled");
+        await this.send(A_CNXN, ADB_VERSION, ADB_MAXDATA, te(ADB_BANNER));
+        onStatus?.("auth", "Waiting for authentication...");
+        await this.doAuth();
+        if (this.stopped) throw new Error("ADB connection canceled");
+        break;
+      } catch (error) {
+        // Closing the USB handle cancels timed-out reads before a new attempt.
+        await this.dev.close().catch(() => {});
+        if (this.stopped) throw new Error("ADB connection canceled");
+        if (
+          !(error instanceof AdbHandshakeError) ||
+          !error.retryable ||
+          attempt >= 3
+        )
+          throw new Error(
+            `ADB handshake failed (attempt ${attempt}/3): ${String(error)}`,
+          );
+        onStatus?.(
+          "connecting",
+          `Retrying ADB handshake (${attempt + 1}/3): ${error.message}`,
+        );
+        await this.dev.open();
+        if (this.stopped) {
+          await this.dev.close().catch(() => {});
+          throw new Error("ADB connection canceled");
+        }
+        if (this.dev.configuration === null)
+          await this.dev.selectConfiguration(1);
+        await this.dev.claimInterface(this.iface.ifaceNum);
+      }
+    }
 
     this.running = true;
     void this.loop();
@@ -334,11 +387,16 @@ export class AdbDevice {
   }
 
   private async doAuth(): Promise<void> {
-    const msg = await this.readMsg();
-    if (msg.cmd === A_CNXN) return; // 已信任
+    const msg = await this.readAuth("initial response");
+    if (this.acceptConnection(msg)) return;
 
     if (msg.cmd !== A_AUTH || msg.arg0 !== AUTH_TOKEN)
-      throw new Error("Protocol error: expected AUTH TOKEN");
+      throw this.unexpectedAuth("initial response", msg);
+    if (msg.data.length !== 20)
+      throw new AdbHandshakeError(
+        `Invalid AUTH TOKEN length: ${msg.data.length}`,
+        false,
+      );
 
     // 签名挑战
     // ADB's token is already a SHA-1 digest. WebCrypto would hash it again.
@@ -375,20 +433,57 @@ export class AdbDevice {
     }
     await this.send(A_AUTH, AUTH_SIGNATURE, 0, sig);
 
-    const resp = await this.readMsg();
-    if (resp.cmd === A_CNXN) return; // 签名认证成功
+    const resp = await this.readAuth("signature response");
+    if (this.acceptConnection(resp)) return;
 
     // 密钥不在信任列表，发送公钥 → 设备弹窗
     if (resp.cmd === A_AUTH && resp.arg0 === AUTH_TOKEN) {
       await this.send(A_AUTH, AUTH_RSAPUBLICKEY, 0, te(this.pubStr));
-      const final = await this.readMsg();
-      if (final.cmd !== A_CNXN)
-        throw new Error(
-          'Authentication failed. Tap "Allow USB debugging" on the device',
-        );
+      const final = await this.readAuth("device authorization", true);
+      if (!this.acceptConnection(final))
+        throw this.unexpectedAuth("device authorization", final, false);
       return;
     }
-    throw new Error("Authentication failed");
+    throw this.unexpectedAuth("signature response", resp);
+  }
+
+  private unexpectedAuth(
+    stage: string,
+    msg: { cmd: number; arg0: number; arg1: number },
+    retry = true,
+  ) {
+    const tag = String.fromCharCode(
+      ...[0, 8, 16, 24].map((shift) => (msg.cmd >>> shift) & 255),
+    );
+    return new AdbHandshakeError(
+      `${stage}: expected CNXN or AUTH TOKEN, received ${JSON.stringify(tag)} (0x${msg.cmd.toString(16)}, arg0=${msg.arg0}, arg1=${msg.arg1})`,
+      retry && [A_WRTE, A_OKAY, A_CLSE].includes(msg.cmd),
+    );
+  }
+
+  private async readAuth(stage: string, authorization = false) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        this.readMsg(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new AdbHandshakeError(
+                  authorization
+                    ? 'Device authorization timed out. Tap "Allow USB debugging" on the device.'
+                    : `${stage}: response timed out`,
+                  !authorization,
+                ),
+              ),
+            authorization ? 60000 : 10000,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private async loop(): Promise<void> {
@@ -440,31 +535,54 @@ export class AdbDevice {
     this.streams.clear();
   }
 
-  async interactive(onData: (data: Uint8Array) => void, onClose: () => void) {
+  async interactive(
+    onData: (data: Uint8Array) => void,
+    onClose: () => void,
+    legacy = false,
+  ): Promise<{
+    write: (data: Uint8Array) => Promise<void>;
+    resize: (cols: number, rows: number) => Promise<boolean>;
+    close: () => Promise<void>;
+  }> {
     const lid = this.lid++;
     let closed = false;
+    let opened = false;
+    let notified = false;
+    const v2 = this.shellV2 && !legacy;
+    const finish = () => {
+      closed = true;
+      if (opened && !notified) {
+        notified = true;
+        onClose();
+      }
+    };
+    const decoder = new ShellOutputDecoder(onData, finish);
     this.streams.set(lid, {
       remoteId: 0,
-      onData,
-      onClose: () => {
-        closed = true;
-        onClose();
-      },
+      onData: (data) => (v2 ? decoder.push(data) : onData(data)),
+      onClose: finish,
     });
     let rid: number;
     try {
-      rid = await this.open(lid, "shell:");
+      rid = await this.open(
+        lid,
+        v2 ? "shell,v2,pty,TERM=xterm-256color:" : "shell:",
+      );
     } catch (error) {
       this.streams.delete(lid);
+      if (v2 && String(error).includes("ADB service closed"))
+        return this.interactive(onData, onClose, true);
       throw error;
     }
     const active = this.streams.get(lid);
     if (!active || closed) throw new Error("Shell closed");
     active.remoteId = rid;
+    opened = true;
+    this.interactiveProtocol = v2 ? "shell-v2-pty" : "legacy";
     let queue = Promise.resolve();
-    return {
-      write: (data: Uint8Array) => {
-        const work = queue.then(async () => {
+    const writeRaw = (data: Uint8Array) => {
+      const work = queue
+        .then(async () => {
           for (let offset = 0; offset < data.length; offset += 4096) {
             if (closed || !this.running) throw new Error("Shell closed");
             await new Promise<void>((resolve, reject) => {
@@ -490,9 +608,34 @@ export class AdbDevice {
               });
             });
           }
+        })
+        .catch((error) => {
+          // A late ACK after a failed write must never acknowledge a later write.
+          if (!closed) {
+            finish();
+            this.streams.delete(lid);
+            void this.send(A_CLSE, lid, rid, new Uint8Array(0)).catch(() => {});
+          }
+          throw error;
         });
-        queue = work.catch(() => {});
-        return work;
+      queue = work.catch(() => {});
+      return work;
+    };
+    return {
+      write: (data) => writeRaw(v2 ? shellPacket(0, data) : data),
+      resize: async (cols, rows) => {
+        if (!v2) return false;
+        if (
+          !Number.isInteger(cols) ||
+          !Number.isInteger(rows) ||
+          cols < 2 ||
+          cols > 1000 ||
+          rows < 1 ||
+          rows > 500
+        )
+          throw new Error("Invalid terminal size");
+        await writeRaw(shellPacket(5, te(`${rows}x${cols},0x0\0`)));
+        return true;
       },
       close: async () => {
         closed = true;
@@ -624,6 +767,8 @@ export class AdbDevice {
     data: Uint8Array;
   }> {
     const hdr = await this.dev.transferIn(this.iface.epIn, 24);
+    if (hdr.status !== "ok")
+      throw new Error(`ADB USB header read failed: ${hdr.status}`);
     if (!hdr.data || hdr.data.byteLength < 24)
       throw new Error("Failed to read message header");
     const dv = hdr.data;
@@ -646,6 +791,8 @@ export class AdbDevice {
         this.iface.epIn,
         Math.min(remaining, this.iface.maxPacket),
       );
+      if (r.status !== "ok")
+        throw new Error(`ADB USB payload read failed: ${r.status}`);
       if (!r.data || r.data.byteLength === 0)
         throw new Error("Incomplete ADB payload");
       chunks.push(
@@ -663,6 +810,7 @@ export class AdbDevice {
   }
 
   async disconnect(): Promise<void> {
+    this.stopped = true;
     this.running = false;
     this.closeStreams();
     try {

@@ -11,6 +11,7 @@ export type UploadOptions = {
   conflict?: "skip" | "keep";
   ticket_id?: string;
   device_type?: "adb" | "serial";
+  client_timezone_offset_minutes?: number;
   description?: string;
 };
 export type UploadReceipt = {
@@ -28,6 +29,7 @@ export type UploadReceipt = {
   context: {
     ticket_id?: string;
     device_type?: "adb" | "serial";
+    client_timezone_offset_minutes?: number;
     bound?: boolean;
   };
 };
